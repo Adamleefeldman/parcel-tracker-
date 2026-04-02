@@ -86,6 +86,29 @@ async def admin_refresh_token(client: AsyncClient):
     return resp.json()["refresh_token"]
 
 
+@pytest_asyncio.fixture
+async def second_admin_token(client: AsyncClient):
+    """Seed a second admin user directly — used to test admin bypass (no shipment membership)."""
+    async with TestSession() as db:
+        from app.db.models import User
+        from app.core.security import hash_password
+        admin = User(
+            email="admin3@test.com",
+            hashed_password=hash_password("adminpass123"),
+            name="Test Admin 3",
+            role=UserRole.ADMIN,
+        )
+        db.add(admin)
+        await db.commit()
+
+    resp = await client.post("/api/v1/auth/login", json={
+        "email": "admin3@test.com",
+        "password": "adminpass123",
+    })
+    assert resp.status_code == 200
+    return resp.json()["access_token"]
+
+
 async def _invite_and_register(client: AsyncClient, admin_token: str, email: str, role: str, name: str) -> str:
     """Helper: admin sends invite, user accepts, returns the new user's access token."""
     invite_resp = await client.post(

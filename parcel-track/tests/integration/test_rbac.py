@@ -309,3 +309,59 @@ class TestShipmentMembership:
         )
         assert second.status_code == 409
         assert second.json()["detail"] == "User is already a member of this shipment"
+
+
+# ── Admin bypass ──────────────────────────────────────────────────────────────
+
+class TestAdminBypass:
+
+    async def test_admin_accesses_shipment_without_membership(
+        self, client: AsyncClient, admin_token: str, second_admin_token: str, shipment: str
+    ):
+        """
+        Admin 1 creates the shipment (auto-added as member).
+        Admin 2 has no row in shipment_users for this shipment.
+        Admin 2 must still get 200 via the _AdminMembership bypass.
+        """
+        resp = await client.get(
+            f"/api/v1/shipments/{shipment}",
+            headers={"Authorization": f"Bearer {second_admin_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["id"] == shipment
+
+    async def test_non_member_non_admin_is_blocked(
+        self, client: AsyncClient, morocco_agent_token: str, shipment: str
+    ):
+        """
+        Morocco Agent has no membership for this shipment.
+        Must receive 403 — proving the bypass is admin-only.
+        """
+        resp = await client.get(
+            f"/api/v1/shipments/{shipment}",
+            headers={"Authorization": f"Bearer {morocco_agent_token}"},
+        )
+        assert resp.status_code == 403
+
+    async def test_admin_sees_all_shipments_in_list(
+        self, client: AsyncClient, admin_token: str, second_admin_token: str
+    ):
+        """
+        Admin 1 creates a shipment. Admin 2 never touched it.
+        Admin 2's GET /shipments list must include it — the admin
+        list query branch (role == ADMIN → no membership join) is exercised.
+        """
+        create_resp = await client.post(
+            "/api/v1/shipments",
+            json={"reference": "BYPASS-SHIP-001"},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        ship_id = create_resp.json()["id"]
+
+        list_resp = await client.get(
+            "/api/v1/shipments",
+            headers={"Authorization": f"Bearer {second_admin_token}"},
+        )
+        assert list_resp.status_code == 200
+        ids = [s["id"] for s in list_resp.json()]
+        assert ship_id in ids
