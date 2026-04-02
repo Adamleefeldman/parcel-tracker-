@@ -170,3 +170,59 @@ class TestRefresh:
 
         resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_tok})
         assert resp.status_code == 401
+
+
+class TestTokenExpiry:
+
+    async def test_expired_access_token_rejected(self, client: AsyncClient):
+        from datetime import datetime, timezone
+        from jose import jwt
+        from app.core.config import get_settings
+        settings = get_settings()
+
+        expired_token = jwt.encode(
+            {
+                "sub": "00000000-0000-0000-0000-000000000001",
+                "role": "admin",
+                "exp": datetime(2000, 1, 1, tzinfo=timezone.utc),
+                "type": "access",
+            },
+            settings.SECRET_KEY,
+            algorithm=settings.JWT_ALGORITHM,
+        )
+        resp = await client.get(
+            "/api/v1/shipments",
+            headers={"Authorization": f"Bearer {expired_token}"},
+        )
+        assert resp.status_code == 401
+
+    async def test_tampered_jwt_rejected(self, client: AsyncClient, admin_token: str):
+        tampered = admin_token[:-3] + "xxx"
+        resp = await client.get(
+            "/api/v1/shipments",
+            headers={"Authorization": f"Bearer {tampered}"},
+        )
+        assert resp.status_code == 401
+
+    async def test_expired_refresh_token_rejected(self, client: AsyncClient, admin_token: str):
+        from datetime import datetime, timedelta
+        from sqlalchemy import select
+        from app.db.models import RefreshToken, User
+        from app.core.security import create_refresh_token
+        from tests.integration.conftest import TestSession
+
+        async with TestSession() as db:
+            result = await db.execute(select(User).where(User.email == "admin@test.com"))
+            user = result.scalar_one()
+
+            raw_tok, tok_hash = create_refresh_token()
+            db.add(RefreshToken(
+                user_id=user.id,
+                token_hash=tok_hash,
+                expires_at=datetime.utcnow() - timedelta(days=1),
+                revoked=False,
+            ))
+            await db.commit()
+
+        resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": raw_tok})
+        assert resp.status_code == 401

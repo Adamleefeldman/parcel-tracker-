@@ -84,3 +84,67 @@ async def admin_refresh_token(client: AsyncClient):
     })
     assert resp.status_code == 200
     return resp.json()["refresh_token"]
+
+
+async def _invite_and_register(client: AsyncClient, admin_token: str, email: str, role: str, name: str) -> str:
+    """Helper: admin sends invite, user accepts, returns the new user's access token."""
+    invite_resp = await client.post(
+        "/api/v1/auth/invite",
+        json={"email": email, "role": role},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert invite_resp.status_code == 200, f"Invite failed: {invite_resp.json()}"
+    token = invite_resp.json()["invite_token"]
+
+    accept_resp = await client.post("/api/v1/auth/accept-invite", json={
+        "token": token,
+        "name": name,
+        "password": "testpass123",
+    })
+    assert accept_resp.status_code == 200, f"Accept invite failed: {accept_resp.json()}"
+    return accept_resp.json()["access_token"]
+
+
+@pytest_asyncio.fixture
+async def morocco_agent_token(client: AsyncClient, admin_token: str) -> str:
+    """Create a Morocco Agent user via the invite flow and return their access token."""
+    return await _invite_and_register(
+        client, admin_token,
+        email="morocco@test.com",
+        role="morocco_agent",
+        name="Morocco Agent",
+    )
+
+
+@pytest_asyncio.fixture
+async def uk_agent_token(client: AsyncClient, admin_token: str) -> str:
+    """Create a UK Agent user via the invite flow and return their access token."""
+    return await _invite_and_register(
+        client, admin_token,
+        email="ukagent@test.com",
+        role="uk_agent",
+        name="UK Agent",
+    )
+
+
+@pytest_asyncio.fixture
+async def customer_token(client: AsyncClient, admin_token: str) -> str:
+    """Create a Customer user via the invite flow and return their access token."""
+    return await _invite_and_register(
+        client, admin_token,
+        email="customer@test.com",
+        role="customer",
+        name="Customer",
+    )
+
+
+@pytest_asyncio.fixture
+async def shipment(client: AsyncClient, admin_token: str) -> str:
+    """Create a shipment as admin and return its ID as a string."""
+    resp = await client.post(
+        "/api/v1/shipments",
+        json={"reference": "TEST-SHIP-001"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, f"Shipment creation failed: {resp.json()}"
+    return resp.json()["id"]
