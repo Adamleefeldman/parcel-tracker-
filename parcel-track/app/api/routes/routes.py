@@ -34,7 +34,7 @@ from app.services.shipment_service import ShipmentService
 from app.services.storage_service import StorageService
 from app.services.notification_service import NotificationService
 from app.schemas.schemas import (
-    InviteRequest, AcceptInviteRequest, LoginRequest,
+    InviteRequest, AcceptInviteRequest, LoginRequest, RefreshRequest,
     ShipmentCreate, ShipmentOut, ShipmentAddMember,
     POCreate, POOut, InvoiceCreate, InvoiceOut,
     PaymentCreate, PaymentOut, BLCreate, BLOut, ContainerOut,
@@ -83,19 +83,19 @@ async def login(
 
 @auth_router.post("/refresh")
 async def refresh_token(
-    refresh_token: str,
+    request: RefreshRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    return await AuthService.refresh(db, refresh_token)
+    return await AuthService.refresh(db, request.refresh_token)
 
 
 @auth_router.post("/logout")
 async def logout(
-    refresh_token: str,
+    request: RefreshRequest,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    await AuthService.revoke_refresh(db, refresh_token)
+    await AuthService.revoke_refresh(db, request.refresh_token)
     return {"message": "Logged out"}
 
 

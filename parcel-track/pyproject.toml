@@ -8,13 +8,14 @@ dependencies = [
     "fastapi==0.111.0",
     "uvicorn[standard]==0.29.0",
     # Database
-    "sqlalchemy==2.0.30",
+    "sqlalchemy[asyncio]==2.0.30",
     "alembic==1.13.1",
     "asyncpg==0.29.0",
     "psycopg2-binary==2.9.9",
     # Auth
     "python-jose[cryptography]==3.3.0",
     "passlib[bcrypt]==1.7.4",
+    "bcrypt>=3.1,<4.0",
     "python-multipart==0.0.9",
     # Validation / settings
     "pydantic==2.7.1",
