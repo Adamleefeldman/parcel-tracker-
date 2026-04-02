@@ -27,14 +27,14 @@ from app.core.enums import (
 )
 from app.middleware.auth import (
     get_current_user, require_admin, require_shipment_role,
-    financial_fields_allowed, get_client_ip,
+    require_shipment_member, financial_fields_allowed, get_client_ip,
 )
 from app.services.auth_service import AuthService
 from app.services.shipment_service import ShipmentService
 from app.services.storage_service import StorageService
 from app.services.notification_service import NotificationService
 from app.schemas.schemas import (
-    InviteRequest, AcceptInviteRequest, LoginRequest,
+    InviteRequest, AcceptInviteRequest, LoginRequest, RefreshRequest,
     ShipmentCreate, ShipmentOut, ShipmentAddMember,
     POCreate, POOut, InvoiceCreate, InvoiceOut,
     PaymentCreate, PaymentOut, BLCreate, BLOut, ContainerOut,
@@ -83,19 +83,19 @@ async def login(
 
 @auth_router.post("/refresh")
 async def refresh_token(
-    refresh_token: str,
+    request: RefreshRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    return await AuthService.refresh(db, refresh_token)
+    return await AuthService.refresh(db, request.refresh_token)
 
 
 @auth_router.post("/logout")
 async def logout(
-    refresh_token: str,
+    request: RefreshRequest,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    await AuthService.revoke_refresh(db, refresh_token)
+    await AuthService.revoke_refresh(db, request.refresh_token)
     return {"message": "Logged out"}
 
 
@@ -137,7 +137,7 @@ async def list_shipments(
 async def get_shipment(
     shipment_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
 ):
     return await ShipmentService.get(db, shipment_id, actor)
 
@@ -151,6 +151,27 @@ async def add_member(
 ):
     from app.db.models import ShipmentUser
     from app.core.enums import UserRole as UR
+
+    # Gap 1 fix — verify shipment exists
+    shipment_result = await db.execute(select(Shipment).where(Shipment.id == shipment_id))
+    if not shipment_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Shipment not found")
+
+    # Gap 2 fix — verify user exists and is active
+    user_result = await db.execute(select(User).where(User.id == body.user_id, User.is_active == True))
+    if not user_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Gap 3 fix — guard against duplicate membership
+    existing = await db.execute(
+        select(ShipmentUser).where(
+            ShipmentUser.shipment_id == shipment_id,
+            ShipmentUser.user_id == body.user_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="User is already a member of this shipment")
+
     membership = ShipmentUser(
         shipment_id=shipment_id,
         user_id=body.user_id,
@@ -223,7 +244,7 @@ async def submit_po(
 async def get_po(
     shipment_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
 ):
     result = await db.execute(select(PurchaseOrder).where(PurchaseOrder.shipment_id == shipment_id))
     po = result.scalar_one_or_none()
@@ -290,7 +311,7 @@ async def acknowledge_discrepancy(
 async def get_invoice(
     shipment_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
 ):
     result = await db.execute(select(Invoice).where(Invoice.shipment_id == shipment_id))
     invoice = result.scalar_one_or_none()
@@ -370,7 +391,7 @@ async def upload_bl(
     shipment_id: uuid.UUID,
     body: BLCreate,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
     request: Request = None,
 ):
     if actor.role not in (UserRole.ADMIN, UserRole.MOROCCO_AGENT):
@@ -414,7 +435,7 @@ async def upload_bl(
 async def get_bl(
     shipment_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
 ):
     result = await db.execute(
         select(BillOfLading)
@@ -439,7 +460,7 @@ async def create_vessel(
     shipment_id: uuid.UUID,
     body: VesselCreate,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
 ):
     if actor.role not in (UserRole.ADMIN, UserRole.MOROCCO_AGENT):
         raise HTTPException(403, "Only admin or Morocco agent can assign vessel")
@@ -459,7 +480,7 @@ async def confirm_departure(
     shipment_id: uuid.UUID,
     body: VesselDeparture,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
     request: Request = None,
 ):
     if actor.role not in (UserRole.ADMIN, UserRole.MOROCCO_AGENT):
@@ -554,7 +575,7 @@ container_router = APIRouter(prefix="/shipments/{shipment_id}/containers", tags=
 async def list_containers(
     shipment_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
 ):
     result = await db.execute(
         select(Container)
@@ -570,7 +591,7 @@ async def update_port_status(
     container_id: uuid.UUID,
     body: ContainerStatusUpdate,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
 ):
     if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):
         raise HTTPException(403, "Only admin or UK agent can update container status")
@@ -603,7 +624,7 @@ async def upsert_customs(
     container_id: uuid.UUID,
     body: CustomsUpdate,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
     request: Request = None,
 ):
     if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):
@@ -669,7 +690,7 @@ async def add_customs_note(
     container_id: uuid.UUID,
     body: CustomsNoteCreate,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
 ):
     if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):
         raise HTTPException(403, "Insufficient role")
@@ -695,7 +716,7 @@ async def upsert_clearing_docs(
     shipment_id: uuid.UUID,
     body: ClearingDocsUpdate,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
 ):
     if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):
         raise HTTPException(403, "Only admin or UK agent can update clearing docs")
@@ -757,7 +778,7 @@ async def create_delivery_point(
 async def list_delivery_points(
     shipment_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
 ):
     query = select(DeliveryPoint).where(DeliveryPoint.shipment_id == shipment_id)
 
@@ -778,7 +799,7 @@ async def schedule_delivery(
     point_id: uuid.UUID,
     body: DeliveryScheduleCreate,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
     request: Request = None,
 ):
     if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):
@@ -812,7 +833,7 @@ async def update_delivery_status(
     point_id: uuid.UUID,
     body: DeliveryStatusUpdate,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_shipment_member),
     request: Request = None,
 ):
     if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):

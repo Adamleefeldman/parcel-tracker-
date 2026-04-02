@@ -98,6 +98,20 @@ class _AdminMembership:
         return UserRole.ADMIN
 
 
+async def require_shipment_member(
+    shipment_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    Dependency: verifies the current user is a member of the shipment (any role).
+    Admins bypass the check automatically via _AdminMembership.
+    Returns the User so route handlers need no signature changes.
+    """
+    await get_shipment_member(shipment_id, current_user, db)
+    return current_user
+
+
 def require_shipment_role(*roles: UserRole):
     """
     Dependency factory for shipment-scoped routes.
