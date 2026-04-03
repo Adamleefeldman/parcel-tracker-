@@ -142,6 +142,7 @@ class DocumentEntityType(str, Enum):
 # ── Notifications ─────────────────────────────────────────────────────────────
 
 class NotificationType(str, Enum):
+    PO_SUBMITTED = "po_submitted"
     INVOICE_RECEIVED = "invoice_received"
     PAYMENT_CONFIRMED = "payment_confirmed"
     BL_UPLOADED = "bl_uploaded"

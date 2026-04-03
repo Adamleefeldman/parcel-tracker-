@@ -3,6 +3,7 @@ ShipmentService owns all state machine logic.
 No route handler or other service should write shipment.status directly —
 all transitions flow through transition_status() which enforces preconditions.
 """
+from unittest import result
 import uuid
 import json
 from decimal import Decimal
@@ -76,6 +77,21 @@ class ShipmentService:
         shipment = result.scalar_one_or_none()
         if not shipment:
             raise HTTPException(status_code=404, detail="Shipment not found")
+        return shipment
+    
+    @staticmethod
+    async def update(db: AsyncSession, shipment_id: uuid.UUID, data: dict, actor: User) -> Shipment:
+        result = await db.execute(select(Shipment).where(Shipment.id == shipment_id))
+        shipment = result.scalar_one_or_none()
+        if not shipment:
+            raise HTTPException(status_code=404, detail="Shipment not found")
+
+        for key, value in data.items():
+            if value is not None:
+                setattr(shipment, key, value)
+
+        await db.flush()
+        await db.refresh(shipment)
         return shipment
 
     @staticmethod

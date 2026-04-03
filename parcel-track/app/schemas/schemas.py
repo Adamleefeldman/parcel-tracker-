@@ -79,7 +79,11 @@ class ShipmentAddMember(BaseModel):
     user_id: uuid.UUID
     role_override: Optional[str] = None
 
+class ShipmentUpdate(BaseModel):
+    reference: Optional[str] = None
+    # Extend with other editable fields (e.g. notes) if/when needed
 
+    
 # ── Purchase Order ─────────────────────────────────────────────────────────────
 
 class POCreate(BaseModel):
