@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -92,7 +93,12 @@ class ShipmentService:
             if value is not None:
                 setattr(shipment, key, value)
 
-        await db.flush()
+        try:
+            await db.flush()
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(status_code=409, detail="Shipment reference already exists")
+
         await db.refresh(shipment)
         return shipment
 
