@@ -358,6 +358,11 @@ class DeliveryPoint(Base):
     container_assignments: Mapped[List["DeliveryContainer"]] = relationship(back_populates="delivery_point", cascade="all, delete-orphan")
     schedule: Mapped[Optional["DeliverySchedule"]] = relationship(back_populates="delivery_point", uselist=False)
 
+    @property
+    def containers(self) -> List["Container"]:
+        """Convenience accessor used by DeliveryPointOut schema — flattens the junction table."""
+        return [a.container for a in self.container_assignments]
+
 
 class DeliveryContainer(Base):
     """Junction: which containers go to which delivery point."""

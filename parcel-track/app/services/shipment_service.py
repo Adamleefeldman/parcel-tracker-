@@ -22,7 +22,7 @@ from app.core.enums import (
 from app.db.models import (
     Shipment, ShipmentUser, PurchaseOrder, Invoice, Payment,
     BillOfLading, Container, Vessel, ClearingDocs, CustomsRecord,
-    DeliveryPoint, AuditLog, User,
+    DeliveryPoint, DeliveryContainer, AuditLog, User,
 )
 from app.schemas import schemas
 
@@ -70,8 +70,10 @@ class ShipmentService:
                 selectinload(Shipment.invoice),
                 selectinload(Shipment.payments),
                 selectinload(Shipment.bill_of_lading).selectinload(BillOfLading.containers),
+                selectinload(Shipment.bill_of_lading).selectinload(BillOfLading.vessel).selectinload(Vessel.updates),
                 selectinload(Shipment.clearing_docs),
-                selectinload(Shipment.delivery_points),
+                selectinload(Shipment.delivery_points).selectinload(DeliveryPoint.schedule),
+                selectinload(Shipment.delivery_points).selectinload(DeliveryPoint.container_assignments).selectinload(DeliveryContainer.container),
             )
         )
         shipment = result.scalar_one_or_none()

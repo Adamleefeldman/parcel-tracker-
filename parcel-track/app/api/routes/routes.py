@@ -35,7 +35,7 @@ from app.services.storage_service import StorageService
 from app.services.notification_service import NotificationService
 from app.schemas.schemas import (
     InviteRequest, AcceptInviteRequest, LoginRequest, RefreshRequest,
-    ShipmentCreate, ShipmentOut, ShipmentAddMember,
+    ShipmentCreate, ShipmentOut, ShipmentDetailOut, ShipmentAddMember,
     POCreate, POOut, InvoiceCreate, InvoiceOut,
     PaymentCreate, PaymentOut, BLCreate, BLOut, ContainerOut, ShipmentUpdate,
     VesselCreate, VesselDeparture, VesselUpdateCreate, VesselOut,
@@ -144,7 +144,7 @@ async def list_shipments(
     return result.scalars().all()
 
 
-@shipment_router.get("/{shipment_id}", response_model=ShipmentOut)
+@shipment_router.get("/{shipment_id}", response_model=ShipmentDetailOut)
 async def get_shipment(
     shipment_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
