@@ -22,6 +22,7 @@ settings = get_settings()
 # ── Notification templates ─────────────────────────────────────────────────────
 
 NOTIFICATION_TEMPLATES: dict[NotificationType, tuple[str, str]] = {
+    NotificationType.PO_SUBMITTED:        ("PO submitted", "A purchase order has been submitted. Please issue an invoice."),
     NotificationType.INVOICE_RECEIVED:    ("Invoice received", "A new invoice has been uploaded for your shipment."),
     NotificationType.PAYMENT_CONFIRMED:   ("Payment confirmed", "Payment has been confirmed. Morocco agent can now proceed."),
     NotificationType.BL_UPLOADED:         ("Bill of lading uploaded", "The BL has been uploaded and containers have been created."),

@@ -3,12 +3,14 @@ ShipmentService owns all state machine logic.
 No route handler or other service should write shipment.status directly —
 all transitions flow through transition_status() which enforces preconditions.
 """
+from unittest import result
 import uuid
 import json
 from decimal import Decimal
 from typing import Optional
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -21,7 +23,7 @@ from app.core.enums import (
 from app.db.models import (
     Shipment, ShipmentUser, PurchaseOrder, Invoice, Payment,
     BillOfLading, Container, Vessel, ClearingDocs, CustomsRecord,
-    DeliveryPoint, AuditLog, User,
+    DeliveryPoint, DeliveryContainer, AuditLog, User,
 )
 from app.schemas import schemas
 
@@ -69,13 +71,35 @@ class ShipmentService:
                 selectinload(Shipment.invoice),
                 selectinload(Shipment.payments),
                 selectinload(Shipment.bill_of_lading).selectinload(BillOfLading.containers),
+                selectinload(Shipment.bill_of_lading).selectinload(BillOfLading.vessel).selectinload(Vessel.updates),
                 selectinload(Shipment.clearing_docs),
-                selectinload(Shipment.delivery_points),
+                selectinload(Shipment.delivery_points).selectinload(DeliveryPoint.schedule),
+                selectinload(Shipment.delivery_points).selectinload(DeliveryPoint.container_assignments).selectinload(DeliveryContainer.container),
             )
         )
         shipment = result.scalar_one_or_none()
         if not shipment:
             raise HTTPException(status_code=404, detail="Shipment not found")
+        return shipment
+    
+    @staticmethod
+    async def update(db: AsyncSession, shipment_id: uuid.UUID, data: dict, actor: User) -> Shipment:
+        result = await db.execute(select(Shipment).where(Shipment.id == shipment_id))
+        shipment = result.scalar_one_or_none()
+        if not shipment:
+            raise HTTPException(status_code=404, detail="Shipment not found")
+
+        for key, value in data.items():
+            if value is not None:
+                setattr(shipment, key, value)
+
+        try:
+            await db.flush()
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(status_code=409, detail="Shipment reference already exists")
+
+        await db.refresh(shipment)
         return shipment
 
     @staticmethod

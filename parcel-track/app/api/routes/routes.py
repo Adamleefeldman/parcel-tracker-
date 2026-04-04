@@ -17,7 +17,7 @@ from app.db.models import (
     Shipment, PurchaseOrder, Invoice, Payment, BillOfLading,
     Container, Vessel, VesselUpdate, ClearingDocs, CustomsRecord,
     CustomsNote, DeliveryPoint, DeliveryContainer, DeliverySchedule,
-    Document, Notification, User,
+    Document, Notification, User, ShipmentUser
 )
 from app.core.enums import (
     UserRole, ShipmentStatus, POStatus, InvoiceStatus, PaymentStatus,
@@ -35,9 +35,9 @@ from app.services.storage_service import StorageService
 from app.services.notification_service import NotificationService
 from app.schemas.schemas import (
     InviteRequest, AcceptInviteRequest, LoginRequest, RefreshRequest,
-    ShipmentCreate, ShipmentOut, ShipmentAddMember,
+    ShipmentCreate, ShipmentOut, ShipmentDetailOut, ShipmentAddMember,
     POCreate, POOut, InvoiceCreate, InvoiceOut,
-    PaymentCreate, PaymentOut, BLCreate, BLOut, ContainerOut,
+    PaymentCreate, PaymentOut, BLCreate, BLOut, ContainerOut, ShipmentUpdate,
     VesselCreate, VesselDeparture, VesselUpdateCreate, VesselOut,
     ContainerStatusUpdate, CustomsUpdate, CustomsNoteCreate, CustomsRecordOut,
     ClearingDocsUpdate, ClearingDocsOut,
@@ -118,28 +118,48 @@ async def create_shipment(
 
 @shipment_router.get("", response_model=List[ShipmentOut])
 async def list_shipments(
+    status: Optional[ShipmentStatus] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
     if actor.role == UserRole.ADMIN:
-        result = await db.execute(select(Shipment))
+        q = select(Shipment)
     else:
-        from app.db.models import ShipmentUser
-        result = await db.execute(
+        q = (
             select(Shipment)
             .join(ShipmentUser, ShipmentUser.shipment_id == Shipment.id)
             .where(ShipmentUser.user_id == actor.id)
         )
+
+    if status is not None:
+        q = q.where(Shipment.status == status)
+    if date_from is not None:
+        q = q.where(Shipment.created_at >= date_from)
+    if date_to is not None:
+        q = q.where(Shipment.created_at <= date_to)
+
+    result = await db.execute(q)
     return result.scalars().all()
 
 
-@shipment_router.get("/{shipment_id}", response_model=ShipmentOut)
+@shipment_router.get("/{shipment_id}", response_model=ShipmentDetailOut)
 async def get_shipment(
     shipment_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_shipment_member),
 ):
     return await ShipmentService.get(db, shipment_id, actor)
+
+@shipment_router.patch("/{shipment_id}", response_model=ShipmentOut)
+async def update_shipment(
+    shipment_id: uuid.UUID,
+    body: ShipmentUpdate,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_admin),   # Only admins can edit shipment metadata
+):
+    return await ShipmentService.update(db, shipment_id, body.model_dump(exclude_unset=True), actor)
 
 
 @shipment_router.post("/{shipment_id}/members")
@@ -235,7 +255,7 @@ async def submit_po(
     await ShipmentService.transition_status(db, shipment, ShipmentStatus.PO_SUBMITTED, actor, get_client_ip(request))
 
     await NotificationService.notify_shipment_roles(
-        db, shipment_id, NotificationType.INVOICE_RECEIVED, [UserRole.ADMIN]
+        db, shipment_id, NotificationType.PO_SUBMITTED, [UserRole.ADMIN, UserRole.MOROCCO_AGENT]
     )
     return {"message": "PO submitted"}
 

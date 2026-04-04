@@ -80,6 +80,21 @@ class ShipmentAddMember(BaseModel):
     role_override: Optional[str] = None
 
 
+class ShipmentDetailOut(ShipmentOut):
+    """Full shipment detail — used by GET /shipments/{id}. Includes all nested relationships."""
+    purchase_order: Optional["POOut"] = None
+    invoice: Optional["InvoiceOut"] = None
+    payments: List["PaymentOut"] = []
+    bill_of_lading: Optional["BLOut"] = None
+    clearing_docs: Optional["ClearingDocsOut"] = None
+    delivery_points: List["DeliveryPointOut"] = []
+
+
+class ShipmentUpdate(BaseModel):
+    reference: Optional[str] = None
+    # Extend with other editable fields (e.g. notes) if/when needed
+
+    
 # ── Purchase Order ─────────────────────────────────────────────────────────────
 
 class POCreate(BaseModel):
@@ -214,6 +229,7 @@ class BLOut(UUIDModel):
     gross_weight_kg: Decimal
     status: str
     containers: List[ContainerOut] = []
+    vessel: Optional["VesselOut"] = None
     created_at: datetime
 
 
@@ -372,6 +388,19 @@ class DeliveryStatusUpdate(BaseModel):
         return self
 
 
+class DeliveryScheduleOut(UUIDModel):
+    delivery_date: date
+    time_window_start: str
+    time_window_end: str
+    haulier: str
+    driver_name: Optional[str] = None
+    vehicle_reg: Optional[str] = None
+    notes_to_recipient: Optional[str] = None
+    status: str
+    delivered_at: Optional[datetime] = None
+    failure_reason: Optional[str] = None
+
+
 class DeliveryPointOut(UUIDModel):
     recipient_name: str
     address: str
@@ -379,7 +408,7 @@ class DeliveryPointOut(UUIDModel):
     contact_phone: str
     special_instructions: Optional[str] = None
     status: str
-    schedule: Optional[dict] = None
+    schedule: Optional[DeliveryScheduleOut] = None
     containers: List[ContainerOut] = []
     created_at: datetime
 
@@ -437,3 +466,8 @@ class MessageResponse(BaseModel):
 class PaginatedResponse(BaseModel):
     total: int
     items: list
+
+
+# Resolve forward references now that all schemas are defined
+ShipmentDetailOut.model_rebuild()
+BLOut.model_rebuild()
