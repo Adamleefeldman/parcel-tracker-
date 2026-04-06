@@ -222,6 +222,7 @@ async def create_po(
 
     po = PurchaseOrder(shipment_id=shipment_id, **body.model_dump())
     db.add(po)
+    await db.flush()
     return po
 
 
@@ -447,8 +448,18 @@ async def upload_bl(
         db, shipment_id, NotificationType.BL_UPLOADED, [UserRole.ADMIN, UserRole.UK_AGENT]
     )
 
-    await db.refresh(bl)
-    return bl
+    # Reload with relationships: db.refresh() expires the relationship
+    # collections, making them unloadable in async context (MissingGreenlet).
+    # An explicit query with selectinload guarantees both are eagerly fetched.
+    result = await db.execute(
+        select(BillOfLading)
+        .where(BillOfLading.id == bl.id)
+        .options(
+            selectinload(BillOfLading.containers),
+            selectinload(BillOfLading.vessel),
+        )
+    )
+    return result.scalar_one()
 
 
 @bl_router.get("", response_model=BLOut)
@@ -460,7 +471,10 @@ async def get_bl(
     result = await db.execute(
         select(BillOfLading)
         .where(BillOfLading.shipment_id == shipment_id)
-        .options(selectinload(BillOfLading.containers))
+        .options(
+            selectinload(BillOfLading.containers),
+            selectinload(BillOfLading.vessel).selectinload(Vessel.updates),
+        )
     )
     bl = result.scalar_one_or_none()
     if not bl:
@@ -492,7 +506,13 @@ async def create_vessel(
 
     vessel = Vessel(bl_id=bl.id, **body.model_dump())
     db.add(vessel)
-    return vessel
+    await db.flush()
+    # Reload with updates eagerly — unloaded relationships raise MissingGreenlet
+    # in async context when Pydantic tries to serialise VesselOut.updates.
+    result = await db.execute(
+        select(Vessel).where(Vessel.id == vessel.id).options(selectinload(Vessel.updates))
+    )
+    return result.scalar_one()
 
 
 @vessel_router.patch("/depart")
@@ -701,7 +721,15 @@ async def upsert_customs(
             override_message=f"Container {container.container_number} placed on hold: {body.hold_reason}",
         )
 
-    return record
+    # Reload to get server-generated updated_at and eagerly fetch notes
+    # (unloaded relationships raise MissingGreenlet during async serialisation).
+    await db.flush()
+    result = await db.execute(
+        select(CustomsRecord)
+        .where(CustomsRecord.id == record.id)
+        .options(selectinload(CustomsRecord.notes))
+    )
+    return result.scalar_one()
 
 
 @customs_router.post("/notes")
@@ -791,7 +819,18 @@ async def create_delivery_point(
     for container_id in body.container_ids:
         db.add(DeliveryContainer(delivery_point_id=point.id, container_id=container_id))
 
-    return point
+    # Reload with all relationships eagerly — unloaded optional relationships
+    # (schedule, container_assignments) raise MissingGreenlet during serialisation.
+    await db.flush()
+    result = await db.execute(
+        select(DeliveryPoint)
+        .where(DeliveryPoint.id == point.id)
+        .options(
+            selectinload(DeliveryPoint.schedule),
+            selectinload(DeliveryPoint.container_assignments).selectinload(DeliveryContainer.container),
+        )
+    )
+    return result.scalar_one()
 
 
 @delivery_router.get("/points", response_model=List[DeliveryPointOut])
@@ -937,9 +976,18 @@ async def confirm_upload(
     db.add(doc)
     await db.flush()
     download_url = StorageService.get_download_url(doc.file_key)
-    result = DocumentOut.model_validate(doc).model_dump()
-    result["download_url"] = download_url
-    return result
+    # Build the response dict manually: model_validate(doc) cannot produce
+    # download_url because it is a computed field, not a DB column.
+    return {
+        "id": doc.id,
+        "entity_type": doc.entity_type,
+        "entity_id": doc.entity_id,
+        "file_name": doc.file_name,
+        "mime_type": doc.mime_type,
+        "file_size_bytes": doc.file_size_bytes,
+        "download_url": download_url,
+        "uploaded_at": doc.uploaded_at,
+    }
 
 
 @doc_router.get("/{document_id}/download-url")

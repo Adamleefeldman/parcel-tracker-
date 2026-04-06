@@ -1,6 +1,9 @@
+import pytest
 import pytest_asyncio
+from unittest.mock import patch
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from jose import jwt as jose_jwt
 
 from app.main import app
 from app.db.database import Base, get_db
@@ -23,6 +26,91 @@ async def override_get_db():
 
 
 app.dependency_overrides[get_db] = override_get_db
+
+
+# ── Infrastructure mocks ──────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def mock_storage_service():
+    """
+    Prevent every test from reaching AWS S3.
+
+    StorageService has three methods that talk to the network:
+      - generate_file_key  → builds an S3 object key string
+      - get_upload_url     → calls boto3 to generate a pre-signed PUT URL
+      - get_download_url   → calls boto3 to generate a pre-signed GET URL
+
+    Tests that exercise document-related flows (e.g. submit_po) need a
+    Document row to exist in the DB.  That row is created via the
+    POST /documents/confirm endpoint, which internally calls get_download_url.
+    Without this mock that call crashes immediately because there are no
+    AWS credentials in the test environment.
+
+    Using autouse=True means every test in this suite is protected
+    automatically — no individual test needs to remember to opt in.
+    """
+    with patch(
+        "app.services.storage_service.StorageService.generate_file_key",
+        return_value="test/uploads/fake-key.pdf",
+    ), patch(
+        "app.services.storage_service.StorageService.get_upload_url",
+        return_value="https://fake-s3.example.com/upload",
+    ), patch(
+        "app.services.storage_service.StorageService.get_download_url",
+        return_value="https://fake-s3.example.com/download",
+    ):
+        yield
+
+
+# ── Shared helper functions ───────────────────────────────────────────────────
+
+def token_to_user_id(token: str) -> str:
+    """
+    Extract the user UUID from a JWT access token without re-hitting the DB.
+
+    JWTs are base64url-encoded and publicly readable — the signature
+    guarantees authenticity but the payload itself is not encrypted.
+    get_unverified_claims() decodes the payload section only, skipping
+    signature verification entirely.  This is safe for test helpers
+    because we already know these tokens came from our own test fixtures.
+
+    The 'sub' (subject) claim is set to the user's UUID string by
+    create_access_token() in app/core/security.py.
+    """
+    claims = jose_jwt.get_unverified_claims(token)
+    return claims["sub"]
+
+
+async def _add_member(
+    client: AsyncClient,
+    admin_token: str,
+    shipment_id: str,
+    user_token: str,
+    role_override: str | None = None,
+) -> None:
+    """
+    Add a user as a member of a shipment via the admin API.
+
+    This is a plain async helper (not a fixture) because it must be
+    called mid-test with specific shipment IDs and user tokens that are
+    only known at runtime.  The user's UUID is extracted from their JWT
+    rather than making an extra /me round-trip.
+
+    Role enforcement tests rely on this: a user must be a shipment member
+    before the role check fires.  Without membership the request is
+    rejected at the membership gate, masking whether the role gate works.
+    """
+    user_id = token_to_user_id(user_token)
+    payload: dict = {"user_id": user_id}
+    if role_override:
+        payload["role_override"] = role_override
+
+    resp = await client.post(
+        f"/api/v1/shipments/{shipment_id}/members",
+        json=payload,
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, f"_add_member failed: {resp.json()}"
 
 
 @pytest_asyncio.fixture(autouse=True)

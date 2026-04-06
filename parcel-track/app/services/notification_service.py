@@ -11,6 +11,7 @@ from typing import Optional
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.enums import NotificationType, UserRole
@@ -49,7 +50,9 @@ class NotificationService:
     ) -> None:
         """Notify all members of a shipment who hold one of the given roles."""
         result = await db.execute(
-            select(ShipmentUser).where(ShipmentUser.shipment_id == shipment_id)
+            select(ShipmentUser)
+            .where(ShipmentUser.shipment_id == shipment_id)
+            .options(selectinload(ShipmentUser.user))
         )
         memberships = result.scalars().all()
 
