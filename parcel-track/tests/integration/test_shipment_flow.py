@@ -9,8 +9,6 @@ Fixtures (client, admin_token, setup_db) are provided by conftest.py.
 from httpx import AsyncClient
 
 
-# ── Auth tests ────────────────────────────────────────────────────────────────
-
 class TestAuth:
 
     async def test_login_wrong_password(self, client: AsyncClient, admin_token):
@@ -43,8 +41,6 @@ class TestAuth:
         assert resp.status_code == 200
         assert "access_token" in resp.json()
 
-
-# ── Shipment lifecycle tests ───────────────────────────────────────────────────
 
 class TestShipmentLifecycle:
 
