@@ -223,6 +223,7 @@ async def create_po(
     po = PurchaseOrder(shipment_id=shipment_id, **body.model_dump())
     db.add(po)
     await db.flush()
+    await db.refresh(po)
     return po
 
 
@@ -448,9 +449,7 @@ async def upload_bl(
         db, shipment_id, NotificationType.BL_UPLOADED, [UserRole.ADMIN, UserRole.UK_AGENT]
     )
 
-    # Reload with relationships: db.refresh() expires the relationship
-    # collections, making them unloadable in async context (MissingGreenlet).
-    # An explicit query with selectinload guarantees both are eagerly fetched.
+    await db.flush()
     result = await db.execute(
         select(BillOfLading)
         .where(BillOfLading.id == bl.id)
@@ -507,10 +506,10 @@ async def create_vessel(
     vessel = Vessel(bl_id=bl.id, **body.model_dump())
     db.add(vessel)
     await db.flush()
-    # Reload with updates eagerly — unloaded relationships raise MissingGreenlet
-    # in async context when Pydantic tries to serialise VesselOut.updates.
     result = await db.execute(
-        select(Vessel).where(Vessel.id == vessel.id).options(selectinload(Vessel.updates))
+        select(Vessel)
+        .where(Vessel.id == vessel.id)
+        .options(selectinload(Vessel.updates))
     )
     return result.scalar_one()
 
@@ -670,7 +669,11 @@ async def upsert_customs(
     if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):
         raise HTTPException(403, "Only admin or UK agent can update customs status")
 
-    result = await db.execute(select(CustomsRecord).where(CustomsRecord.container_id == container_id))
+    result = await db.execute(
+        select(CustomsRecord)
+        .where(CustomsRecord.container_id == container_id)
+        .options(selectinload(CustomsRecord.notes))
+    )
     record = result.scalar_one_or_none()
 
     if not record:
@@ -721,15 +724,13 @@ async def upsert_customs(
             override_message=f"Container {container.container_number} placed on hold: {body.hold_reason}",
         )
 
-    # Reload to get server-generated updated_at and eagerly fetch notes
-    # (unloaded relationships raise MissingGreenlet during async serialisation).
     await db.flush()
-    result = await db.execute(
+    refreshed = await db.execute(
         select(CustomsRecord)
         .where(CustomsRecord.id == record.id)
         .options(selectinload(CustomsRecord.notes))
     )
-    return result.scalar_one()
+    return refreshed.scalar_one()
 
 
 @customs_router.post("/notes")
