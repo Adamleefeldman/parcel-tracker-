@@ -1,7 +1,7 @@
 from enum import Enum
 
-
 # ── Users & Roles ─────────────────────────────────────────────────────────────
+
 
 class UserRole(str, Enum):
     ADMIN = "admin"
@@ -11,6 +11,7 @@ class UserRole(str, Enum):
 
 
 # ── Shipment ──────────────────────────────────────────────────────────────────
+
 
 class ShipmentStatus(str, Enum):
     DRAFT = "draft"
@@ -25,6 +26,7 @@ class ShipmentStatus(str, Enum):
 
 # ── Purchase Order ─────────────────────────────────────────────────────────────
 
+
 class POStatus(str, Enum):
     DRAFT = "draft"
     SUBMITTED = "submitted"
@@ -32,6 +34,7 @@ class POStatus(str, Enum):
 
 
 # ── Invoice ───────────────────────────────────────────────────────────────────
+
 
 class InvoiceStatus(str, Enum):
     PENDING = "pending"
@@ -41,6 +44,7 @@ class InvoiceStatus(str, Enum):
 
 
 # ── Payment ───────────────────────────────────────────────────────────────────
+
 
 class PaymentType(str, Enum):
     FULL = "full"
@@ -55,6 +59,7 @@ class PaymentStatus(str, Enum):
 
 # ── Bill of Lading ─────────────────────────────────────────────────────────────
 
+
 class BLStatus(str, Enum):
     UPLOADED = "uploaded"
     CONTAINERS_CREATED = "containers_created"
@@ -62,6 +67,7 @@ class BLStatus(str, Enum):
 
 
 # ── Vessel ────────────────────────────────────────────────────────────────────
+
 
 class VesselStatus(str, Enum):
     ASSIGNED = "assigned"
@@ -78,6 +84,7 @@ class VesselUpdateStatus(str, Enum):
 
 
 # ── Container ─────────────────────────────────────────────────────────────────
+
 
 class ContainerStatus(str, Enum):
     CREATED = "created"
@@ -99,6 +106,7 @@ class PortStatus(str, Enum):
 
 # ── Customs ───────────────────────────────────────────────────────────────────
 
+
 class CustomsStatus(str, Enum):
     PENDING = "pending"
     SUBMITTED = "submitted"
@@ -110,6 +118,7 @@ class CustomsStatus(str, Enum):
 
 # ── Clearing Docs ─────────────────────────────────────────────────────────────
 
+
 class ClearingDocsStatus(str, Enum):
     PENDING = "pending"
     PARTIAL = "partial"
@@ -117,6 +126,7 @@ class ClearingDocsStatus(str, Enum):
 
 
 # ── Delivery ──────────────────────────────────────────────────────────────────
+
 
 class DeliveryStatus(str, Enum):
     AWAITING_SCHEDULE = "awaiting_schedule"
@@ -130,6 +140,7 @@ class DeliveryStatus(str, Enum):
 
 # ── Documents ─────────────────────────────────────────────────────────────────
 
+
 class DocumentEntityType(str, Enum):
     PURCHASE_ORDER = "purchase_order"
     INVOICE = "invoice"
@@ -140,6 +151,7 @@ class DocumentEntityType(str, Enum):
 
 
 # ── Notifications ─────────────────────────────────────────────────────────────
+
 
 class NotificationType(str, Enum):
     PO_SUBMITTED = "po_submitted"
@@ -157,6 +169,7 @@ class NotificationType(str, Enum):
 
 
 # ── Currency ──────────────────────────────────────────────────────────────────
+
 
 class Currency(str, Enum):
     USD = "USD"

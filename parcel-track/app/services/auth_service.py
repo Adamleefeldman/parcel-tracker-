@@ -1,25 +1,30 @@
-import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import (
-    hash_password, verify_password,
-    create_access_token, create_refresh_token,
-    create_invite_token, hash_token,
-    refresh_token_expiry, invite_token_expiry,
-)
 from app.core.enums import UserRole
-from app.db.models import User, RefreshToken, InviteToken, ShipmentUser
+from app.core.security import (
+    create_access_token,
+    create_invite_token,
+    create_refresh_token,
+    hash_password,
+    hash_token,
+    invite_token_expiry,
+    refresh_token_expiry,
+    verify_password,
+)
+from app.db.models import InviteToken, RefreshToken, ShipmentUser, User
 from app.schemas.schemas import (
-    InviteRequest, AcceptInviteRequest, LoginRequest, TokenResponse,
+    AcceptInviteRequest,
+    InviteRequest,
+    LoginRequest,
+    TokenResponse,
 )
 
 
 class AuthService:
-
     @staticmethod
     async def create_invite(
         db: AsyncSession,
@@ -63,15 +68,24 @@ class AuthService:
         invite = result.scalar_one_or_none()
 
         if not invite:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or already used invite token")
-        invite_expires = invite.expires_at if invite.expires_at.tzinfo else invite.expires_at.replace(tzinfo=timezone.utc)
-        if invite_expires < datetime.now(timezone.utc):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invite token has expired")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or already used invite token",
+            )
+        invite_expires = (
+            invite.expires_at if invite.expires_at.tzinfo else invite.expires_at.replace(tzinfo=UTC)
+        )
+        if invite_expires < datetime.now(UTC):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invite token has expired"
+            )
 
         # Check email not already registered
         existing = await db.execute(select(User).where(User.email == invite.email))
         if existing.scalar_one_or_none():
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
+            )
 
         user = User(
             email=invite.email,
@@ -95,11 +109,13 @@ class AuthService:
         access_token = create_access_token(str(user.id), user.role)
         raw_refresh, refresh_hash = create_refresh_token()
 
-        db.add(RefreshToken(
-            user_id=user.id,
-            token_hash=refresh_hash,
-            expires_at=refresh_token_expiry(),
-        ))
+        db.add(
+            RefreshToken(
+                user_id=user.id,
+                token_hash=refresh_hash,
+                expires_at=refresh_token_expiry(),
+            )
+        )
 
         return {
             "access_token": access_token,
@@ -112,7 +128,9 @@ class AuthService:
         db: AsyncSession,
         request: LoginRequest,
     ) -> dict:
-        result = await db.execute(select(User).where(User.email == request.email, User.is_active == True))
+        result = await db.execute(
+            select(User).where(User.email == request.email, User.is_active == True)
+        )
         user = result.scalar_one_or_none()
 
         if not user or not verify_password(request.password, user.hashed_password):
@@ -124,11 +142,13 @@ class AuthService:
         access_token = create_access_token(str(user.id), user.role)
         raw_refresh, refresh_hash = create_refresh_token()
 
-        db.add(RefreshToken(
-            user_id=user.id,
-            token_hash=refresh_hash,
-            expires_at=refresh_token_expiry(),
-        ))
+        db.add(
+            RefreshToken(
+                user_id=user.id,
+                token_hash=refresh_hash,
+                expires_at=refresh_token_expiry(),
+            )
+        )
 
         return {
             "access_token": access_token,
@@ -149,15 +169,25 @@ class AuthService:
         token_record = result.scalar_one_or_none()
 
         if not token_record:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
-        token_expires = token_record.expires_at if token_record.expires_at.tzinfo else token_record.expires_at.replace(tzinfo=timezone.utc)
-        if token_expires < datetime.now(timezone.utc):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+            )
+        token_expires = (
+            token_record.expires_at
+            if token_record.expires_at.tzinfo
+            else token_record.expires_at.replace(tzinfo=UTC)
+        )
+        if token_expires < datetime.now(UTC):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired"
+            )
 
         # Rotate: revoke old, issue new
         token_record.revoked = True
 
-        user_result = await db.execute(select(User).where(User.id == token_record.user_id, User.is_active == True))
+        user_result = await db.execute(
+            select(User).where(User.id == token_record.user_id, User.is_active == True)
+        )
         user = user_result.scalar_one_or_none()
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
@@ -165,11 +195,13 @@ class AuthService:
         access_token = create_access_token(str(user.id), user.role)
         raw_new, new_hash = create_refresh_token()
 
-        db.add(RefreshToken(
-            user_id=user.id,
-            token_hash=new_hash,
-            expires_at=refresh_token_expiry(),
-        ))
+        db.add(
+            RefreshToken(
+                user_id=user.id,
+                token_hash=new_hash,
+                expires_at=refresh_token_expiry(),
+            )
+        )
 
         return {
             "access_token": access_token,

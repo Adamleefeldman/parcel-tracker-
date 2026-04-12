@@ -1,0 +1,131 @@
+# ParcelTrack backend CI pipeline.
+#
+# Runs on every push and PR to main. Three parallel jobs:
+#   1. lint   — ruff check + ruff format --check (fast, fails the pipeline)
+#   2. test   — pytest against a real Postgres service container (fails the pipeline)
+#   3. typecheck — mypy (non-blocking in P0, will become blocking in P2)
+#
+# The tests run against Postgres (not SQLite) to match production behaviour.
+# A TEST_DATABASE_URL env var is set so conftest.py can pick it up.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "parcel-track/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "parcel-track/**"
+      - ".github/workflows/ci.yml"
+
+defaults:
+  run:
+    working-directory: parcel-track
+
+jobs:
+  # ── Lint ──────────────────────────────────────────────────────────────────
+  lint:
+    name: Ruff lint + format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.x"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Ruff check
+        run: uv run ruff check app/ tests/
+
+      - name: Ruff format check
+        run: uv run ruff format --check app/ tests/
+
+  # ── Tests ─────────────────────────────────────────────────────────────────
+  test:
+    name: Pytest (Postgres)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: parceltrack_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ci -d parceltrack_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      # App settings for the test run.
+      APP_ENV: testing
+      SECRET_KEY: ci_only_test_secret_key_not_for_production_xxxxxxxxx
+      DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/parceltrack_test
+      DATABASE_URL_SYNC: postgresql://ci:ci@localhost:5432/parceltrack_test
+      TEST_DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/parceltrack_test
+      # Storage placeholders — mocked in tests.
+      STORAGE_BUCKET: ci-bucket
+      STORAGE_ENDPOINT_URL: https://fake.r2.cloudflarestorage.com
+      STORAGE_ACCESS_KEY_ID: fake
+      STORAGE_SECRET_ACCESS_KEY: fake
+      STORAGE_PUBLIC_URL: https://fake.cdn.example.com
+      REDIS_URL: redis://localhost:6379/0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.x"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Run migrations
+        run: uv run alembic upgrade head
+
+      - name: Run tests
+        run: uv run pytest tests/ -q --tb=short
+
+  # ── Type checking ─────────────────────────────────────────────────────────
+  typecheck:
+    name: Mypy (non-blocking)
+    runs-on: ubuntu-latest
+    # Non-blocking in P0 — change to required in P2 once type coverage improves.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.x"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Mypy
+        run: uv run mypy app/

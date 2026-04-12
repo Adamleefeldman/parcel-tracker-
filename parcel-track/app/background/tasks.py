@@ -8,6 +8,7 @@ Start the worker with:
 Start the scheduler (for periodic tasks):
     celery -A app.background.tasks beat --loglevel=info
 """
+
 from celery import Celery
 from celery.schedules import crontab
 
@@ -40,6 +41,7 @@ celery_app.conf.update(
 
 # ── Tasks ──────────────────────────────────────────────────────────────────────
 
+
 @celery_app.task(name="app.background.tasks.check_clearing_doc_deadlines")
 def check_clearing_doc_deadlines():
     """
@@ -50,11 +52,13 @@ def check_clearing_doc_deadlines():
     """
     import asyncio
     from datetime import date, timedelta
+
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
+
+    from app.core.enums import ClearingDocsStatus, NotificationType, ShipmentStatus, UserRole
     from app.db.database import AsyncSessionLocal
-    from app.db.models import Shipment, BillOfLading, Vessel, ClearingDocs
-    from app.core.enums import ShipmentStatus, ClearingDocsStatus, UserRole, NotificationType
+    from app.db.models import BillOfLading, ClearingDocs, Shipment, Vessel
 
     async def _run():
         async with AsyncSessionLocal() as db:
@@ -81,6 +85,7 @@ def check_clearing_doc_deadlines():
 
                 if not docs or docs.status != ClearingDocsStatus.COMPLETE:
                     from app.services.notification_service import NotificationService
+
                     await NotificationService.notify_shipment_roles(
                         db=db,
                         shipment_id=bl.shipment_id,
@@ -102,6 +107,7 @@ def send_push_notification(expo_token: str, title: str, body: str):
     for high-volume scenarios where push should be queued.
     """
     import httpx
+
     payload = {"to": expo_token, "title": title, "body": body, "sound": "default"}
     try:
         httpx.post(settings.EXPO_PUSH_URL, json=payload, timeout=5.0)

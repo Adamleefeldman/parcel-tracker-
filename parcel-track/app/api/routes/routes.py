@@ -3,48 +3,105 @@ Route definitions for all sections.
 Route handlers are intentionally thin — they validate input, call a service, return output.
 Business logic lives exclusively in the service layer.
 """
-import uuid
-from typing import List, Optional
-from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
+import uuid
+from datetime import UTC, date
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.enums import (
+    BLStatus,
+    ClearingDocsStatus,
+    ContainerStatus,
+    CustomsStatus,
+    DeliveryStatus,
+    DocumentEntityType,
+    InvoiceStatus,
+    NotificationType,
+    PaymentStatus,
+    PortStatus,
+    POStatus,
+    ShipmentStatus,
+    UserRole,
+    VesselStatus,
+    VesselUpdateStatus,
+)
 from app.db.database import get_db
 from app.db.models import (
-    Shipment, PurchaseOrder, Invoice, Payment, BillOfLading,
-    Container, Vessel, VesselUpdate, ClearingDocs, CustomsRecord,
-    CustomsNote, DeliveryPoint, DeliveryContainer, DeliverySchedule,
-    Document, Notification, User, ShipmentUser
-)
-from app.core.enums import (
-    UserRole, ShipmentStatus, POStatus, InvoiceStatus, PaymentStatus,
-    BLStatus, VesselStatus, VesselUpdateStatus, ContainerStatus,
-    PortStatus, CustomsStatus, ClearingDocsStatus, DeliveryStatus,
-    DocumentEntityType, NotificationType,
+    BillOfLading,
+    ClearingDocs,
+    Container,
+    CustomsNote,
+    CustomsRecord,
+    DeliveryContainer,
+    DeliveryPoint,
+    DeliverySchedule,
+    Document,
+    Invoice,
+    Notification,
+    Payment,
+    PurchaseOrder,
+    Shipment,
+    ShipmentUser,
+    User,
+    Vessel,
+    VesselUpdate,
 )
 from app.middleware.auth import (
-    get_current_user, require_admin, require_shipment_role,
-    require_shipment_member, financial_fields_allowed, get_client_ip,
+    financial_fields_allowed,
+    get_client_ip,
+    get_current_user,
+    require_admin,
+    require_shipment_member,
+)
+from app.middleware.rate_limit import limiter
+from app.schemas.pagination import PaginatedResponse, PaginationParams, paginate
+from app.schemas.schemas import (
+    AcceptInviteRequest,
+    BLCreate,
+    BLOut,
+    ClearingDocsOut,
+    ClearingDocsUpdate,
+    ConfirmUploadRequest,
+    ContainerOut,
+    ContainerStatusUpdate,
+    CustomsNoteCreate,
+    CustomsRecordOut,
+    CustomsUpdate,
+    DeliveryPointCreate,
+    DeliveryPointOut,
+    DeliveryScheduleCreate,
+    DeliveryStatusUpdate,
+    DocumentOut,
+    InviteRequest,
+    InvoiceCreate,
+    InvoiceOut,
+    LoginRequest,
+    NotificationOut,
+    PaymentCreate,
+    PaymentOut,
+    POCreate,
+    POOut,
+    RefreshRequest,
+    ShipmentAddMember,
+    ShipmentCreate,
+    ShipmentDetailOut,
+    ShipmentOut,
+    ShipmentUpdate,
+    UploadUrlRequest,
+    UploadUrlResponse,
+    VesselCreate,
+    VesselDeparture,
+    VesselOut,
+    VesselUpdateCreate,
 )
 from app.services.auth_service import AuthService
+from app.services.notification_service import NotificationService
 from app.services.shipment_service import ShipmentService
 from app.services.storage_service import StorageService
-from app.services.notification_service import NotificationService
-from app.schemas.schemas import (
-    InviteRequest, AcceptInviteRequest, LoginRequest, RefreshRequest,
-    ShipmentCreate, ShipmentOut, ShipmentDetailOut, ShipmentAddMember,
-    POCreate, POOut, InvoiceCreate, InvoiceOut,
-    PaymentCreate, PaymentOut, BLCreate, BLOut, ContainerOut, ShipmentUpdate,
-    VesselCreate, VesselDeparture, VesselUpdateCreate, VesselOut,
-    ContainerStatusUpdate, CustomsUpdate, CustomsNoteCreate, CustomsRecordOut,
-    ClearingDocsUpdate, ClearingDocsOut,
-    DeliveryPointCreate, DeliveryScheduleCreate, DeliveryStatusUpdate, DeliveryPointOut,
-    UploadUrlRequest, UploadUrlResponse, ConfirmUploadRequest, DocumentOut,
-    NotificationOut, MessageResponse,
-)
 
 router = APIRouter()
 
@@ -57,45 +114,55 @@ auth_router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @auth_router.post("/invite")
+@limiter.limit("10/minute")
 async def create_invite(
-    request: InviteRequest,
+    request: Request,
+    body: InviteRequest,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_admin),
 ):
-    return await AuthService.create_invite(db, request, actor)
+    return await AuthService.create_invite(db, body, actor)
 
 
 @auth_router.post("/accept-invite")
+@limiter.limit("10/minute")
 async def accept_invite(
-    request: AcceptInviteRequest,
+    request: Request,
+    body: AcceptInviteRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    return await AuthService.accept_invite(db, request)
+    return await AuthService.accept_invite(db, body)
 
 
 @auth_router.post("/login")
+@limiter.limit("5/minute")
 async def login(
-    request: LoginRequest,
+    request: Request,
+    body: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    return await AuthService.login(db, request)
+    return await AuthService.login(db, body)
 
 
 @auth_router.post("/refresh")
+@limiter.limit("20/minute")
 async def refresh_token(
-    request: RefreshRequest,
+    request: Request,
+    body: RefreshRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    return await AuthService.refresh(db, request.refresh_token)
+    return await AuthService.refresh(db, body.refresh_token)
 
 
 @auth_router.post("/logout")
+@limiter.limit("20/minute")
 async def logout(
-    request: RefreshRequest,
+    request: Request,
+    body: RefreshRequest,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    await AuthService.revoke_refresh(db, request.refresh_token)
+    await AuthService.revoke_refresh(db, body.refresh_token)
     return {"message": "Logged out"}
 
 
@@ -116,11 +183,12 @@ async def create_shipment(
     return shipment
 
 
-@shipment_router.get("", response_model=List[ShipmentOut])
+@shipment_router.get("", response_model=PaginatedResponse[ShipmentOut])
 async def list_shipments(
-    status: Optional[ShipmentStatus] = None,
-    date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
+    status: ShipmentStatus | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
@@ -140,8 +208,7 @@ async def list_shipments(
     if date_to is not None:
         q = q.where(Shipment.created_at <= date_to)
 
-    result = await db.execute(q)
-    return result.scalars().all()
+    return await paginate(db, q, pagination)
 
 
 @shipment_router.get("/{shipment_id}", response_model=ShipmentDetailOut)
@@ -152,12 +219,13 @@ async def get_shipment(
 ):
     return await ShipmentService.get(db, shipment_id, actor)
 
+
 @shipment_router.patch("/{shipment_id}", response_model=ShipmentOut)
 async def update_shipment(
     shipment_id: uuid.UUID,
     body: ShipmentUpdate,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_admin),   # Only admins can edit shipment metadata
+    actor: User = Depends(require_admin),  # Only admins can edit shipment metadata
 ):
     return await ShipmentService.update(db, shipment_id, body.model_dump(exclude_unset=True), actor)
 
@@ -169,8 +237,8 @@ async def add_member(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_admin),
 ):
-    from app.db.models import ShipmentUser
     from app.core.enums import UserRole as UR
+    from app.db.models import ShipmentUser
 
     # Gap 1 fix — verify shipment exists
     shipment_result = await db.execute(select(Shipment).where(Shipment.id == shipment_id))
@@ -178,7 +246,9 @@ async def add_member(
         raise HTTPException(status_code=404, detail="Shipment not found")
 
     # Gap 2 fix — verify user exists and is active
-    user_result = await db.execute(select(User).where(User.id == body.user_id, User.is_active == True))
+    user_result = await db.execute(
+        select(User).where(User.id == body.user_id, User.is_active == True)
+    )
     if not user_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -216,7 +286,9 @@ async def create_po(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_admin),
 ):
-    existing = await db.execute(select(PurchaseOrder).where(PurchaseOrder.shipment_id == shipment_id))
+    existing = await db.execute(
+        select(PurchaseOrder).where(PurchaseOrder.shipment_id == shipment_id)
+    )
     if existing.scalar_one_or_none():
         raise HTTPException(400, "PO already exists for this shipment")
 
@@ -254,7 +326,9 @@ async def submit_po(
     po.status = POStatus.SUBMITTED
 
     shipment = await ShipmentService.get(db, shipment_id, actor)
-    await ShipmentService.transition_status(db, shipment, ShipmentStatus.PO_SUBMITTED, actor, get_client_ip(request))
+    await ShipmentService.transition_status(
+        db, shipment, ShipmentStatus.PO_SUBMITTED, actor, get_client_ip(request)
+    )
 
     await NotificationService.notify_shipment_roles(
         db, shipment_id, NotificationType.PO_SUBMITTED, [UserRole.ADMIN, UserRole.MOROCCO_AGENT]
@@ -293,7 +367,9 @@ async def create_invoice(
     request: Request = None,
 ):
     # Date must be after PO date
-    po_result = await db.execute(select(PurchaseOrder).where(PurchaseOrder.shipment_id == shipment_id))
+    po_result = await db.execute(
+        select(PurchaseOrder).where(PurchaseOrder.shipment_id == shipment_id)
+    )
     po = po_result.scalar_one_or_none()
     if po and body.invoice_date < po.po_date:
         raise HTTPException(400, "Invoice date must be on or after PO date")
@@ -309,7 +385,9 @@ async def create_invoice(
             invoice.status = InvoiceStatus.DISCREPANCY
 
     shipment = await ShipmentService.get(db, shipment_id, actor)
-    await ShipmentService.transition_status(db, shipment, ShipmentStatus.INVOICE_RECEIVED, actor, get_client_ip(request))
+    await ShipmentService.transition_status(
+        db, shipment, ShipmentStatus.INVOICE_RECEIVED, actor, get_client_ip(request)
+    )
 
     return invoice
 
@@ -365,6 +443,7 @@ async def add_payment(
 
     # Check if total payments now cover the invoice
     from sqlalchemy import func
+
     inv_result = await db.execute(select(Invoice).where(Invoice.shipment_id == shipment_id))
     invoice = inv_result.scalar_one_or_none()
     if invoice:
@@ -382,23 +461,30 @@ async def add_payment(
                     db, shipment, ShipmentStatus.PAYMENT_CONFIRMED, actor, get_client_ip(request)
                 )
                 await NotificationService.notify_shipment_roles(
-                    db, shipment_id, NotificationType.PAYMENT_CONFIRMED,
+                    db,
+                    shipment_id,
+                    NotificationType.PAYMENT_CONFIRMED,
                     [UserRole.MOROCCO_AGENT],
                 )
 
     return payment
 
 
-@payment_router.get("", response_model=List[PaymentOut])
+@payment_router.get("", response_model=PaginatedResponse[PaymentOut])
 async def list_payments(
     shipment_id: uuid.UUID,
+    pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_admin),
 ):
-    result = await db.execute(select(Payment).where(Payment.shipment_id == shipment_id))
-    payments = result.scalars().all()
+    q = select(Payment).where(Payment.shipment_id == shipment_id)
+    page = await paginate(db, q, pagination)
     show = financial_fields_allowed(actor)
-    return [ShipmentService.mask_financials(PaymentOut.model_validate(p).model_dump(), show) for p in payments]
+    page["items"] = [
+        ShipmentService.mask_financials(PaymentOut.model_validate(p).model_dump(), show)
+        for p in page["items"]
+    ]
+    return page
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -438,12 +524,16 @@ async def upload_bl(
 
     # Auto-create container records
     for c in body.containers:
-        db.add(Container(bl_id=bl.id, container_number=c.container_number, seal_number=c.seal_number))
+        db.add(
+            Container(bl_id=bl.id, container_number=c.container_number, seal_number=c.seal_number)
+        )
 
     bl.status = BLStatus.CONTAINERS_CREATED
 
     shipment = await ShipmentService.get(db, shipment_id, actor)
-    await ShipmentService.transition_status(db, shipment, ShipmentStatus.BL_ISSUED, actor, get_client_ip(request))
+    await ShipmentService.transition_status(
+        db, shipment, ShipmentStatus.BL_ISSUED, actor, get_client_ip(request)
+    )
 
     await NotificationService.notify_shipment_roles(
         db, shipment_id, NotificationType.BL_UPLOADED, [UserRole.ADMIN, UserRole.UK_AGENT]
@@ -498,7 +588,9 @@ async def create_vessel(
     if actor.role not in (UserRole.ADMIN, UserRole.MOROCCO_AGENT):
         raise HTTPException(403, "Only admin or Morocco agent can assign vessel")
 
-    bl_result = await db.execute(select(BillOfLading).where(BillOfLading.shipment_id == shipment_id))
+    bl_result = await db.execute(
+        select(BillOfLading).where(BillOfLading.shipment_id == shipment_id)
+    )
     bl = bl_result.scalar_one_or_none()
     if not bl:
         raise HTTPException(400, "BL must be uploaded before assigning vessel")
@@ -507,9 +599,7 @@ async def create_vessel(
     db.add(vessel)
     await db.flush()
     result = await db.execute(
-        select(Vessel)
-        .where(Vessel.id == vessel.id)
-        .options(selectinload(Vessel.updates))
+        select(Vessel).where(Vessel.id == vessel.id).options(selectinload(Vessel.updates))
     )
     return result.scalar_one()
 
@@ -545,10 +635,14 @@ async def confirm_departure(
         c.status = ContainerStatus.IN_TRANSIT
 
     shipment = await ShipmentService.get(db, shipment_id, actor)
-    await ShipmentService.transition_status(db, shipment, ShipmentStatus.IN_TRANSIT, actor, get_client_ip(request))
+    await ShipmentService.transition_status(
+        db, shipment, ShipmentStatus.IN_TRANSIT, actor, get_client_ip(request)
+    )
 
     await NotificationService.notify_shipment_roles(
-        db, shipment_id, NotificationType.VESSEL_DEPARTED,
+        db,
+        shipment_id,
+        NotificationType.VESSEL_DEPARTED,
         [UserRole.ADMIN, UserRole.UK_AGENT, UserRole.CUSTOMER],
     )
     return {"message": "Departure confirmed", "eta": body.eta}
@@ -584,14 +678,18 @@ async def add_vessel_update(
     if body.revised_eta:
         vessel.eta = body.revised_eta
         await NotificationService.notify_shipment_roles(
-            db, shipment_id, NotificationType.VESSEL_DELAYED,
+            db,
+            shipment_id,
+            NotificationType.VESSEL_DELAYED,
             [UserRole.ADMIN, UserRole.UK_AGENT, UserRole.CUSTOMER],
             override_message=f"Vessel ETA revised to {body.revised_eta}",
         )
 
     if body.status == VesselUpdateStatus.ARRIVED.value:
         await NotificationService.notify_shipment_roles(
-            db, shipment_id, NotificationType.VESSEL_ARRIVED,
+            db,
+            shipment_id,
+            NotificationType.VESSEL_ARRIVED,
             [UserRole.ADMIN, UserRole.UK_AGENT],
         )
         # Update container port status
@@ -610,18 +708,19 @@ async def add_vessel_update(
 container_router = APIRouter(prefix="/shipments/{shipment_id}/containers", tags=["containers"])
 
 
-@container_router.get("", response_model=List[ContainerOut])
+@container_router.get("", response_model=PaginatedResponse[ContainerOut])
 async def list_containers(
     shipment_id: uuid.UUID,
+    pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_shipment_member),
 ):
-    result = await db.execute(
+    q = (
         select(Container)
         .join(BillOfLading, Container.bl_id == BillOfLading.id)
         .where(BillOfLading.shipment_id == shipment_id)
     )
-    return result.scalars().all()
+    return await paginate(db, q, pagination)
 
 
 @container_router.patch("/{container_id}/port-status")
@@ -654,7 +753,9 @@ async def update_port_status(
 # CUSTOMS  (UK agent writes per container)
 # ════════════════════════════════════════════════════════════════════════════════
 
-customs_router = APIRouter(prefix="/shipments/{shipment_id}/containers/{container_id}/customs", tags=["customs"])
+customs_router = APIRouter(
+    prefix="/shipments/{shipment_id}/containers/{container_id}/customs", tags=["customs"]
+)
 
 
 @customs_router.put("", response_model=CustomsRecordOut)
@@ -720,7 +821,10 @@ async def upsert_customs(
         container.status = ContainerStatus.ON_HOLD
         container.port_status = PortStatus.CUSTOMS_HOLD
         await NotificationService.notify_shipment_roles(
-            db, shipment_id, NotificationType.CONTAINER_HOLD, [UserRole.ADMIN],
+            db,
+            shipment_id,
+            NotificationType.CONTAINER_HOLD,
+            [UserRole.ADMIN],
             override_message=f"Container {container.container_number} placed on hold: {body.hold_reason}",
         )
 
@@ -744,7 +848,9 @@ async def add_customs_note(
     if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):
         raise HTTPException(403, "Insufficient role")
 
-    record_result = await db.execute(select(CustomsRecord).where(CustomsRecord.container_id == container_id))
+    record_result = await db.execute(
+        select(CustomsRecord).where(CustomsRecord.container_id == container_id)
+    )
     record = record_result.scalar_one_or_none()
     if not record:
         raise HTTPException(404, "No customs record for this container")
@@ -828,29 +934,32 @@ async def create_delivery_point(
         .where(DeliveryPoint.id == point.id)
         .options(
             selectinload(DeliveryPoint.schedule),
-            selectinload(DeliveryPoint.container_assignments).selectinload(DeliveryContainer.container),
+            selectinload(DeliveryPoint.container_assignments).selectinload(
+                DeliveryContainer.container
+            ),
         )
     )
     return result.scalar_one()
 
 
-@delivery_router.get("/points", response_model=List[DeliveryPointOut])
+@delivery_router.get("/points", response_model=PaginatedResponse[DeliveryPointOut])
 async def list_delivery_points(
     shipment_id: uuid.UUID,
+    pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_shipment_member),
 ):
-    query = select(DeliveryPoint).where(DeliveryPoint.shipment_id == shipment_id)
+    q = select(DeliveryPoint).where(DeliveryPoint.shipment_id == shipment_id)
 
     # Customers only see their own delivery point
     if actor.role == UserRole.CUSTOMER:
-        query = query.where(DeliveryPoint.customer_user_id == actor.id)
+        q = q.where(DeliveryPoint.customer_user_id == actor.id)
 
-    result = await db.execute(query.options(
+    q = q.options(
         selectinload(DeliveryPoint.container_assignments).selectinload(DeliveryContainer.container),
         selectinload(DeliveryPoint.schedule),
-    ))
-    return result.scalars().all()
+    )
+    return await paginate(db, q, pagination)
 
 
 @delivery_router.post("/points/{point_id}/schedule")
@@ -914,8 +1023,9 @@ async def update_delivery_status(
     if point.schedule:
         point.schedule.status = new_status
         if new_status == DeliveryStatus.DELIVERED:
-            from datetime import datetime, timezone
-            point.schedule.delivered_at = datetime.now(timezone.utc)
+            from datetime import datetime
+
+            point.schedule.delivered_at = datetime.now(UTC)
         if new_status == DeliveryStatus.FAILED:
             point.schedule.failure_reason = body.failure_reason
             point.status = DeliveryStatus.AWAITING_SCHEDULE  # reset for reschedule
@@ -1011,17 +1121,18 @@ async def get_download_url(
 notif_router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
-@notif_router.get("", response_model=List[NotificationOut])
+@notif_router.get("", response_model=PaginatedResponse[NotificationOut])
 async def list_notifications(
     unread_only: bool = False,
+    pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
-    query = select(Notification).where(Notification.user_id == actor.id)
+    q = select(Notification).where(Notification.user_id == actor.id)
     if unread_only:
-        query = query.where(Notification.read == False)
-    result = await db.execute(query.order_by(Notification.created_at.desc()).limit(50))
-    return result.scalars().all()
+        q = q.where(Notification.read == False)
+    q = q.order_by(Notification.created_at.desc())
+    return await paginate(db, q, pagination)
 
 
 @notif_router.patch("/{notification_id}/read")
@@ -1031,7 +1142,9 @@ async def mark_read(
     actor: User = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(Notification).where(Notification.id == notification_id, Notification.user_id == actor.id)
+        select(Notification).where(
+            Notification.id == notification_id, Notification.user_id == actor.id
+        )
     )
     notif = result.scalar_one_or_none()
     if notif:

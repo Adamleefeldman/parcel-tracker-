@@ -1,4 +1,5 @@
 import uuid
+
 import boto3
 from botocore.exceptions import ClientError
 
@@ -23,8 +24,7 @@ def get_s3():
 
 
 class StorageService:
-
-    UPLOAD_EXPIRY = 300    # 5 minutes for upload URL
+    UPLOAD_EXPIRY = 300  # 5 minutes for upload URL
     DOWNLOAD_EXPIRY = 900  # 15 minutes for download URL
 
     @staticmethod

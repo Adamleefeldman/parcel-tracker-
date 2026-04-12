@@ -1,9 +1,7 @@
 from httpx import AsyncClient
 
 
-
 class TestRolePermissions:
-
     async def test_admin_can_create_shipment(self, client: AsyncClient, admin_token: str):
         resp = await client.post(
             "/api/v1/shipments",
@@ -12,7 +10,9 @@ class TestRolePermissions:
         )
         assert resp.status_code == 200
 
-    async def test_morocco_agent_cannot_create_shipment(self, client: AsyncClient, morocco_agent_token: str):
+    async def test_morocco_agent_cannot_create_shipment(
+        self, client: AsyncClient, morocco_agent_token: str
+    ):
         resp = await client.post(
             "/api/v1/shipments",
             json={"reference": "RBAC-SHIP-MA"},
@@ -35,7 +35,6 @@ class TestRolePermissions:
             headers={"Authorization": f"Bearer {customer_token}"},
         )
         assert resp.status_code == 403
-
 
     async def test_morocco_agent_cannot_invite(self, client: AsyncClient, morocco_agent_token: str):
         resp = await client.post(
@@ -61,22 +60,25 @@ class TestRolePermissions:
         )
         assert resp.status_code == 403
 
-
     async def test_admin_can_list_shipments(self, client: AsyncClient, admin_token: str):
         resp = await client.get(
             "/api/v1/shipments",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
+        data = resp.json()
+        assert "items" in data and isinstance(data["items"], list)
+        assert "total" in data
 
-    async def test_morocco_agent_can_list_shipments(self, client: AsyncClient, morocco_agent_token: str):
+    async def test_morocco_agent_can_list_shipments(
+        self, client: AsyncClient, morocco_agent_token: str
+    ):
         resp = await client.get(
             "/api/v1/shipments",
             headers={"Authorization": f"Bearer {morocco_agent_token}"},
         )
         assert resp.status_code == 200
-        assert resp.json() == []  # no memberships yet — empty list, not 403
+        assert resp.json()["items"] == []  # no memberships yet — empty list, not 403
 
     async def test_uk_agent_can_list_shipments(self, client: AsyncClient, uk_agent_token: str):
         resp = await client.get(
@@ -84,7 +86,7 @@ class TestRolePermissions:
             headers={"Authorization": f"Bearer {uk_agent_token}"},
         )
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json()["items"] == []
 
     async def test_customer_can_list_shipments(self, client: AsyncClient, customer_token: str):
         resp = await client.get(
@@ -92,8 +94,7 @@ class TestRolePermissions:
             headers={"Authorization": f"Bearer {customer_token}"},
         )
         assert resp.status_code == 200
-        assert resp.json() == []
-
+        assert resp.json()["items"] == []
 
     async def test_morocco_agent_cannot_add_member(
         self, client: AsyncClient, morocco_agent_token: str, shipment: str
@@ -126,10 +127,7 @@ class TestRolePermissions:
         assert resp.status_code == 403
 
 
-
-
 class TestShipmentScopedAccess:
-
     async def test_non_member_sees_empty_list(
         self, client: AsyncClient, uk_agent_token: str, shipment: str
     ):
@@ -139,7 +137,7 @@ class TestShipmentScopedAccess:
             headers={"Authorization": f"Bearer {uk_agent_token}"},
         )
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json()["items"] == []
 
     async def test_member_sees_only_their_shipment(
         self, client: AsyncClient, admin_token: str, uk_agent_token: str
@@ -161,7 +159,9 @@ class TestShipmentScopedAccess:
 
         # Fetch the UK Agent's user id from their token by hitting the invite flow
         from jose import jwt
+
         from app.core.config import get_settings
+
         uk_user_id = jwt.decode(
             uk_agent_token,
             get_settings().SECRET_KEY,
@@ -181,13 +181,11 @@ class TestShipmentScopedAccess:
             headers={"Authorization": f"Bearer {uk_agent_token}"},
         )
         assert resp.status_code == 200
-        ids = [s["id"] for s in resp.json()]
+        ids = [s["id"] for s in resp.json()["items"]]
         assert ship_a_id in ids
         assert len(ids) == 1  # B must not appear
 
-    async def test_admin_sees_all_shipments(
-        self, client: AsyncClient, admin_token: str
-    ):
+    async def test_admin_sees_all_shipments(self, client: AsyncClient, admin_token: str):
         """Admin sees both shipments regardless of explicit membership."""
         await client.post(
             "/api/v1/shipments",
@@ -205,7 +203,7 @@ class TestShipmentScopedAccess:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200
-        assert len(resp.json()) >= 2
+        assert len(resp.json()["items"]) >= 2
 
     async def test_unassigned_agent_sees_nothing(
         self, client: AsyncClient, admin_token: str, morocco_agent_token: str, shipment: str
@@ -216,21 +214,21 @@ class TestShipmentScopedAccess:
             headers={"Authorization": f"Bearer {morocco_agent_token}"},
         )
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json()["items"] == []
 
 
 # ── Shipment membership flow ──────────────────────────────────────────────────
 
-class TestShipmentMembership:
 
+class TestShipmentMembership:
     def _decode_user_id(self, token: str) -> str:
         """Extract user UUID from a JWT access token without making an API call."""
         from jose import jwt
+
         from app.core.config import get_settings
+
         settings = get_settings()
-        return jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
-        )["sub"]
+        return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])["sub"]
 
     async def test_assignment_activates_list_access(
         self, client: AsyncClient, admin_token: str, uk_agent_token: str, shipment: str
@@ -241,7 +239,7 @@ class TestShipmentMembership:
             "/api/v1/shipments",
             headers={"Authorization": f"Bearer {uk_agent_token}"},
         )
-        assert before.json() == []
+        assert before.json()["items"] == []
 
         # Admin assigns UK Agent to the shipment
         uk_user_id = self._decode_user_id(uk_agent_token)
@@ -257,7 +255,7 @@ class TestShipmentMembership:
             "/api/v1/shipments",
             headers={"Authorization": f"Bearer {uk_agent_token}"},
         )
-        ids = [s["id"] for s in after.json()]
+        ids = [s["id"] for s in after.json()["items"]]
         assert shipment in ids
 
     async def test_assigning_non_existent_user_rejected(
@@ -265,6 +263,7 @@ class TestShipmentMembership:
     ):
         """Route now validates user existence — unknown user_id returns 404."""
         import uuid
+
         fake_user_id = str(uuid.uuid4())
         resp = await client.post(
             f"/api/v1/shipments/{shipment}/members",
@@ -279,6 +278,7 @@ class TestShipmentMembership:
     ):
         """Route now validates shipment existence — unknown shipment_id returns 404."""
         import uuid
+
         fake_shipment_id = str(uuid.uuid4())
         uk_user_id = self._decode_user_id(uk_agent_token)
         resp = await client.post(
@@ -299,13 +299,15 @@ class TestShipmentMembership:
 
         first = await client.post(
             f"/api/v1/shipments/{shipment}/members",
-            json=payload, headers=headers,
+            json=payload,
+            headers=headers,
         )
         assert first.status_code == 200
 
         second = await client.post(
             f"/api/v1/shipments/{shipment}/members",
-            json=payload, headers=headers,
+            json=payload,
+            headers=headers,
         )
         assert second.status_code == 409
         assert second.json()["detail"] == "User is already a member of this shipment"
@@ -313,8 +315,8 @@ class TestShipmentMembership:
 
 # ── Admin bypass ──────────────────────────────────────────────────────────────
 
-class TestAdminBypass:
 
+class TestAdminBypass:
     async def test_admin_accesses_shipment_without_membership(
         self, client: AsyncClient, admin_token: str, second_admin_token: str, shipment: str
     ):
@@ -363,5 +365,5 @@ class TestAdminBypass:
             headers={"Authorization": f"Bearer {second_admin_token}"},
         )
         assert list_resp.status_code == 200
-        ids = [s["id"] for s in list_resp.json()]
+        ids = [s["id"] for s in list_resp.json()["items"]]
         assert ship_id in ids

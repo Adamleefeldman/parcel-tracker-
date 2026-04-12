@@ -6,16 +6,19 @@ Uses an in-memory SQLite database for speed.
 Replace DATABASE_URL with a real test Postgres instance for full type compatibility.
 Fixtures (client, admin_token, setup_db) are provided by conftest.py.
 """
+
 from httpx import AsyncClient
 
 
 class TestAuth:
-
     async def test_login_wrong_password(self, client: AsyncClient, admin_token):
-        resp = await client.post("/api/v1/auth/login", json={
-            "email": "admin@test.com",
-            "password": "wrongpassword",
-        })
+        resp = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "admin@test.com",
+                "password": "wrongpassword",
+            },
+        )
         assert resp.status_code == 401
 
     async def test_protected_route_without_token(self, client: AsyncClient):
@@ -33,17 +36,19 @@ class TestAuth:
         token = resp.json()["invite_token"]
 
         # Agent accepts invite
-        resp = await client.post("/api/v1/auth/accept-invite", json={
-            "token": token,
-            "name": "Morocco Agent",
-            "password": "agentpass123",
-        })
+        resp = await client.post(
+            "/api/v1/auth/accept-invite",
+            json={
+                "token": token,
+                "name": "Morocco Agent",
+                "password": "agentpass123",
+            },
+        )
         assert resp.status_code == 200
         assert "access_token" in resp.json()
 
 
 class TestShipmentLifecycle:
-
     async def test_create_shipment(self, client: AsyncClient, admin_token):
         resp = await client.post(
             "/api/v1/shipments",
@@ -82,9 +87,14 @@ class TestShipmentLifecycle:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         token = invite_resp.json()["invite_token"]
-        accept_resp = await client.post("/api/v1/auth/accept-invite", json={
-            "token": token, "name": "MA", "password": "agentpass123",
-        })
+        accept_resp = await client.post(
+            "/api/v1/auth/accept-invite",
+            json={
+                "token": token,
+                "name": "MA",
+                "password": "agentpass123",
+            },
+        )
         agent_token = accept_resp.json()["access_token"]
 
         resp = await client.post(

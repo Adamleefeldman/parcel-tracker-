@@ -1,0 +1,33 @@
+# Pre-commit hooks for ParcelTrack.
+#
+# Setup (one-time, required):
+#     pip install pre-commit   # or: uv tool install pre-commit
+#     pre-commit install
+#     pre-commit install --hook-type pre-push
+#
+# Ruff runs on every commit (fast — milliseconds).
+# Mypy runs on push only (slower — seconds, touches the whole app/ tree).
+
+repos:
+  # ── Ruff: lint + format (pre-commit) ──────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.10
+    hooks:
+      - id: ruff
+        name: ruff lint
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        types_or: [python, pyi]
+
+  # ── Mypy: type checking (pre-push only) ──────────────────────────────────
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy type check
+        entry: uv run mypy app/
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]

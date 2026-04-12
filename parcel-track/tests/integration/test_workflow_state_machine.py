@@ -15,8 +15,11 @@ The state machine:
 All transitions are driven through the HTTP API exactly as a real client
 would use it.  Infrastructure (S3) is mocked globally in conftest.py.
 """
+
 from datetime import date
+
 from httpx import AsyncClient
+
 from tests.integration.conftest import _add_member
 
 
@@ -44,7 +47,6 @@ class TestSequentialWalkthrough:
         r = await client.get(f"/api/v1/shipments/{shipment_id}", headers=headers)
         assert r.status_code == 200, f"Could not fetch shipment: {r.json()}"
         return r.json()["status"]
-
 
     async def test_full_lifecycle(self, client: AsyncClient, admin_token: str):
         """
@@ -136,7 +138,7 @@ class TestSequentialWalkthrough:
             json={
                 "invoice_number": "INV-2026-001",
                 "invoice_date": "2026-01-15",  # must be >= po_date
-                "value": "10000.00",           # exactly matches PO total
+                "value": "10000.00",  # exactly matches PO total
                 "currency": "USD",
             },
             headers=h,
@@ -308,6 +310,7 @@ class TestSequentialWalkthrough:
 
 # ── Module-level state-advance helper ────────────────────────────────────────
 
+
 async def _advance_to(
     client: AsyncClient,
     h: dict,
@@ -335,11 +338,19 @@ async def _advance_to(
     if target == "draft":
         return sid, {}
 
-    r = await client.post(f"/api/v1/shipments/{sid}/po", json={
-        "po_number": "PO-001", "po_date": "2026-01-10",
-        "product_description": "Tiles", "quantity": "100",
-        "quantity_unit": "boxes", "total_value": "10000.00", "currency": "USD",
-    }, headers=h)
+    r = await client.post(
+        f"/api/v1/shipments/{sid}/po",
+        json={
+            "po_number": "PO-001",
+            "po_date": "2026-01-10",
+            "product_description": "Tiles",
+            "quantity": "100",
+            "quantity_unit": "boxes",
+            "total_value": "10000.00",
+            "currency": "USD",
+        },
+        headers=h,
+    )
     assert r.status_code == 200, f"_advance_to({target!r}): create PO failed: {r.json()}"
     po_id = r.json()["id"]
 
@@ -356,32 +367,53 @@ async def _advance_to(
     if target == "po_submitted":
         return sid, {"po_id": po_id}
 
-    r = await client.post(f"/api/v1/shipments/{sid}/invoice", json={
-        "invoice_number": "INV-001", "invoice_date": "2026-01-15",
-        "value": "10000.00", "currency": "USD",
-    }, headers=h)
+    r = await client.post(
+        f"/api/v1/shipments/{sid}/invoice",
+        json={
+            "invoice_number": "INV-001",
+            "invoice_date": "2026-01-15",
+            "value": "10000.00",
+            "currency": "USD",
+        },
+        headers=h,
+    )
     assert r.status_code == 200, f"_advance_to({target!r}): create invoice failed: {r.json()}"
     if target == "invoice_received":
         return sid, {"po_id": po_id}
 
-    r = await client.post(f"/api/v1/shipments/{sid}/payments", json={
-        "swift_ref": "SW001", "payment_date": "2026-01-20",
-        "amount": "10000.00", "currency": "USD", "payment_type": "full",
-    }, headers=h)
+    r = await client.post(
+        f"/api/v1/shipments/{sid}/payments",
+        json={
+            "swift_ref": "SW001",
+            "payment_date": "2026-01-20",
+            "amount": "10000.00",
+            "currency": "USD",
+            "payment_type": "full",
+        },
+        headers=h,
+    )
     assert r.status_code == 200, f"_advance_to({target!r}): add payment failed: {r.json()}"
     if target == "payment_confirmed":
         return sid, {"po_id": po_id}
 
-    r = await client.post(f"/api/v1/shipments/{sid}/bl", json={
-        "bl_number": "BL-001", "bl_date": "2026-01-25",
-        "shipper_name": "Shipper", "consignee_name": "Consignee",
-        "port_of_loading": "Casablanca", "port_of_discharge": "Felixstowe",
-        "containers": [
-            {"container_number": "TCKU1234567"},
-            {"container_number": "MSCU7654321"},
-        ],
-        "commodity_description": "Tiles", "gross_weight_kg": "5000.00",
-    }, headers=h)
+    r = await client.post(
+        f"/api/v1/shipments/{sid}/bl",
+        json={
+            "bl_number": "BL-001",
+            "bl_date": "2026-01-25",
+            "shipper_name": "Shipper",
+            "consignee_name": "Consignee",
+            "port_of_loading": "Casablanca",
+            "port_of_discharge": "Felixstowe",
+            "containers": [
+                {"container_number": "TCKU1234567"},
+                {"container_number": "MSCU7654321"},
+            ],
+            "commodity_description": "Tiles",
+            "gross_weight_kg": "5000.00",
+        },
+        headers=h,
+    )
     assert r.status_code == 200, f"_advance_to({target!r}): upload BL failed: {r.json()}"
     r2 = await client.get(f"/api/v1/shipments/{sid}/bl", headers=h)
     assert r2.status_code == 200, f"_advance_to({target!r}): get BL failed: {r2.json()}"
@@ -389,10 +421,16 @@ async def _advance_to(
     if target == "bl_issued":
         return sid, {"po_id": po_id, "container_ids": container_ids}
 
-    r = await client.post(f"/api/v1/shipments/{sid}/vessel", json={
-        "vessel_name": "Test Vessel", "shipping_line": "TestLine",
-        "port_of_loading": "Casablanca", "port_of_discharge": "Felixstowe",
-    }, headers=h)
+    r = await client.post(
+        f"/api/v1/shipments/{sid}/vessel",
+        json={
+            "vessel_name": "Test Vessel",
+            "shipping_line": "TestLine",
+            "port_of_loading": "Casablanca",
+            "port_of_discharge": "Felixstowe",
+        },
+        headers=h,
+    )
     assert r.status_code == 200, f"_advance_to({target!r}): create vessel failed: {r.json()}"
     r = await client.patch(
         f"/api/v1/shipments/{sid}/vessel/depart",
@@ -451,10 +489,16 @@ class TestPreconditions:
         h = {"Authorization": f"Bearer {admin_token}"}
         sid, _ = await _advance_to(client, h, "draft", ref="SKIP-001")
 
-        r = await client.post(f"/api/v1/shipments/{sid}/invoice", json={
-            "invoice_number": "INV-SKIP", "invoice_date": "2026-01-15",
-            "value": "10000.00", "currency": "USD",
-        }, headers=h)
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/invoice",
+            json={
+                "invoice_number": "INV-SKIP",
+                "invoice_date": "2026-01-15",
+                "value": "10000.00",
+                "currency": "USD",
+            },
+            headers=h,
+        )
         assert r.status_code == 400
         assert "Cannot transition from 'ShipmentStatus.DRAFT'" in r.json()["detail"]
 
@@ -486,13 +530,17 @@ class TestPreconditions:
         sid, ctx = await _advance_to(client, h, "cleared", ref="TERM-001")
 
         # Complete the lifecycle: one delivery point → mark delivered
-        r = await client.post(f"/api/v1/shipments/{sid}/delivery/points", json={
-            "recipient_name": "Final Customer",
-            "address": "1 End Street, London, EC1A 1BB",
-            "contact_name": "Terminal Test",
-            "contact_phone": "+44 7700 900001",
-            "container_ids": ctx["container_ids"],
-        }, headers=h)
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/delivery/points",
+            json={
+                "recipient_name": "Final Customer",
+                "address": "1 End Street, London, EC1A 1BB",
+                "contact_name": "Terminal Test",
+                "contact_phone": "+44 7700 900001",
+                "container_ids": ctx["container_ids"],
+            },
+            headers=h,
+        )
         assert r.status_code == 200, r.json()
         point_id = r.json()["id"]
 
@@ -530,11 +578,19 @@ class TestPreconditions:
         sid, _ = await _advance_to(client, h, "draft", ref="NODOC-001")
 
         # Create PO but deliberately skip the /documents/confirm step
-        r = await client.post(f"/api/v1/shipments/{sid}/po", json={
-            "po_number": "PO-NODOC", "po_date": "2026-01-10",
-            "product_description": "Tiles", "quantity": "100",
-            "quantity_unit": "boxes", "total_value": "10000.00", "currency": "USD",
-        }, headers=h)
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/po",
+            json={
+                "po_number": "PO-NODOC",
+                "po_date": "2026-01-10",
+                "product_description": "Tiles",
+                "quantity": "100",
+                "quantity_unit": "boxes",
+                "total_value": "10000.00",
+                "currency": "USD",
+            },
+            headers=h,
+        )
         assert r.status_code == 200
         po_id = r.json()["id"]
 
@@ -577,11 +633,16 @@ class TestPreconditions:
         h = {"Authorization": f"Bearer {admin_token}"}
         sid, _ = await _advance_to(client, h, "po_submitted", ref="DISC-001")
 
-        r = await client.post(f"/api/v1/shipments/{sid}/invoice", json={
-            "invoice_number": "INV-DISC", "invoice_date": "2026-01-15",
-            "value": "15000.00",   # 50% over the 10000 PO total — well beyond the 2% threshold
-            "currency": "USD",
-        }, headers=h)
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/invoice",
+            json={
+                "invoice_number": "INV-DISC",
+                "invoice_date": "2026-01-15",
+                "value": "15000.00",  # 50% over the 10000 PO total — well beyond the 2% threshold
+                "currency": "USD",
+            },
+            headers=h,
+        )
         assert r.status_code == 400
         assert "Invoice must be uploaded before proceeding" in r.json()["detail"]
         assert await self._get_status(client, sid, h) == "po_submitted"
@@ -601,17 +662,21 @@ class TestPreconditions:
         h = {"Authorization": f"Bearer {admin_token}"}
         sid, _ = await _advance_to(client, h, "invoice_received", ref="PART-001")
 
-        r = await client.post(f"/api/v1/shipments/{sid}/payments", json={
-            "swift_ref": "PART-SW001", "payment_date": "2026-01-20",
-            "amount": "5000.00",   # exactly half — insufficient to trigger transition
-            "currency": "USD", "payment_type": "partial",
-        }, headers=h)
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/payments",
+            json={
+                "swift_ref": "PART-SW001",
+                "payment_date": "2026-01-20",
+                "amount": "5000.00",  # exactly half — insufficient to trigger transition
+                "currency": "USD",
+                "payment_type": "partial",
+            },
+            headers=h,
+        )
         assert r.status_code == 200, r.json()
         assert await self._get_status(client, sid, h) == "invoice_received"
 
-    async def test_in_transit_without_vessel_blocked(
-        self, client: AsyncClient, admin_token: str
-    ):
+    async def test_in_transit_without_vessel_blocked(self, client: AsyncClient, admin_token: str):
         """
         Confirming departure without an assigned vessel is rejected.
 
@@ -631,9 +696,7 @@ class TestPreconditions:
         assert r.status_code == 400
         assert "Vessel not assigned yet" in r.json()["detail"]
 
-    async def test_cleared_requires_all_containers(
-        self, client: AsyncClient, admin_token: str
-    ):
+    async def test_cleared_requires_all_containers(self, client: AsyncClient, admin_token: str):
         """
         The CLEARED transition only fires when every container is customs-cleared.
 
@@ -671,23 +734,31 @@ class TestPreconditions:
         container_ids = ctx["container_ids"]
 
         # Create two delivery points — one container each
-        r1 = await client.post(f"/api/v1/shipments/{sid}/delivery/points", json={
-            "recipient_name": "Customer A",
-            "address": "1 Alpha Road, London, EC1A 1AA",
-            "contact_name": "Alice",
-            "contact_phone": "+44 7700 900001",
-            "container_ids": [container_ids[0]],
-        }, headers=h)
+        r1 = await client.post(
+            f"/api/v1/shipments/{sid}/delivery/points",
+            json={
+                "recipient_name": "Customer A",
+                "address": "1 Alpha Road, London, EC1A 1AA",
+                "contact_name": "Alice",
+                "contact_phone": "+44 7700 900001",
+                "container_ids": [container_ids[0]],
+            },
+            headers=h,
+        )
         assert r1.status_code == 200, r1.json()
         point_id_0 = r1.json()["id"]
 
-        r2 = await client.post(f"/api/v1/shipments/{sid}/delivery/points", json={
-            "recipient_name": "Customer B",
-            "address": "2 Beta Lane, Birmingham, B1 1BB",
-            "contact_name": "Bob",
-            "contact_phone": "+44 7700 900002",
-            "container_ids": [container_ids[1]],
-        }, headers=h)
+        r2 = await client.post(
+            f"/api/v1/shipments/{sid}/delivery/points",
+            json={
+                "recipient_name": "Customer B",
+                "address": "2 Beta Lane, Birmingham, B1 1BB",
+                "contact_name": "Bob",
+                "contact_phone": "+44 7700 900002",
+                "container_ids": [container_ids[1]],
+            },
+            headers=h,
+        )
         assert r2.status_code == 200, r2.json()
 
         # Mark only the first point as delivered
@@ -741,11 +812,19 @@ class TestRoleEnforcement:
 
         sid, _ = await _advance_to(client, h, "draft", ref="ROLE-PO-001")
 
-        r = await client.post(f"/api/v1/shipments/{sid}/po", json={
-            "po_number": "PO-ROLE", "po_date": "2026-01-10",
-            "product_description": "Tiles", "quantity": "100",
-            "quantity_unit": "boxes", "total_value": "10000.00", "currency": "USD",
-        }, headers=h)
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/po",
+            json={
+                "po_number": "PO-ROLE",
+                "po_date": "2026-01-10",
+                "product_description": "Tiles",
+                "quantity": "100",
+                "quantity_unit": "boxes",
+                "total_value": "10000.00",
+                "currency": "USD",
+            },
+            headers=h,
+        )
         po_id = r.json()["id"]
 
         await client.post(
@@ -769,10 +848,16 @@ class TestRoleEnforcement:
 
         sid, _ = await _advance_to(client, h, "po_submitted", ref="ROLE-INV-001")
 
-        r = await client.post(f"/api/v1/shipments/{sid}/invoice", json={
-            "invoice_number": "INV-ROLE", "invoice_date": "2026-01-15",
-            "value": "10000.00", "currency": "USD",
-        }, headers=uk_h)
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/invoice",
+            json={
+                "invoice_number": "INV-ROLE",
+                "invoice_date": "2026-01-15",
+                "value": "10000.00",
+                "currency": "USD",
+            },
+            headers=uk_h,
+        )
         assert r.status_code == 403
 
     async def test_only_admin_can_add_payment(
@@ -786,10 +871,17 @@ class TestRoleEnforcement:
 
         sid, _ = await _advance_to(client, h, "invoice_received", ref="ROLE-PAY-001")
 
-        r = await client.post(f"/api/v1/shipments/{sid}/payments", json={
-            "swift_ref": "ROLE-SW001", "payment_date": "2026-01-20",
-            "amount": "10000.00", "currency": "USD", "payment_type": "full",
-        }, headers=uk_h)
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/payments",
+            json={
+                "swift_ref": "ROLE-SW001",
+                "payment_date": "2026-01-20",
+                "amount": "10000.00",
+                "currency": "USD",
+                "payment_type": "full",
+            },
+            headers=uk_h,
+        )
         assert r.status_code == 403
 
     # ── Bill of Lading upload ─────────────────────────────────────────────────
@@ -809,13 +901,21 @@ class TestRoleEnforcement:
         sid, _ = await _advance_to(client, h, "payment_confirmed", ref="ROLE-BL-MA-001")
         await _add_member(client, admin_token, sid, morocco_agent_token)
 
-        r = await client.post(f"/api/v1/shipments/{sid}/bl", json={
-            "bl_number": "BL-ROLE-001", "bl_date": "2026-01-25",
-            "shipper_name": "Shipper", "consignee_name": "Consignee",
-            "port_of_loading": "Casablanca", "port_of_discharge": "Felixstowe",
-            "containers": [{"container_number": "TCKU1234567"}],
-            "commodity_description": "Tiles", "gross_weight_kg": "5000.00",
-        }, headers=ma_h)
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/bl",
+            json={
+                "bl_number": "BL-ROLE-001",
+                "bl_date": "2026-01-25",
+                "shipper_name": "Shipper",
+                "consignee_name": "Consignee",
+                "port_of_loading": "Casablanca",
+                "port_of_discharge": "Felixstowe",
+                "containers": [{"container_number": "TCKU1234567"}],
+                "commodity_description": "Tiles",
+                "gross_weight_kg": "5000.00",
+            },
+            headers=ma_h,
+        )
         assert r.status_code == 200, r.json()
 
     async def test_uk_agent_cannot_upload_bl(
@@ -830,13 +930,21 @@ class TestRoleEnforcement:
         sid, _ = await _advance_to(client, h, "payment_confirmed", ref="ROLE-BL-UK-001")
         await _add_member(client, admin_token, sid, uk_agent_token)
 
-        r = await client.post(f"/api/v1/shipments/{sid}/bl", json={
-            "bl_number": "BL-ROLE-002", "bl_date": "2026-01-25",
-            "shipper_name": "Shipper", "consignee_name": "Consignee",
-            "port_of_loading": "Casablanca", "port_of_discharge": "Felixstowe",
-            "containers": [{"container_number": "TCKU1234567"}],
-            "commodity_description": "Tiles", "gross_weight_kg": "5000.00",
-        }, headers=uk_h)
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/bl",
+            json={
+                "bl_number": "BL-ROLE-002",
+                "bl_date": "2026-01-25",
+                "shipper_name": "Shipper",
+                "consignee_name": "Consignee",
+                "port_of_loading": "Casablanca",
+                "port_of_discharge": "Felixstowe",
+                "containers": [{"container_number": "TCKU1234567"}],
+                "commodity_description": "Tiles",
+                "gross_weight_kg": "5000.00",
+            },
+            headers=uk_h,
+        )
         assert r.status_code == 403
 
     async def test_customer_cannot_upload_bl(
@@ -851,13 +959,21 @@ class TestRoleEnforcement:
         sid, _ = await _advance_to(client, h, "payment_confirmed", ref="ROLE-BL-CUST-001")
         await _add_member(client, admin_token, sid, customer_token)
 
-        r = await client.post(f"/api/v1/shipments/{sid}/bl", json={
-            "bl_number": "BL-ROLE-003", "bl_date": "2026-01-25",
-            "shipper_name": "Shipper", "consignee_name": "Consignee",
-            "port_of_loading": "Casablanca", "port_of_discharge": "Felixstowe",
-            "containers": [{"container_number": "TCKU1234567"}],
-            "commodity_description": "Tiles", "gross_weight_kg": "5000.00",
-        }, headers=cust_h)
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/bl",
+            json={
+                "bl_number": "BL-ROLE-003",
+                "bl_date": "2026-01-25",
+                "shipper_name": "Shipper",
+                "consignee_name": "Consignee",
+                "port_of_loading": "Casablanca",
+                "port_of_discharge": "Felixstowe",
+                "containers": [{"container_number": "TCKU1234567"}],
+                "commodity_description": "Tiles",
+                "gross_weight_kg": "5000.00",
+            },
+            headers=cust_h,
+        )
         assert r.status_code == 403
 
     # ── Vessel departure confirmation ─────────────────────────────────────────
@@ -879,10 +995,16 @@ class TestRoleEnforcement:
         await _add_member(client, admin_token, sid, morocco_agent_token)
 
         # Vessel is created by admin (Morocco agent cannot create vessel on its own here)
-        await client.post(f"/api/v1/shipments/{sid}/vessel", json={
-            "vessel_name": "Role Test Vessel", "shipping_line": "TestLine",
-            "port_of_loading": "Casablanca", "port_of_discharge": "Felixstowe",
-        }, headers=h)
+        await client.post(
+            f"/api/v1/shipments/{sid}/vessel",
+            json={
+                "vessel_name": "Role Test Vessel",
+                "shipping_line": "TestLine",
+                "port_of_loading": "Casablanca",
+                "port_of_discharge": "Felixstowe",
+            },
+            headers=h,
+        )
 
         r = await client.patch(
             f"/api/v1/shipments/{sid}/vessel/depart",
@@ -903,10 +1025,16 @@ class TestRoleEnforcement:
         sid, _ = await _advance_to(client, h, "bl_issued", ref="ROLE-DEP-UK-001")
         await _add_member(client, admin_token, sid, uk_agent_token)
 
-        await client.post(f"/api/v1/shipments/{sid}/vessel", json={
-            "vessel_name": "Role Test Vessel", "shipping_line": "TestLine",
-            "port_of_loading": "Casablanca", "port_of_discharge": "Felixstowe",
-        }, headers=h)
+        await client.post(
+            f"/api/v1/shipments/{sid}/vessel",
+            json={
+                "vessel_name": "Role Test Vessel",
+                "shipping_line": "TestLine",
+                "port_of_loading": "Casablanca",
+                "port_of_discharge": "Felixstowe",
+            },
+            headers=h,
+        )
 
         r = await client.patch(
             f"/api/v1/shipments/{sid}/vessel/depart",

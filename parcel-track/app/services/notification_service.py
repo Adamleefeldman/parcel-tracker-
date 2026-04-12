@@ -5,17 +5,17 @@ NotificationService handles two concerns:
 
 Called from service layer on state transitions — never from route handlers directly.
 """
+
 import uuid
-from typing import Optional
 
 import httpx
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.enums import NotificationType, UserRole
-from app.db.models import Notification, User, ShipmentUser
+from app.db.models import Notification, ShipmentUser, User
 
 settings = get_settings()
 
@@ -23,30 +23,59 @@ settings = get_settings()
 # ── Notification templates ─────────────────────────────────────────────────────
 
 NOTIFICATION_TEMPLATES: dict[NotificationType, tuple[str, str]] = {
-    NotificationType.PO_SUBMITTED:        ("PO submitted", "A purchase order has been submitted. Please issue an invoice."),
-    NotificationType.INVOICE_RECEIVED:    ("Invoice received", "A new invoice has been uploaded for your shipment."),
-    NotificationType.PAYMENT_CONFIRMED:   ("Payment confirmed", "Payment has been confirmed. Morocco agent can now proceed."),
-    NotificationType.BL_UPLOADED:         ("Bill of lading uploaded", "The BL has been uploaded and containers have been created."),
-    NotificationType.VESSEL_DEPARTED:     ("Vessel departed", "Your shipment has departed from the port of loading."),
-    NotificationType.VESSEL_DELAYED:      ("Vessel delayed", "The vessel has been delayed. ETA has been revised."),
-    NotificationType.VESSEL_ARRIVED:      ("Vessel arrived", "The vessel has arrived at the destination port."),
-    NotificationType.CONTAINER_HOLD:      ("Container on hold", "A container has been placed on customs hold."),
-    NotificationType.CONTAINER_CLEARED:   ("Container cleared", "A container has cleared customs."),
-    NotificationType.CLEARING_DOCS_URGENT: ("Clearing docs urgent", "Vessel ETA is within 48 hours — clearing docs needed urgently."),
-    NotificationType.DELIVERY_SCHEDULED:  ("Delivery scheduled", "Your delivery has been scheduled."),
-    NotificationType.DELIVERY_COMPLETE:   ("Delivery complete", "Your delivery has been completed."),
+    NotificationType.PO_SUBMITTED: (
+        "PO submitted",
+        "A purchase order has been submitted. Please issue an invoice.",
+    ),
+    NotificationType.INVOICE_RECEIVED: (
+        "Invoice received",
+        "A new invoice has been uploaded for your shipment.",
+    ),
+    NotificationType.PAYMENT_CONFIRMED: (
+        "Payment confirmed",
+        "Payment has been confirmed. Morocco agent can now proceed.",
+    ),
+    NotificationType.BL_UPLOADED: (
+        "Bill of lading uploaded",
+        "The BL has been uploaded and containers have been created.",
+    ),
+    NotificationType.VESSEL_DEPARTED: (
+        "Vessel departed",
+        "Your shipment has departed from the port of loading.",
+    ),
+    NotificationType.VESSEL_DELAYED: (
+        "Vessel delayed",
+        "The vessel has been delayed. ETA has been revised.",
+    ),
+    NotificationType.VESSEL_ARRIVED: (
+        "Vessel arrived",
+        "The vessel has arrived at the destination port.",
+    ),
+    NotificationType.CONTAINER_HOLD: (
+        "Container on hold",
+        "A container has been placed on customs hold.",
+    ),
+    NotificationType.CONTAINER_CLEARED: ("Container cleared", "A container has cleared customs."),
+    NotificationType.CLEARING_DOCS_URGENT: (
+        "Clearing docs urgent",
+        "Vessel ETA is within 48 hours — clearing docs needed urgently.",
+    ),
+    NotificationType.DELIVERY_SCHEDULED: (
+        "Delivery scheduled",
+        "Your delivery has been scheduled.",
+    ),
+    NotificationType.DELIVERY_COMPLETE: ("Delivery complete", "Your delivery has been completed."),
 }
 
 
 class NotificationService:
-
     @staticmethod
     async def notify_shipment_roles(
         db: AsyncSession,
         shipment_id: uuid.UUID,
         notification_type: NotificationType,
         roles: list[UserRole],
-        override_message: Optional[str] = None,
+        override_message: str | None = None,
     ) -> None:
         """Notify all members of a shipment who hold one of the given roles."""
         result = await db.execute(
@@ -70,9 +99,9 @@ class NotificationService:
     async def send(
         db: AsyncSession,
         user_id: uuid.UUID,
-        shipment_id: Optional[uuid.UUID],
+        shipment_id: uuid.UUID | None,
         notification_type: NotificationType,
-        override_message: Optional[str] = None,
+        override_message: str | None = None,
     ) -> None:
         title, default_message = NOTIFICATION_TEMPLATES.get(
             notification_type, ("Notification", "You have a new update.")

@@ -1,0 +1,136 @@
+# Local development stack for ParcelTrack.
+#
+# All five services boot from one command:
+#     docker compose up
+#
+# After the first boot, run migrations once:
+#     docker compose run --rm api alembic upgrade head
+#
+# The api and worker services bind-mount ./app for hot reload — edits on the
+# host take effect immediately. The production runtime image (built from the
+# same Dockerfile) does NOT have this bind mount; it ships its own copy.
+#
+# Postgres credentials below are HARDCODED for local-only use. They are never
+# read by anything outside this file. Production reads DATABASE_URL from the
+# deploy environment.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: parceltrack-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: parceltrack
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d parceltrack"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: parceltrack-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: parceltrack:dev
+    container_name: parceltrack-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment: &app_env
+      APP_ENV: development
+      APP_NAME: ParcelTrack
+      # Hardcoded local-only secret. Long enough to satisfy the validator
+      # added in Task 6. NEVER use this value outside this compose file.
+      SECRET_KEY: dev_only_local_secret_key_do_not_use_in_production_xxxxx
+      # asyncpg URL for the app's async engine.
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/parceltrack
+      # psycopg2 URL for Alembic's sync engine.
+      DATABASE_URL_SYNC: postgresql://postgres:postgres@postgres:5432/parceltrack
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 15
+      REFRESH_TOKEN_EXPIRE_DAYS: 30
+      INVITE_TOKEN_EXPIRE_HOURS: 72
+      # Storage placeholders — real R2 credentials live in .env (gitignored).
+      # Override at runtime: docker compose --env-file .env up
+      STORAGE_BUCKET: parceltrack-local
+      STORAGE_ENDPOINT_URL: http://localhost:9000
+      STORAGE_ACCESS_KEY_ID: local_dev_key
+      STORAGE_SECRET_ACCESS_KEY: local_dev_secret
+      STORAGE_REGION: auto
+      STORAGE_PUBLIC_URL: http://localhost:9000/parceltrack-local
+      REDIS_URL: redis://redis:6379/0
+      EXPO_PUSH_URL: https://exp.host/--/api/v2/push/send
+      # Task 3 — CORS allowlist for the local frontends.
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173,http://localhost:8081
+    volumes:
+      # Hot-reload bind mount. Production image does NOT include this.
+      - ./app:/app/app
+      - ./alembic.ini:/app/alembic.ini:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    image: parceltrack:dev
+    container_name: parceltrack-worker
+    command: celery -A app.background.tasks worker --loglevel=info
+    environment: *app_env
+    volumes:
+      - ./app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    # Worker is not an HTTP server — disable the inherited Dockerfile HEALTHCHECK.
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
+  beat:
+    image: parceltrack:dev
+    container_name: parceltrack-beat
+    # Beat persists its schedule to a file. /app is read-only for the app user,
+    # so write it to /tmp inside the container instead.
+    command: celery -A app.background.tasks beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    environment: *app_env
+    volumes:
+      - ./app:/app/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    # Beat is not an HTTP server — disable the inherited Dockerfile HEALTHCHECK.
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: parceltrack_postgres_data

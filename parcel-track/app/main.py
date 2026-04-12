@@ -2,18 +2,33 @@
 Application entry point.
 All routers registered here. Exception handlers provide consistent error shape.
 """
-from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import get_settings
+from fastapi import Depends, FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.api.routes.routes import (
-    auth_router, shipment_router, po_router,
-    invoice_router, payment_router, bl_router,
-    vessel_router, container_router, customs_router,
-    clearing_router, delivery_router, doc_router,
+    auth_router,
+    bl_router,
+    clearing_router,
+    container_router,
+    customs_router,
+    delivery_router,
+    doc_router,
+    invoice_router,
     notif_router,
+    payment_router,
+    po_router,
+    shipment_router,
+    vessel_router,
 )
+from app.core.config import get_settings
+from app.db.database import get_db
+from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
+from app.middleware.security_headers import SecurityHeadersMiddleware
 
 settings = get_settings()
 
@@ -24,22 +39,62 @@ app = FastAPI(
     redoc_url="/redoc" if not settings.is_production else None,
 )
 
-# ── CORS (lock down in production) ────────────────────────────────────────────
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+#
+# Global default: 120 req/min per IP. Tighter per-route limits are applied
+# via @limiter.limit("N/period") decorators on auth and mutation endpoints.
 
-origins = ["*"] if not settings.is_production else [
-    "https://yourapp.com",  # replace with actual origin in production
-]
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ── CORS ──────────────────────────────────────────────────────────────────────
+#
+# Origins are driven entirely by the CORS_ALLOWED_ORIGINS env var
+# (comma-separated). Empty in production is a hard boot-time error — never
+# silently fall back to a wildcard in prod.
+#
+# Empty in development falls back to a permissive wildcard (no credentials)
+# so casual exploration with curl / a fresh frontend isn't blocked.
+
+cors_origins = settings.cors_origins
+
+if cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+elif settings.is_production:
+    raise RuntimeError(
+        "CORS_ALLOWED_ORIGINS must be set in production. "
+        "Provide a comma-separated list of allowed origins, e.g. "
+        "'https://app.example.com,https://admin.example.com'."
+    )
+else:
+    # Dev fallback: wildcard origin without credentials.
+    # The CORS spec forbids '*' with allow_credentials=True, so we drop creds
+    # in this branch instead of silently misconfiguring the browser.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+
+# ── Security headers ─────────────────────────────────────────────────────────
+#
+# Adds X-Frame-Options: DENY, X-Content-Type-Options: nosniff, HSTS (prod),
+# Referrer-Policy, Permissions-Policy, X-Robots-Tag to every response.
+
+app.add_middleware(SecurityHeadersMiddleware, is_production=settings.is_production)
 
 
 # ── Global exception handlers ─────────────────────────────────────────────────
+
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
@@ -53,25 +108,54 @@ async def generic_exception_handler(request: Request, exc: Exception):
 
 # ── Health check ──────────────────────────────────────────────────────────────
 
+
 @app.get("/health", tags=["health"])
 async def health():
+    """Liveness probe — confirms the process is running and can serve HTTP."""
     return {"status": "ok", "env": settings.APP_ENV}
+
+
+@app.get("/ready", tags=["health"])
+async def ready(db: AsyncSession = Depends(get_db)):
+    """
+    Readiness probe — confirms the app can actually serve real requests.
+
+    Pings the database with `SELECT 1`. If the DB is unreachable or slow,
+    the probe returns 503 so the load balancer / orchestrator stops routing
+    traffic here until the situation resolves.
+
+    Redis check deferred to P2 (alongside broader observability work).
+    """
+    checks: dict[str, str] = {}
+
+    # ── Database ──────────────────────────────────────────────────────────
+    try:
+        await db.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as exc:
+        checks["database"] = f"unavailable: {exc}"
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "unhealthy", "checks": checks},
+        )
+
+    return {"status": "ok", "checks": checks}
 
 
 # ── Register all routers ──────────────────────────────────────────────────────
 
 PREFIX = "/api/v1"
 
-app.include_router(auth_router,       prefix=PREFIX)
-app.include_router(shipment_router,   prefix=PREFIX)
-app.include_router(po_router,         prefix=PREFIX)
-app.include_router(invoice_router,    prefix=PREFIX)
-app.include_router(payment_router,    prefix=PREFIX)
-app.include_router(bl_router,         prefix=PREFIX)
-app.include_router(vessel_router,     prefix=PREFIX)
-app.include_router(container_router,  prefix=PREFIX)
-app.include_router(customs_router,    prefix=PREFIX)
-app.include_router(clearing_router,   prefix=PREFIX)
-app.include_router(delivery_router,   prefix=PREFIX)
-app.include_router(doc_router,        prefix=PREFIX)
-app.include_router(notif_router,      prefix=PREFIX)
+app.include_router(auth_router, prefix=PREFIX)
+app.include_router(shipment_router, prefix=PREFIX)
+app.include_router(po_router, prefix=PREFIX)
+app.include_router(invoice_router, prefix=PREFIX)
+app.include_router(payment_router, prefix=PREFIX)
+app.include_router(bl_router, prefix=PREFIX)
+app.include_router(vessel_router, prefix=PREFIX)
+app.include_router(container_router, prefix=PREFIX)
+app.include_router(customs_router, prefix=PREFIX)
+app.include_router(clearing_router, prefix=PREFIX)
+app.include_router(delivery_router, prefix=PREFIX)
+app.include_router(doc_router, prefix=PREFIX)
+app.include_router(notif_router, prefix=PREFIX)

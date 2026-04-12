@@ -9,16 +9,20 @@ Covers:
 Fixtures (client, admin_token, shipment, role tokens, setup_db) are
 provided by conftest.py. pytest-asyncio auto mode means no decorator needed.
 """
+
 import uuid
+
 from httpx import AsyncClient
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _decode_user_id(token: str) -> str:
     """Extract user UUID from a JWT without an API call."""
     from jose import jwt
+
     from app.core.config import get_settings
+
     settings = get_settings()
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])["sub"]
 
@@ -47,6 +51,7 @@ async def _assign_member(client: AsyncClient, admin_token: str, shipment_id: str
 
 # ── GET /shipments filters ─────────────────────────────────────────────────────
 
+
 class TestShipmentListFilters:
     """
     Exercises the status and date_from / date_to query parameters added in Task 2.
@@ -54,9 +59,7 @@ class TestShipmentListFilters:
     testing filter logic only, not access control (that lives in test_rbac.py).
     """
 
-    async def test_filter_by_status_returns_matching(
-        self, client: AsyncClient, admin_token: str
-    ):
+    async def test_filter_by_status_returns_matching(self, client: AsyncClient, admin_token: str):
         """
         Creates one shipment (status=draft). Filter by status=draft must return it.
         Filter by status=in_transit must return nothing.
@@ -68,7 +71,7 @@ class TestShipmentListFilters:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert draft_resp.status_code == 200
-        statuses = [s["status"] for s in draft_resp.json()]
+        statuses = [s["status"] for s in draft_resp.json()["items"]]
         assert all(s == "draft" for s in statuses)
         assert len(statuses) >= 1
 
@@ -83,7 +86,7 @@ class TestShipmentListFilters:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json()["items"] == []
 
     async def test_filter_by_invalid_status_returns_422(
         self, client: AsyncClient, admin_token: str
@@ -99,9 +102,7 @@ class TestShipmentListFilters:
         )
         assert resp.status_code == 422
 
-    async def test_filter_date_from_excludes_earlier(
-        self, client: AsyncClient, admin_token: str
-    ):
+    async def test_filter_date_from_excludes_earlier(self, client: AsyncClient, admin_token: str):
         """
         date_from=2099-01-01 is in the future — no shipment created now
         should match, so the result must be empty.
@@ -113,11 +114,9 @@ class TestShipmentListFilters:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json()["items"] == []
 
-    async def test_filter_date_to_includes_today(
-        self, client: AsyncClient, admin_token: str
-    ):
+    async def test_filter_date_to_includes_today(self, client: AsyncClient, admin_token: str):
         """
         date_to=2099-12-31 is far in the future — a shipment created now
         must appear in results.
@@ -129,12 +128,10 @@ class TestShipmentListFilters:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200
-        ids = [s["id"] for s in resp.json()]
+        ids = [s["id"] for s in resp.json()["items"]]
         assert ship_id in ids
 
-    async def test_status_and_date_filters_combine(
-        self, client: AsyncClient, admin_token: str
-    ):
+    async def test_status_and_date_filters_combine(self, client: AsyncClient, admin_token: str):
         """
         Both filters active simultaneously. A shipment that matches status=draft
         but is excluded by date_from should not appear.
@@ -147,11 +144,9 @@ class TestShipmentListFilters:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json()["items"] == []
 
-    async def test_no_filters_returns_all(
-        self, client: AsyncClient, admin_token: str
-    ):
+    async def test_no_filters_returns_all(self, client: AsyncClient, admin_token: str):
         """Baseline: no query params returns all shipments for an admin."""
         id_a = await _create_shipment(client, admin_token, "FILTER-NONE-A")
         id_b = await _create_shipment(client, admin_token, "FILTER-NONE-B")
@@ -161,7 +156,7 @@ class TestShipmentListFilters:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200
-        ids = [s["id"] for s in resp.json()]
+        ids = [s["id"] for s in resp.json()["items"]]
         assert id_a in ids
         assert id_b in ids
 
@@ -182,12 +177,13 @@ class TestShipmentListFilters:
             headers={"Authorization": f"Bearer {uk_agent_token}"},
         )
         assert resp.status_code == 200
-        ids = [s["id"] for s in resp.json()]
+        ids = [s["id"] for s in resp.json()["items"]]
         assert ship_a in ids
         assert len(ids) == 1
 
 
 # ── GET /shipments/{id} response shape ────────────────────────────────────────
+
 
 class TestShipmentDetail:
     """
@@ -279,9 +275,7 @@ class TestShipmentDetail:
         assert resp.status_code == 200
         assert resp.json()["id"] == shipment
 
-    async def test_detail_unknown_id_returns_404(
-        self, client: AsyncClient, admin_token: str
-    ):
+    async def test_detail_unknown_id_returns_404(self, client: AsyncClient, admin_token: str):
         """A well-formed UUID that doesn't exist in the DB must return 404."""
         fake_id = str(uuid.uuid4())
         resp = await client.get(
@@ -292,6 +286,7 @@ class TestShipmentDetail:
 
 
 # ── PATCH /shipments/{id} ─────────────────────────────────────────────────────
+
 
 class TestShipmentPatch:
     """

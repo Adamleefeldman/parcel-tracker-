@@ -31,6 +31,7 @@ dependencies = [
     # Utilities
     "python-dotenv==1.0.1",
     "pytz==2024.1",
+    "slowapi>=0.1.9",
 ]
 
 [dependency-groups]
@@ -38,7 +39,50 @@ dev = [
     "pytest==8.2.0",
     "pytest-asyncio==0.23.6",
     "aiosqlite>=0.20",
+    "ruff>=0.15.10",
+    "mypy>=1.20.0",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+# ── Ruff ──────────────────────────────────────────────────────────────────────
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "S",   # flake8-bandit (security)
+    "RUF", # ruff-specific rules
+]
+ignore = [
+    "S101",  # assert is fine in tests
+    "S105",  # possible hardcoded password — too noisy for config modules
+    "S106",  # same (function arg defaults)
+    "B008",  # do not perform function call in argument defaults — conflicts with Depends()
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S"]  # don't flag security issues in test helpers
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+# ── Mypy ──────────────────────────────────────────────────────────────────────
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+# Non-strict for P0 — we're adding types incrementally, not doing a full
+# retrofit in one shot. Tighten in P2.
+ignore_missing_imports = true
+check_untyped_defs = true

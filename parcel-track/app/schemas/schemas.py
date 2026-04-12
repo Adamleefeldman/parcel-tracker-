@@ -3,16 +3,17 @@ Pydantic schemas for request validation and response serialisation.
 Financial fields are Optional[Decimal] — the service layer sets them to None
 for non-admin users before returning.
 """
-import uuid
+
 import re
-from datetime import datetime, date
+import uuid
+from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional
 
 from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
-
 # ── Base ──────────────────────────────────────────────────────────────────────
+
 
 class UUIDModel(BaseModel):
     id: uuid.UUID
@@ -21,10 +22,11 @@ class UUIDModel(BaseModel):
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
+
 class InviteRequest(BaseModel):
     email: EmailStr
     role: str  # UserRole value
-    shipment_id: Optional[uuid.UUID] = None
+    shipment_id: uuid.UUID | None = None
 
 
 class AcceptInviteRequest(BaseModel):
@@ -64,6 +66,7 @@ class UserOut(UUIDModel):
 
 # ── Shipments ─────────────────────────────────────────────────────────────────
 
+
 class ShipmentCreate(BaseModel):
     reference: str
 
@@ -77,36 +80,38 @@ class ShipmentOut(UUIDModel):
 
 class ShipmentAddMember(BaseModel):
     user_id: uuid.UUID
-    role_override: Optional[str] = None
+    role_override: str | None = None
 
 
 class ShipmentDetailOut(ShipmentOut):
     """Full shipment detail — used by GET /shipments/{id}. Includes all nested relationships."""
+
     purchase_order: Optional["POOut"] = None
     invoice: Optional["InvoiceOut"] = None
-    payments: List["PaymentOut"] = []
+    payments: list["PaymentOut"] = []
     bill_of_lading: Optional["BLOut"] = None
     clearing_docs: Optional["ClearingDocsOut"] = None
-    delivery_points: List["DeliveryPointOut"] = []
+    delivery_points: list["DeliveryPointOut"] = []
 
 
 class ShipmentUpdate(BaseModel):
-    reference: Optional[str] = None
+    reference: str | None = None
     # Extend with other editable fields (e.g. notes) if/when needed
 
-    
+
 # ── Purchase Order ─────────────────────────────────────────────────────────────
+
 
 class POCreate(BaseModel):
     po_number: str
     po_date: date
-    supplier_ref: Optional[str] = None
+    supplier_ref: str | None = None
     product_description: str
     quantity: Decimal
     quantity_unit: str
     total_value: Decimal
     currency: str
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 class POOut(UUIDModel):
@@ -115,31 +120,32 @@ class POOut(UUIDModel):
     product_description: str
     quantity: Decimal
     quantity_unit: str
-    total_value: Optional[Decimal] = None   # None for non-admins
+    total_value: Decimal | None = None  # None for non-admins
     currency: str
     status: str
-    notes: Optional[str] = None
+    notes: str | None = None
     created_at: datetime
 
 
 # ── Invoice ───────────────────────────────────────────────────────────────────
+
 
 class InvoiceCreate(BaseModel):
     invoice_number: str
     invoice_date: date
     value: Decimal
     currency: str
-    payment_terms: Optional[str] = None
-    due_date: Optional[date] = None
+    payment_terms: str | None = None
+    due_date: date | None = None
 
 
 class InvoiceOut(UUIDModel):
     invoice_number: str
     invoice_date: date
-    value: Optional[Decimal] = None          # None for non-admins
+    value: Decimal | None = None  # None for non-admins
     currency: str
-    payment_terms: Optional[str] = None
-    due_date: Optional[date] = None
+    payment_terms: str | None = None
+    due_date: date | None = None
     status: str
     discrepancy_acknowledged: bool
     created_at: datetime
@@ -147,20 +153,21 @@ class InvoiceOut(UUIDModel):
 
 # ── Payment ───────────────────────────────────────────────────────────────────
 
+
 class PaymentCreate(BaseModel):
     swift_ref: str
     payment_date: date
     amount: Decimal
     currency: str
-    bank_name: Optional[str] = None
+    bank_name: str | None = None
     payment_type: str
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 class PaymentOut(UUIDModel):
-    swift_ref: Optional[str] = None         # None for non-admins
+    swift_ref: str | None = None  # None for non-admins
     payment_date: date
-    amount: Optional[Decimal] = None        # None for non-admins
+    amount: Decimal | None = None  # None for non-admins
     currency: str
     payment_type: str
     status: str
@@ -174,13 +181,15 @@ CONTAINER_NUMBER_RE = re.compile(r"^[A-Z]{4}\d{7}$")
 
 class ContainerInput(BaseModel):
     container_number: str
-    seal_number: Optional[str] = None
+    seal_number: str | None = None
 
     @field_validator("container_number")
     @classmethod
     def validate_container_number(cls, v: str) -> str:
         if not CONTAINER_NUMBER_RE.match(v.upper()):
-            raise ValueError(f"Invalid container number format: {v}. Expected 4 letters + 7 digits (e.g. TCKU1234567)")
+            raise ValueError(
+                f"Invalid container number format: {v}. Expected 4 letters + 7 digits (e.g. TCKU1234567)"
+            )
         return v.upper()
 
 
@@ -189,10 +198,10 @@ class BLCreate(BaseModel):
     bl_date: date
     shipper_name: str
     consignee_name: str
-    notify_party: Optional[str] = None
+    notify_party: str | None = None
     port_of_loading: str
     port_of_discharge: str
-    containers: List[ContainerInput]
+    containers: list[ContainerInput]
     commodity_description: str
     gross_weight_kg: Decimal
 
@@ -209,11 +218,11 @@ class BLCreate(BaseModel):
 
 class ContainerOut(UUIDModel):
     container_number: str
-    seal_number: Optional[str] = None
+    seal_number: str | None = None
     port_status: str
     status: str
-    destin8_ref: Optional[str] = None
-    notes: Optional[str] = None
+    destin8_ref: str | None = None
+    notes: str | None = None
     updated_at: datetime
 
 
@@ -228,21 +237,22 @@ class BLOut(UUIDModel):
     commodity_description: str
     gross_weight_kg: Decimal
     status: str
-    containers: List[ContainerOut] = []
+    containers: list[ContainerOut] = []
     vessel: Optional["VesselOut"] = None
     created_at: datetime
 
 
 # ── Vessel ────────────────────────────────────────────────────────────────────
 
+
 class VesselCreate(BaseModel):
     vessel_name: str
-    imo_number: Optional[str] = None
-    voyage_number: Optional[str] = None
+    imo_number: str | None = None
+    voyage_number: str | None = None
     shipping_line: str
     port_of_loading: str
     port_of_discharge: str
-    etd: Optional[date] = None
+    etd: date | None = None
 
 
 class VesselDeparture(BaseModel):
@@ -258,8 +268,8 @@ class VesselDeparture(BaseModel):
 
 class VesselUpdateCreate(BaseModel):
     status: str
-    current_position_note: Optional[str] = None
-    revised_eta: Optional[date] = None
+    current_position_note: str | None = None
+    revised_eta: date | None = None
 
     @model_validator(mode="after")
     def revised_eta_required_if_delayed(self):
@@ -270,41 +280,43 @@ class VesselUpdateCreate(BaseModel):
 
 class VesselUpdateOut(UUIDModel):
     status: str
-    current_position_note: Optional[str] = None
-    revised_eta: Optional[date] = None
+    current_position_note: str | None = None
+    revised_eta: date | None = None
     source: str
     created_at: datetime
 
 
 class VesselOut(UUIDModel):
     vessel_name: str
-    imo_number: Optional[str] = None
+    imo_number: str | None = None
     shipping_line: str
     port_of_loading: str
     port_of_discharge: str
-    etd: Optional[date] = None
-    atd: Optional[date] = None
-    eta: Optional[date] = None
+    etd: date | None = None
+    atd: date | None = None
+    eta: date | None = None
     status: str
-    updates: List[VesselUpdateOut] = []
+    updates: list[VesselUpdateOut] = []
 
 
 # ── Container status update ───────────────────────────────────────────────────
 
+
 class ContainerStatusUpdate(BaseModel):
-    port_status: Optional[str] = None
-    destin8_ref: Optional[str] = None
-    notes: Optional[str] = None
+    port_status: str | None = None
+    destin8_ref: str | None = None
+    notes: str | None = None
 
 
 # ── Customs ───────────────────────────────────────────────────────────────────
 
+
 class CustomsUpdate(BaseModel):
     status: str
-    clearance_date: Optional[date] = None
-    hold_reason: Optional[str] = None
-    hmrc_ref: Optional[str] = None
-    duty_paid: Optional[Decimal] = None
+    clearance_date: date | None = None
+    hold_reason: str | None = None
+    hmrc_ref: str | None = None
+    duty_paid: Decimal | None = None
 
     @model_validator(mode="after")
     def validate_status_fields(self):
@@ -321,32 +333,33 @@ class CustomsNoteCreate(BaseModel):
 
 class CustomsRecordOut(UUIDModel):
     status: str
-    clearance_date: Optional[date] = None
-    hold_reason: Optional[str] = None
-    hmrc_ref: Optional[str] = None
-    duty_paid: Optional[Decimal] = None
-    notes: List[dict] = []
+    clearance_date: date | None = None
+    hold_reason: str | None = None
+    hmrc_ref: str | None = None
+    duty_paid: Decimal | None = None
+    notes: list[dict] = []
     updated_at: datetime
 
 
 # ── Clearing Docs ─────────────────────────────────────────────────────────────
 
+
 class ClearingDocsUpdate(BaseModel):
-    customs_entry_ref: Optional[str] = None
-    hs_code: Optional[str] = None
-    duty_rate: Optional[Decimal] = None
-    estimated_duty_vat: Optional[Decimal] = None
-    has_customs_entry: Optional[bool] = None
-    has_packing_list: Optional[bool] = None
-    has_certificate_of_origin: Optional[bool] = None
-    has_health_cert: Optional[bool] = None
+    customs_entry_ref: str | None = None
+    hs_code: str | None = None
+    duty_rate: Decimal | None = None
+    estimated_duty_vat: Decimal | None = None
+    has_customs_entry: bool | None = None
+    has_packing_list: bool | None = None
+    has_certificate_of_origin: bool | None = None
+    has_health_cert: bool | None = None
 
 
 class ClearingDocsOut(UUIDModel):
-    customs_entry_ref: Optional[str] = None
-    hs_code: Optional[str] = None
-    duty_rate: Optional[Decimal] = None
-    estimated_duty_vat: Optional[Decimal] = None
+    customs_entry_ref: str | None = None
+    hs_code: str | None = None
+    duty_rate: Decimal | None = None
+    estimated_duty_vat: Decimal | None = None
     has_customs_entry: bool
     has_packing_list: bool
     has_certificate_of_origin: bool
@@ -357,29 +370,30 @@ class ClearingDocsOut(UUIDModel):
 
 # ── Delivery ──────────────────────────────────────────────────────────────────
 
+
 class DeliveryPointCreate(BaseModel):
     recipient_name: str
     address: str
     contact_name: str
     contact_phone: str
-    container_ids: List[uuid.UUID]
-    customer_user_id: Optional[uuid.UUID] = None
-    special_instructions: Optional[str] = None
+    container_ids: list[uuid.UUID]
+    customer_user_id: uuid.UUID | None = None
+    special_instructions: str | None = None
 
 
 class DeliveryScheduleCreate(BaseModel):
     delivery_date: date
-    time_window_start: str   # "07:00"
-    time_window_end: str     # "12:00"
+    time_window_start: str  # "07:00"
+    time_window_end: str  # "12:00"
     haulier: str
-    driver_name: Optional[str] = None
-    vehicle_reg: Optional[str] = None
-    notes_to_recipient: Optional[str] = None
+    driver_name: str | None = None
+    vehicle_reg: str | None = None
+    notes_to_recipient: str | None = None
 
 
 class DeliveryStatusUpdate(BaseModel):
     status: str
-    failure_reason: Optional[str] = None
+    failure_reason: str | None = None
 
     @model_validator(mode="after")
     def failure_requires_reason(self):
@@ -393,12 +407,12 @@ class DeliveryScheduleOut(UUIDModel):
     time_window_start: str
     time_window_end: str
     haulier: str
-    driver_name: Optional[str] = None
-    vehicle_reg: Optional[str] = None
-    notes_to_recipient: Optional[str] = None
+    driver_name: str | None = None
+    vehicle_reg: str | None = None
+    notes_to_recipient: str | None = None
     status: str
-    delivered_at: Optional[datetime] = None
-    failure_reason: Optional[str] = None
+    delivered_at: datetime | None = None
+    failure_reason: str | None = None
 
 
 class DeliveryPointOut(UUIDModel):
@@ -406,26 +420,27 @@ class DeliveryPointOut(UUIDModel):
     address: str
     contact_name: str
     contact_phone: str
-    special_instructions: Optional[str] = None
+    special_instructions: str | None = None
     status: str
-    schedule: Optional[DeliveryScheduleOut] = None
-    containers: List[ContainerOut] = []
+    schedule: DeliveryScheduleOut | None = None
+    containers: list[ContainerOut] = []
     created_at: datetime
 
 
 # ── Documents ─────────────────────────────────────────────────────────────────
+
 
 class UploadUrlRequest(BaseModel):
     entity_type: str
     entity_id: uuid.UUID
     file_name: str
     mime_type: str
-    file_size_bytes: Optional[int] = None
+    file_size_bytes: int | None = None
 
 
 class UploadUrlResponse(BaseModel):
-    upload_url: str          # pre-signed PUT URL for client to upload to directly
-    file_key: str            # key to confirm back after upload
+    upload_url: str  # pre-signed PUT URL for client to upload to directly
+    file_key: str  # key to confirm back after upload
     expires_in_seconds: int
 
 
@@ -433,7 +448,7 @@ class ConfirmUploadRequest(BaseModel):
     file_key: str
     file_name: str
     mime_type: str
-    file_size_bytes: Optional[int] = None
+    file_size_bytes: int | None = None
 
 
 class DocumentOut(UUIDModel):
@@ -441,23 +456,25 @@ class DocumentOut(UUIDModel):
     entity_id: uuid.UUID
     file_name: str
     mime_type: str
-    file_size_bytes: Optional[int] = None
-    download_url: str         # pre-signed GET URL, generated on request
+    file_size_bytes: int | None = None
+    download_url: str  # pre-signed GET URL, generated on request
     uploaded_at: datetime
 
 
 # ── Notifications ─────────────────────────────────────────────────────────────
+
 
 class NotificationOut(UUIDModel):
     type: str
     title: str
     message: str
     read: bool
-    shipment_id: Optional[uuid.UUID] = None
+    shipment_id: uuid.UUID | None = None
     created_at: datetime
 
 
 # ── Generic responses ─────────────────────────────────────────────────────────
+
 
 class MessageResponse(BaseModel):
     message: str

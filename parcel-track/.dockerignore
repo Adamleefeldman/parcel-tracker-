@@ -1,0 +1,56 @@
+# Keep the build context lean and the runtime image small.
+# Anything listed here is invisible to `docker build` and `COPY` instructions.
+
+# ── Python build artefacts ────────────────────────────────────────────────
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# ── Tests are NEVER shipped in the runtime image ──────────────────────────
+tests/
+
+# ── Secrets / local env ───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Editor / OS noise ─────────────────────────────────────────────────────
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ── Git / CI / docs ───────────────────────────────────────────────────────
+.git/
+.gitignore
+.github/
+.gitlab-ci.yml
+.pre-commit-config.yaml
+*.md
+!README.md
+
+# ── Docker self-references ────────────────────────────────────────────────
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.*.yml
+
+# ── Stray / unintended files ──────────────────────────────────────────────
+{app
