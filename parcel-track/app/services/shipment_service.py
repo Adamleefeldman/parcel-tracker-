@@ -111,7 +111,9 @@ class ShipmentService:
             await db.flush()
         except IntegrityError:
             await db.rollback()
-            raise HTTPException(status_code=409, detail="Shipment reference already exists")
+            raise HTTPException(
+                status_code=409, detail="Shipment reference already exists"
+            ) from None
 
         await db.refresh(shipment)
         return shipment

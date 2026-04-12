@@ -10,6 +10,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from jose import jwt as jose_jwt
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.core.enums import UserRole
 from app.db.database import Base, get_db
@@ -19,7 +20,10 @@ from app.main import app
 # Fall back to in-memory SQLite for fast local iteration.
 TEST_DB_URL = os.environ.get("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-engine = create_async_engine(TEST_DB_URL, echo=False)
+# NullPool disables connection pooling so asyncpg never reuses connections
+# across event loops. Without this, pytest-asyncio's per-test event loops
+# cause "Future attached to a different loop" errors with real Postgres.
+engine = create_async_engine(TEST_DB_URL, echo=False, poolclass=NullPool)
 TestSession = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

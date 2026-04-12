@@ -62,7 +62,7 @@ class AuthService:
         result = await db.execute(
             select(InviteToken).where(
                 InviteToken.token_hash == token_hash,
-                InviteToken.used == False,
+                ~InviteToken.used,
             )
         )
         invite = result.scalar_one_or_none()
@@ -128,9 +128,7 @@ class AuthService:
         db: AsyncSession,
         request: LoginRequest,
     ) -> dict:
-        result = await db.execute(
-            select(User).where(User.email == request.email, User.is_active == True)
-        )
+        result = await db.execute(select(User).where(User.email == request.email, User.is_active))
         user = result.scalar_one_or_none()
 
         if not user or not verify_password(request.password, user.hashed_password):
@@ -163,7 +161,7 @@ class AuthService:
         result = await db.execute(
             select(RefreshToken).where(
                 RefreshToken.token_hash == token_hash,
-                RefreshToken.revoked == False,
+                ~RefreshToken.revoked,
             )
         )
         token_record = result.scalar_one_or_none()
@@ -186,7 +184,7 @@ class AuthService:
         token_record.revoked = True
 
         user_result = await db.execute(
-            select(User).where(User.id == token_record.user_id, User.is_active == True)
+            select(User).where(User.id == token_record.user_id, User.is_active)
         )
         user = user_result.scalar_one_or_none()
         if not user:

@@ -188,7 +188,7 @@ class ContainerInput(BaseModel):
     def validate_container_number(cls, v: str) -> str:
         if not CONTAINER_NUMBER_RE.match(v.upper()):
             raise ValueError(
-                f"Invalid container number format: {v}. Expected 4 letters + 7 digits (e.g. TCKU1234567)"
+                f"Invalid container number format: {v}. Expected 4 letters + 7 digits (e.g. TCKU1234567)"  # noqa: E501
             )
         return v.upper()
 

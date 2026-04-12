@@ -136,5 +136,5 @@ class NotificationService:
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 await client.post(settings.EXPO_PUSH_URL, json=payload)
-        except Exception:
+        except Exception:  # noqa: S110
             pass  # Push failure is non-fatal — notification is already in DB

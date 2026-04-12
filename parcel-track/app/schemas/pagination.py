@@ -50,7 +50,7 @@ class PaginationParams:
             DEFAULT_PAGE_SIZE,
             ge=1,
             le=MAX_PAGE_SIZE,
-            description=f"Max items to return (1–{MAX_PAGE_SIZE})",
+            description=f"Max items to return (1-{MAX_PAGE_SIZE})",
         ),
     ) -> None:
         self.offset = offset
@@ -60,7 +60,7 @@ class PaginationParams:
 # ── Response envelope ─────────────────────────────────────────────────────────
 
 
-class PaginatedResponse(BaseModel, Generic[T]):
+class PaginatedResponse(BaseModel, Generic[T]):  # noqa: UP046
     """Paginated list envelope returned by every list endpoint."""
 
     items: list[T]

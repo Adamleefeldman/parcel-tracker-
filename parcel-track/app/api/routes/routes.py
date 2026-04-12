@@ -246,9 +246,7 @@ async def add_member(
         raise HTTPException(status_code=404, detail="Shipment not found")
 
     # Gap 2 fix — verify user exists and is active
-    user_result = await db.execute(
-        select(User).where(User.id == body.user_id, User.is_active == True)
-    )
+    user_result = await db.execute(select(User).where(User.id == body.user_id, User.is_active))
     if not user_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -307,7 +305,7 @@ async def submit_po(
     actor: User = Depends(require_admin),
     request: Request = None,
 ):
-    """Mark PO as submitted — requires document already uploaded. Transitions shipment to PO_SUBMITTED."""
+    """Mark PO as submitted — requires document already uploaded. Transitions to PO_SUBMITTED."""
     result = await db.execute(select(PurchaseOrder).where(PurchaseOrder.id == po_id))
     po = result.scalar_one_or_none()
     if not po:
@@ -825,7 +823,9 @@ async def upsert_customs(
             shipment_id,
             NotificationType.CONTAINER_HOLD,
             [UserRole.ADMIN],
-            override_message=f"Container {container.container_number} placed on hold: {body.hold_reason}",
+            override_message=(
+                f"Container {container.container_number} placed on hold: {body.hold_reason}"
+            ),
         )
 
     await db.flush()
@@ -990,7 +990,10 @@ async def schedule_delivery(
             user_id=point.customer_user_id,
             shipment_id=shipment_id,
             notification_type=NotificationType.DELIVERY_SCHEDULED,
-            override_message=f"Your delivery is scheduled for {body.delivery_date} between {body.time_window_start}–{body.time_window_end}",
+            override_message=(
+                f"Your delivery is scheduled for {body.delivery_date}"
+                f" between {body.time_window_start}-{body.time_window_end}"
+            ),
         )
 
     return {"message": "Delivery scheduled"}
@@ -1130,7 +1133,7 @@ async def list_notifications(
 ):
     q = select(Notification).where(Notification.user_id == actor.id)
     if unread_only:
-        q = q.where(Notification.read == False)
+        q = q.where(~Notification.read)
     q = q.order_by(Notification.created_at.desc())
     return await paginate(db, q, pagination)
 

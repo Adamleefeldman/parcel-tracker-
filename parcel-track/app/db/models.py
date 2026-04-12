@@ -218,7 +218,10 @@ class PurchaseOrder(Base):
 
     shipment: Mapped["Shipment"] = relationship(back_populates="purchase_order")
     document: Mapped[Optional["Document"]] = relationship(
-        primaryjoin="and_(Document.entity_type=='purchase_order', foreign(Document.entity_id)==PurchaseOrder.id)",
+        primaryjoin=(
+            "and_(Document.entity_type=='purchase_order',"
+            " foreign(Document.entity_id)==PurchaseOrder.id)"
+        ),
         foreign_keys="Document.entity_id",
         uselist=False,
         viewonly=True,

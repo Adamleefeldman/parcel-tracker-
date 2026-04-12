@@ -3,7 +3,7 @@ from enum import Enum
 # ── Users & Roles ─────────────────────────────────────────────────────────────
 
 
-class UserRole(str, Enum):
+class UserRole(str, Enum):  # noqa: UP042
     ADMIN = "admin"
     MOROCCO_AGENT = "morocco_agent"
     UK_AGENT = "uk_agent"
@@ -13,7 +13,7 @@ class UserRole(str, Enum):
 # ── Shipment ──────────────────────────────────────────────────────────────────
 
 
-class ShipmentStatus(str, Enum):
+class ShipmentStatus(str, Enum):  # noqa: UP042
     DRAFT = "draft"
     PO_SUBMITTED = "po_submitted"
     INVOICE_RECEIVED = "invoice_received"
@@ -27,7 +27,7 @@ class ShipmentStatus(str, Enum):
 # ── Purchase Order ─────────────────────────────────────────────────────────────
 
 
-class POStatus(str, Enum):
+class POStatus(str, Enum):  # noqa: UP042
     DRAFT = "draft"
     SUBMITTED = "submitted"
     LOCKED = "locked"
@@ -36,7 +36,7 @@ class POStatus(str, Enum):
 # ── Invoice ───────────────────────────────────────────────────────────────────
 
 
-class InvoiceStatus(str, Enum):
+class InvoiceStatus(str, Enum):  # noqa: UP042
     PENDING = "pending"
     RECEIVED = "received"
     RECONCILED = "reconciled"
@@ -46,13 +46,13 @@ class InvoiceStatus(str, Enum):
 # ── Payment ───────────────────────────────────────────────────────────────────
 
 
-class PaymentType(str, Enum):
+class PaymentType(str, Enum):  # noqa: UP042
     FULL = "full"
     PARTIAL = "partial"
     DEPOSIT = "deposit"
 
 
-class PaymentStatus(str, Enum):
+class PaymentStatus(str, Enum):  # noqa: UP042
     UPLOADED = "uploaded"
     CONFIRMED = "confirmed"
 
@@ -60,7 +60,7 @@ class PaymentStatus(str, Enum):
 # ── Bill of Lading ─────────────────────────────────────────────────────────────
 
 
-class BLStatus(str, Enum):
+class BLStatus(str, Enum):  # noqa: UP042
     UPLOADED = "uploaded"
     CONTAINERS_CREATED = "containers_created"
     LOCKED = "locked"
@@ -69,13 +69,13 @@ class BLStatus(str, Enum):
 # ── Vessel ────────────────────────────────────────────────────────────────────
 
 
-class VesselStatus(str, Enum):
+class VesselStatus(str, Enum):  # noqa: UP042
     ASSIGNED = "assigned"
     ETD_SET = "etd_set"
     DEPARTED = "departed"
 
 
-class VesselUpdateStatus(str, Enum):
+class VesselUpdateStatus(str, Enum):  # noqa: UP042
     IN_TRANSIT = "in_transit"
     AT_WAYPOINT = "at_waypoint"
     APPROACHING = "approaching"
@@ -86,7 +86,7 @@ class VesselUpdateStatus(str, Enum):
 # ── Container ─────────────────────────────────────────────────────────────────
 
 
-class ContainerStatus(str, Enum):
+class ContainerStatus(str, Enum):  # noqa: UP042
     CREATED = "created"
     VESSEL_ASSIGNED = "vessel_assigned"
     IN_TRANSIT = "in_transit"
@@ -97,7 +97,7 @@ class ContainerStatus(str, Enum):
     DELIVERED = "delivered"
 
 
-class PortStatus(str, Enum):
+class PortStatus(str, Enum):  # noqa: UP042
     NOT_ARRIVED = "not_arrived"
     AWAITING_CUSTOMS = "awaiting_customs"
     CUSTOMS_HOLD = "customs_hold"
@@ -107,7 +107,7 @@ class PortStatus(str, Enum):
 # ── Customs ───────────────────────────────────────────────────────────────────
 
 
-class CustomsStatus(str, Enum):
+class CustomsStatus(str, Enum):  # noqa: UP042
     PENDING = "pending"
     SUBMITTED = "submitted"
     CLEARED = "cleared"
@@ -119,7 +119,7 @@ class CustomsStatus(str, Enum):
 # ── Clearing Docs ─────────────────────────────────────────────────────────────
 
 
-class ClearingDocsStatus(str, Enum):
+class ClearingDocsStatus(str, Enum):  # noqa: UP042
     PENDING = "pending"
     PARTIAL = "partial"
     COMPLETE = "complete"
@@ -128,7 +128,7 @@ class ClearingDocsStatus(str, Enum):
 # ── Delivery ──────────────────────────────────────────────────────────────────
 
 
-class DeliveryStatus(str, Enum):
+class DeliveryStatus(str, Enum):  # noqa: UP042
     AWAITING_SCHEDULE = "awaiting_schedule"
     SCHEDULED = "scheduled"
     IN_TRANSIT = "in_transit"
@@ -141,7 +141,7 @@ class DeliveryStatus(str, Enum):
 # ── Documents ─────────────────────────────────────────────────────────────────
 
 
-class DocumentEntityType(str, Enum):
+class DocumentEntityType(str, Enum):  # noqa: UP042
     PURCHASE_ORDER = "purchase_order"
     INVOICE = "invoice"
     PAYMENT = "payment"
@@ -153,7 +153,7 @@ class DocumentEntityType(str, Enum):
 # ── Notifications ─────────────────────────────────────────────────────────────
 
 
-class NotificationType(str, Enum):
+class NotificationType(str, Enum):  # noqa: UP042
     PO_SUBMITTED = "po_submitted"
     INVOICE_RECEIVED = "invoice_received"
     PAYMENT_CONFIRMED = "payment_confirmed"
@@ -171,7 +171,7 @@ class NotificationType(str, Enum):
 # ── Currency ──────────────────────────────────────────────────────────────────
 
 
-class Currency(str, Enum):
+class Currency(str, Enum):  # noqa: UP042
     USD = "USD"
     GBP = "GBP"
     EUR = "EUR"

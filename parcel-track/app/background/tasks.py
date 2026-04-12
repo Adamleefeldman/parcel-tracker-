@@ -91,7 +91,9 @@ def check_clearing_doc_deadlines():
                         shipment_id=bl.shipment_id,
                         notification_type=NotificationType.CLEARING_DOCS_URGENT,
                         roles=[UserRole.ADMIN, UserRole.UK_AGENT],
-                        override_message=f"Vessel ETA is {vessel.eta} — clearing docs not yet complete.",
+                        override_message=(
+                            f"Vessel ETA is {vessel.eta} — clearing docs not yet complete."
+                        ),
                     )
 
             await db.commit()
@@ -111,5 +113,5 @@ def send_push_notification(expo_token: str, title: str, body: str):
     payload = {"to": expo_token, "title": title, "body": body, "sound": "default"}
     try:
         httpx.post(settings.EXPO_PUSH_URL, json=payload, timeout=5.0)
-    except Exception:
-        pass  # non-fatal
+    except Exception:  # noqa: S110
+        pass  # non-fatal — push is best-effort

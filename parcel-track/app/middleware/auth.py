@@ -38,9 +38,7 @@ async def get_current_user(
         )
 
     user_id = payload.get("sub")
-    result = await db.execute(
-        select(User).where(User.id == uuid.UUID(user_id), User.is_active == True)
-    )
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id), User.is_active))
     user = result.scalar_one_or_none()
 
     if not user:
