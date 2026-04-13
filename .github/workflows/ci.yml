@@ -71,6 +71,16 @@ jobs:
           --health-timeout=5s
           --health-retries=10
 
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
     env:
       # App settings for the test run.
       APP_ENV: testing
@@ -78,6 +88,7 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/parceltrack_test
       DATABASE_URL_SYNC: postgresql://ci:ci@localhost:5432/parceltrack_test
       TEST_DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/parceltrack_test
+      LOG_LEVEL: WARNING
       # Storage placeholders — mocked in tests.
       STORAGE_BUCKET: ci-bucket
       STORAGE_ENDPOINT_URL: https://fake.r2.cloudflarestorage.com

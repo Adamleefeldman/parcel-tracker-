@@ -1,9 +1,12 @@
+import logging
 import uuid
 
 import boto3
 from botocore.exceptions import ClientError
 
 from app.core.config import get_settings
+
+logger = logging.getLogger("parceltrack.storage")
 
 settings = get_settings()
 
@@ -26,6 +29,18 @@ def get_s3():
 class StorageService:
     UPLOAD_EXPIRY = 300  # 5 minutes for upload URL
     DOWNLOAD_EXPIRY = 900  # 15 minutes for download URL
+    MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
+
+    ALLOWED_MIME_TYPES: frozenset[str] = frozenset(
+        {
+            "application/pdf",
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # xlsx
+            "application/vnd.ms-excel",  # xls
+        }
+    )
 
     @staticmethod
     def generate_file_key(entity_type: str, entity_id: uuid.UUID, file_name: str) -> str:
@@ -36,6 +51,11 @@ class StorageService:
     @staticmethod
     def get_upload_url(file_key: str, mime_type: str) -> str:
         """Pre-signed PUT URL. Client uploads directly to storage — never through the API server."""
+        if mime_type not in StorageService.ALLOWED_MIME_TYPES:
+            raise ValueError(
+                f"Unsupported MIME type '{mime_type}'. "
+                f"Allowed: {', '.join(sorted(StorageService.ALLOWED_MIME_TYPES))}"
+            )
         s3 = get_s3()
         url = s3.generate_presigned_url(
             "put_object",
@@ -68,4 +88,4 @@ class StorageService:
         try:
             s3.delete_object(Bucket=settings.STORAGE_BUCKET, Key=file_key)
         except ClientError:
-            pass  # log but don't fail — file may already be gone
+            logger.error("Failed to delete S3 object %s", file_key, exc_info=True)

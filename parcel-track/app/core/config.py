@@ -43,8 +43,17 @@ class Settings(BaseSettings):
     STORAGE_REGION: str = "auto"
     STORAGE_PUBLIC_URL: str
 
+    # Database pool
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_RECYCLE: int = 600  # recycle connections every 10 minutes
+    DB_STATEMENT_TIMEOUT_MS: int = 30000  # 30-second query timeout
+
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
+
+    # Logging
+    LOG_LEVEL: str = "INFO"
 
     # Push
     EXPO_PUSH_URL: str = "https://exp.host/--/api/v2/push/send"
@@ -68,13 +77,15 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
 
     @model_validator(mode="after")
-    def _validate_secret_key(self) -> "Settings":
+    def _validate_settings(self) -> "Settings":
         """
-        Reject SECRET_KEY values that are too short or obviously placeholder.
+        Validate settings at startup — fail fast before the app starts serving.
 
-        Enforced in ALL environments (including development) — a weak dev
-        key is a footgun that will eventually leak into staging or prod.
+        SECRET_KEY strength is enforced in all environments.
+        Additional production-only checks catch misconfiguration before it
+        silently affects real traffic.
         """
+        # ── SECRET_KEY (all envs) ─────────────────────────────────────────────
         key = self.SECRET_KEY
 
         if len(key) < _MIN_SECRET_KEY_LENGTH:
@@ -90,6 +101,29 @@ class Settings(BaseSettings):
                 "Set a real random value. Generate one with: "
                 'python -c "import secrets; print(secrets.token_hex(32))"'
             )
+
+        # ── Production-only checks ────────────────────────────────────────────
+        if self.APP_ENV == "production":
+            if not self.DATABASE_URL.startswith("postgresql+asyncpg://"):
+                raise ValueError(
+                    "DATABASE_URL must use the 'postgresql+asyncpg://' scheme in production."
+                )
+
+            if not self.REDIS_URL or self.REDIS_URL == "redis://localhost:6379/0":
+                raise ValueError(
+                    "REDIS_URL must be set to a non-localhost Redis instance in production."
+                )
+
+            if not self.STORAGE_ENDPOINT_URL.startswith("https://"):
+                raise ValueError("STORAGE_ENDPOINT_URL must use HTTPS in production.")
+
+            cors = [o.strip() for o in self.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
+            if not cors:
+                raise ValueError(
+                    "CORS_ALLOWED_ORIGINS must be set in production. "
+                    "Provide a comma-separated list of allowed origins, e.g. "
+                    "'https://app.example.com,https://admin.example.com'."
+                )
 
         return self
 

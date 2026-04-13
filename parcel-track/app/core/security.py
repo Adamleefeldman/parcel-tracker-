@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from jose import JWTError, jwt
@@ -33,6 +34,7 @@ def create_access_token(user_id: str, role: UserRole) -> str:
         "role": role.value,
         "exp": expire,
         "type": "access",
+        "jti": uuid.uuid4().hex,  # unique token ID — used for server-side revocation
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 

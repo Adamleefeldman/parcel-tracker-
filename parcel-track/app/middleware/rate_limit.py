@@ -31,59 +31,29 @@ has a sane backstop even without an explicit decorator.
 
 from __future__ import annotations
 
-import ipaddress
+import logging
 
-from fastapi import Request
+from fastapi import Request, status
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from starlette.responses import JSONResponse
 
 from app.core.config import get_settings
+from app.core.network import get_client_ip
 
-
-def _parse_trusted_proxies(raw: str) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
-    """Parse a comma-separated list of IPs / CIDRs into network objects."""
-    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
-    for entry in raw.split(","):
-        entry = entry.strip()
-        if not entry:
-            continue
-        try:
-            networks.append(ipaddress.ip_network(entry, strict=False))
-        except ValueError:
-            # Silently skip malformed entries — log a warning in P2 when we
-            # have structured logging.
-            pass
-    return networks
+logger = logging.getLogger("parceltrack.api")
 
 
 def get_remote_address(request: Request) -> str:
     """
     Determine the client IP for rate-limiting purposes.
 
-    Honours X-Forwarded-For only when running in production behind a
-    known, trusted reverse proxy (identified via the TRUSTED_PROXIES env
-    var).  In all other cases, falls back to the direct socket peer.
+    Delegates to the shared get_client_ip utility which honours
+    X-Forwarded-For only in production behind a trusted proxy.
+    Falls back to "127.0.0.1" if the peer address is unavailable.
     """
     settings = get_settings()
-    peer_ip = request.client.host if request.client else "127.0.0.1"
-
-    if settings.is_production and settings.TRUSTED_PROXIES:
-        trusted = _parse_trusted_proxies(settings.TRUSTED_PROXIES)
-        try:
-            peer = ipaddress.ip_address(peer_ip)
-        except ValueError:
-            return peer_ip
-
-        if any(peer in network for network in trusted):
-            # The direct connection comes from a trusted proxy — honour XFF.
-            xff = request.headers.get("X-Forwarded-For", "")
-            if xff:
-                # XFF is a chain: "client, proxy1, proxy2". Take the leftmost
-                # (original client) entry.
-                return xff.split(",")[0].strip()
-
-    return peer_ip
+    return get_client_ip(request, settings.is_production, settings.TRUSTED_PROXIES) or "127.0.0.1"
 
 
 # ── Limiter instance ──────────────────────────────────────────────────────────
@@ -95,11 +65,22 @@ def get_remote_address(request: Request) -> str:
 _settings = get_settings()
 _enabled = _settings.APP_ENV not in ("testing",)
 
+# Use Redis-backed storage so counters are shared across all API instances.
+# Falls back to in-memory if Redis is unavailable (e.g. local dev without Redis).
+_storage_uri = "memory://"
+if _enabled:
+    try:
+        import redis as _redis_sync
+
+        _redis_sync.from_url(_settings.REDIS_URL).ping()
+        _storage_uri = _settings.REDIS_URL
+    except Exception:
+        logger.warning("Redis unavailable for rate limiting — falling back to in-memory store")
+
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["120/minute"],
-    storage_uri="memory://",  # In-process store — good enough for P0.
-    # P2: swap to Redis once we wire REDIS_URL for caching.
+    storage_uri=_storage_uri,
     enabled=_enabled,
 )
 
@@ -110,7 +91,7 @@ limiter = Limiter(
 def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
     """Return a JSON 429 with a Retry-After header."""
     return JSONResponse(
-        status_code=429,
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         content={
             "detail": "Rate limit exceeded. Slow down.",
             "retry_after": exc.detail,

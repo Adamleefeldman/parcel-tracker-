@@ -113,6 +113,13 @@ class POCreate(BaseModel):
     currency: str
     notes: str | None = None
 
+    @field_validator("quantity", "total_value")
+    @classmethod
+    def must_be_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("Must be greater than zero")
+        return v
+
 
 class POOut(UUIDModel):
     po_number: str
@@ -138,6 +145,19 @@ class InvoiceCreate(BaseModel):
     payment_terms: str | None = None
     due_date: date | None = None
 
+    @field_validator("value")
+    @classmethod
+    def value_must_be_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("Must be greater than zero")
+        return v
+
+    @model_validator(mode="after")
+    def due_date_after_invoice_date(self):
+        if self.due_date is not None and self.due_date < self.invoice_date:
+            raise ValueError("due_date must not be before invoice_date")
+        return self
+
 
 class InvoiceOut(UUIDModel):
     invoice_number: str
@@ -162,6 +182,13 @@ class PaymentCreate(BaseModel):
     bank_name: str | None = None
     payment_type: str
     notes: str | None = None
+
+    @field_validator("amount")
+    @classmethod
+    def amount_must_be_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("Must be greater than zero")
+        return v
 
 
 class PaymentOut(UUIDModel):
@@ -204,6 +231,13 @@ class BLCreate(BaseModel):
     containers: list[ContainerInput]
     commodity_description: str
     gross_weight_kg: Decimal
+
+    @field_validator("gross_weight_kg")
+    @classmethod
+    def gross_weight_must_be_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("Must be greater than zero")
+        return v
 
     @model_validator(mode="after")
     def containers_match_count(self):
@@ -311,12 +345,22 @@ class ContainerStatusUpdate(BaseModel):
 # ── Customs ───────────────────────────────────────────────────────────────────
 
 
+_TIME_RE = re.compile(r"^\d{2}:\d{2}$")
+
+
 class CustomsUpdate(BaseModel):
     status: str
     clearance_date: date | None = None
     hold_reason: str | None = None
     hmrc_ref: str | None = None
     duty_paid: Decimal | None = None
+
+    @field_validator("duty_paid")
+    @classmethod
+    def duty_paid_non_negative(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v < 0:
+            raise ValueError("Must be non-negative")
+        return v
 
     @model_validator(mode="after")
     def validate_status_fields(self):
@@ -354,6 +398,13 @@ class ClearingDocsUpdate(BaseModel):
     has_certificate_of_origin: bool | None = None
     has_health_cert: bool | None = None
 
+    @field_validator("duty_rate", "estimated_duty_vat")
+    @classmethod
+    def must_be_non_negative(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v < 0:
+            raise ValueError("Must be non-negative")
+        return v
+
 
 class ClearingDocsOut(UUIDModel):
     customs_entry_ref: str | None = None
@@ -389,6 +440,19 @@ class DeliveryScheduleCreate(BaseModel):
     driver_name: str | None = None
     vehicle_reg: str | None = None
     notes_to_recipient: str | None = None
+
+    @field_validator("time_window_start", "time_window_end")
+    @classmethod
+    def validate_time_format(cls, v: str) -> str:
+        if not _TIME_RE.match(v):
+            raise ValueError("Time must be in HH:MM format (e.g. '07:00')")
+        return v
+
+    @model_validator(mode="after")
+    def end_after_start(self):
+        if self.time_window_end <= self.time_window_start:
+            raise ValueError("time_window_end must be after time_window_start")
+        return self
 
 
 class DeliveryStatusUpdate(BaseModel):
@@ -436,6 +500,28 @@ class UploadUrlRequest(BaseModel):
     file_name: str
     mime_type: str
     file_size_bytes: int | None = None
+
+    @field_validator("mime_type")
+    @classmethod
+    def validate_mime_type(cls, v: str) -> str:
+        from app.services.storage_service import StorageService
+
+        if v not in StorageService.ALLOWED_MIME_TYPES:
+            raise ValueError(
+                f"Unsupported MIME type '{v}'. "
+                f"Allowed: {', '.join(sorted(StorageService.ALLOWED_MIME_TYPES))}"
+            )
+        return v
+
+    @field_validator("file_size_bytes")
+    @classmethod
+    def validate_file_size(cls, v: int | None) -> int | None:
+        from app.services.storage_service import StorageService
+
+        if v is not None and v > StorageService.MAX_FILE_SIZE_BYTES:
+            max_mb = StorageService.MAX_FILE_SIZE_BYTES // (1024 * 1024)
+            raise ValueError(f"File too large ({v} bytes). Maximum allowed: {max_mb} MB")
+        return v
 
 
 class UploadUrlResponse(BaseModel):

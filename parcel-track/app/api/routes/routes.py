@@ -5,13 +5,15 @@ Business logic lives exclusively in the service layer.
 """
 
 import uuid
-from datetime import UTC, date
+from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.constants import RATE_LIMIT_AUTH, RATE_LIMIT_INVITE, RATE_LIMIT_REFRESH
 from app.core.enums import (
     BLStatus,
     ClearingDocsStatus,
@@ -29,6 +31,9 @@ from app.core.enums import (
     VesselStatus,
     VesselUpdateStatus,
 )
+from app.core.exceptions import handle_integrity_error
+from app.core.redis import revoke_access_token
+from app.core.security import decode_access_token
 from app.db.database import get_db
 from app.db.models import (
     BillOfLading,
@@ -57,6 +62,7 @@ from app.middleware.auth import (
     require_admin,
     require_shipment_member,
 )
+from app.middleware.idempotency import IdempotencyResult, require_idempotency
 from app.middleware.rate_limit import limiter
 from app.schemas.pagination import PaginatedResponse, PaginationParams, paginate
 from app.schemas.schemas import (
@@ -114,7 +120,7 @@ auth_router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @auth_router.post("/invite")
-@limiter.limit("10/minute")
+@limiter.limit(RATE_LIMIT_INVITE)
 async def create_invite(
     request: Request,
     body: InviteRequest,
@@ -125,7 +131,7 @@ async def create_invite(
 
 
 @auth_router.post("/accept-invite")
-@limiter.limit("10/minute")
+@limiter.limit(RATE_LIMIT_INVITE)
 async def accept_invite(
     request: Request,
     body: AcceptInviteRequest,
@@ -135,7 +141,7 @@ async def accept_invite(
 
 
 @auth_router.post("/login")
-@limiter.limit("5/minute")
+@limiter.limit(RATE_LIMIT_AUTH)
 async def login(
     request: Request,
     body: LoginRequest,
@@ -145,7 +151,7 @@ async def login(
 
 
 @auth_router.post("/refresh")
-@limiter.limit("20/minute")
+@limiter.limit(RATE_LIMIT_REFRESH)
 async def refresh_token(
     request: Request,
     body: RefreshRequest,
@@ -154,15 +160,28 @@ async def refresh_token(
     return await AuthService.refresh(db, body.refresh_token)
 
 
+_bearer = HTTPBearer(auto_error=False)
+
+
 @auth_router.post("/logout")
-@limiter.limit("20/minute")
+@limiter.limit(RATE_LIMIT_REFRESH)
 async def logout(
     request: Request,
     body: RefreshRequest,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ):
     await AuthService.revoke_refresh(db, body.refresh_token)
+
+    # Revoke the current access token so it cannot be reused before expiry.
+    if credentials:
+        payload = decode_access_token(credentials.credentials)
+        if payload and (jti := payload.get("jti")):
+            exp = payload.get("exp", 0)
+            remaining_ttl = max(1, int(exp - datetime.now(UTC).timestamp()))
+            await revoke_access_token(jti, remaining_ttl)
+
     return {"message": "Logged out"}
 
 
@@ -243,12 +262,12 @@ async def add_member(
     # Gap 1 fix — verify shipment exists
     shipment_result = await db.execute(select(Shipment).where(Shipment.id == shipment_id))
     if not shipment_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Shipment not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shipment not found")
 
     # Gap 2 fix — verify user exists and is active
     user_result = await db.execute(select(User).where(User.id == body.user_id, User.is_active))
     if not user_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     # Gap 3 fix — guard against duplicate membership
     existing = await db.execute(
@@ -258,7 +277,10 @@ async def add_member(
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="User is already a member of this shipment")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User is already a member of this shipment",
+        )
 
     membership = ShipmentUser(
         shipment_id=shipment_id,
@@ -290,9 +312,10 @@ async def create_po(
     if existing.scalar_one_or_none():
         raise HTTPException(400, "PO already exists for this shipment")
 
-    po = PurchaseOrder(shipment_id=shipment_id, **body.model_dump())
-    db.add(po)
-    await db.flush()
+    async with handle_integrity_error("A PO with this PO number already exists"):
+        po = PurchaseOrder(shipment_id=shipment_id, **body.model_dump())
+        db.add(po)
+        await db.flush()
     await db.refresh(po)
     return po
 
@@ -363,7 +386,11 @@ async def create_invoice(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_admin),
     request: Request = None,
+    idempotency: IdempotencyResult = Depends(require_idempotency),
 ):
+    if idempotency.cached_response:
+        return idempotency.cached_response
+
     # Date must be after PO date
     po_result = await db.execute(
         select(PurchaseOrder).where(PurchaseOrder.shipment_id == shipment_id)
@@ -372,9 +399,12 @@ async def create_invoice(
     if po and body.invoice_date < po.po_date:
         raise HTTPException(400, "Invoice date must be on or after PO date")
 
-    invoice = Invoice(shipment_id=shipment_id, status=InvoiceStatus.RECEIVED, **body.model_dump())
-    db.add(invoice)
-    await db.flush()
+    async with handle_integrity_error("An invoice with this invoice number already exists"):
+        invoice = Invoice(
+            shipment_id=shipment_id, status=InvoiceStatus.RECEIVED, **body.model_dump()
+        )
+        db.add(invoice)
+        await db.flush()
 
     # Check for value discrepancy vs PO (>2% triggers flag)
     if po:
@@ -387,6 +417,8 @@ async def create_invoice(
         db, shipment, ShipmentStatus.INVOICE_RECEIVED, actor, get_client_ip(request)
     )
 
+    result = InvoiceOut.model_validate(invoice).model_dump(mode="json")
+    await idempotency.store(result)
     return invoice
 
 
@@ -434,7 +466,11 @@ async def add_payment(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_admin),
     request: Request = None,
+    idempotency: IdempotencyResult = Depends(require_idempotency),
 ):
+    if idempotency.cached_response:
+        return idempotency.cached_response
+
     payment = Payment(shipment_id=shipment_id, status=PaymentStatus.CONFIRMED, **body.model_dump())
     db.add(payment)
     await db.flush()
@@ -465,6 +501,8 @@ async def add_payment(
                     [UserRole.MOROCCO_AGENT],
                 )
 
+    result = PaymentOut.model_validate(payment).model_dump(mode="json")
+    await idempotency.store(result)
     return payment
 
 
@@ -503,30 +541,33 @@ async def upload_bl(
     if actor.role not in (UserRole.ADMIN, UserRole.MOROCCO_AGENT):
         raise HTTPException(403, "Only admin or Morocco agent can upload BL")
 
-    bl = BillOfLading(
-        shipment_id=shipment_id,
-        bl_number=body.bl_number,
-        bl_date=body.bl_date,
-        shipper_name=body.shipper_name,
-        consignee_name=body.consignee_name,
-        notify_party=body.notify_party,
-        port_of_loading=body.port_of_loading,
-        port_of_discharge=body.port_of_discharge,
-        container_count=len(body.containers),
-        commodity_description=body.commodity_description,
-        gross_weight_kg=body.gross_weight_kg,
-        status=BLStatus.UPLOADED,
-    )
-    db.add(bl)
-    await db.flush()
-
-    # Auto-create container records
-    for c in body.containers:
-        db.add(
-            Container(bl_id=bl.id, container_number=c.container_number, seal_number=c.seal_number)
+    async with handle_integrity_error("A BL or container number in this request already exists"):
+        bl = BillOfLading(
+            shipment_id=shipment_id,
+            bl_number=body.bl_number,
+            bl_date=body.bl_date,
+            shipper_name=body.shipper_name,
+            consignee_name=body.consignee_name,
+            notify_party=body.notify_party,
+            port_of_loading=body.port_of_loading,
+            port_of_discharge=body.port_of_discharge,
+            container_count=len(body.containers),
+            commodity_description=body.commodity_description,
+            gross_weight_kg=body.gross_weight_kg,
+            status=BLStatus.UPLOADED,
         )
+        db.add(bl)
+        await db.flush()
 
-    bl.status = BLStatus.CONTAINERS_CREATED
+        # Auto-create container records
+        for c in body.containers:
+            db.add(
+                Container(
+                    bl_id=bl.id, container_number=c.container_number, seal_number=c.seal_number
+                )
+            )
+
+        bl.status = BLStatus.CONTAINERS_CREATED
 
     shipment = await ShipmentService.get(db, shipment_id, actor)
     await ShipmentService.transition_status(
@@ -911,20 +952,23 @@ async def create_delivery_point(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_admin),
 ):
-    point = DeliveryPoint(
-        shipment_id=shipment_id,
-        customer_user_id=body.customer_user_id,
-        recipient_name=body.recipient_name,
-        address=body.address,
-        contact_name=body.contact_name,
-        contact_phone=body.contact_phone,
-        special_instructions=body.special_instructions,
-    )
-    db.add(point)
-    await db.flush()
+    async with handle_integrity_error(
+        "One or more containers are already assigned to a delivery point"
+    ):
+        point = DeliveryPoint(
+            shipment_id=shipment_id,
+            customer_user_id=body.customer_user_id,
+            recipient_name=body.recipient_name,
+            address=body.address,
+            contact_name=body.contact_name,
+            contact_phone=body.contact_phone,
+            special_instructions=body.special_instructions,
+        )
+        db.add(point)
+        await db.flush()
 
-    for container_id in body.container_ids:
-        db.add(DeliveryContainer(delivery_point_id=point.id, container_id=container_id))
+        for container_id in body.container_ids:
+            db.add(DeliveryContainer(delivery_point_id=point.id, container_id=container_id))
 
     # Reload with all relationships eagerly — unloaded optional relationships
     # (schedule, container_assignments) raise MissingGreenlet during serialisation.

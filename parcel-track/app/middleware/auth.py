@@ -13,7 +13,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.enums import UserRole
+from app.core.network import get_client_ip as _resolve_client_ip
+from app.core.redis import is_token_revoked
 from app.core.security import decode_access_token
 from app.db.database import get_db
 from app.db.models import ShipmentUser, User
@@ -35,6 +38,13 @@ async def get_current_user(
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token"
+        )
+
+    # Check server-side revocation (set on logout)
+    jti = payload.get("jti")
+    if jti and await is_token_revoked(jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has been revoked"
         )
 
     user_id = payload.get("sub")
@@ -162,7 +172,11 @@ def financial_fields_allowed(current_user: User) -> bool:
 
 
 def get_client_ip(request: Request) -> str | None:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else None
+    """
+    Resolve the client IP for audit logging.
+
+    Uses the shared trusted-proxy-aware resolution so audit logs record
+    the same IP as the rate limiter — prevents XFF spoofing in audit trails.
+    """
+    settings = get_settings()
+    return _resolve_client_ip(request, settings.is_production, settings.TRUSTED_PROXIES)

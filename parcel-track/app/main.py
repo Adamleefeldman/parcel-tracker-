@@ -3,6 +3,8 @@ Application entry point.
 All routers registered here. Exception handlers provide consistent error shape.
 """
 
+import logging
+
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -26,11 +28,16 @@ from app.api.routes.routes import (
     vessel_router,
 )
 from app.core.config import get_settings
+from app.core.logging import setup_logging
 from app.db.database import get_db
 from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
+from app.middleware.request_logging import RequestLoggingMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 
+setup_logging()
+
 settings = get_settings()
+logger = logging.getLogger("parceltrack.api")
 
 app = FastAPI(
     title="ParcelTrack API",
@@ -49,12 +56,9 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 #
-# Origins are driven entirely by the CORS_ALLOWED_ORIGINS env var
-# (comma-separated). Empty in production is a hard boot-time error — never
-# silently fall back to a wildcard in prod.
-#
-# Empty in development falls back to a permissive wildcard (no credentials)
-# so casual exploration with curl / a fresh frontend isn't blocked.
+# Origins are driven entirely by the CORS_ALLOWED_ORIGINS env var.
+# Production validates this is non-empty at Settings init time (config.py).
+# Dev without an explicit list falls back to a permissive wildcard (no creds).
 
 cors_origins = settings.cors_origins
 
@@ -65,12 +69,6 @@ if cors_origins:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-    )
-elif settings.is_production:
-    raise RuntimeError(
-        "CORS_ALLOWED_ORIGINS must be set in production. "
-        "Provide a comma-separated list of allowed origins, e.g. "
-        "'https://app.example.com,https://admin.example.com'."
     )
 else:
     # Dev fallback: wildcard origin without credentials.
@@ -92,12 +90,20 @@ else:
 
 app.add_middleware(SecurityHeadersMiddleware, is_production=settings.is_production)
 
+# ── Request logging ──────────────────────────────────────────────────────────
+#
+# Outermost middleware — captures total request duration including all other
+# middleware. Generates a per-request X-Request-ID for log correlation.
+
+app.add_middleware(RequestLoggingMiddleware)
+
 
 # ── Global exception handlers ─────────────────────────────────────────────────
 
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled exception on %s %s", request.method, request.url.path, exc_info=exc)
     if settings.is_production:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -120,13 +126,14 @@ async def ready(db: AsyncSession = Depends(get_db)):
     """
     Readiness probe — confirms the app can actually serve real requests.
 
-    Pings the database with `SELECT 1`. If the DB is unreachable or slow,
-    the probe returns 503 so the load balancer / orchestrator stops routing
+    Checks database connectivity and Redis availability. Returns 503 if
+    either dependency is unhealthy so the load balancer stops routing
     traffic here until the situation resolves.
-
-    Redis check deferred to P2 (alongside broader observability work).
     """
+    from app.core.redis import get_redis_client
+
     checks: dict[str, str] = {}
+    healthy = True
 
     # ── Database ──────────────────────────────────────────────────────────
     try:
@@ -134,6 +141,17 @@ async def ready(db: AsyncSession = Depends(get_db)):
         checks["database"] = "ok"
     except Exception as exc:
         checks["database"] = f"unavailable: {exc}"
+        healthy = False
+
+    # ── Redis ─────────────────────────────────────────────────────────────
+    try:
+        await get_redis_client().ping()
+        checks["redis"] = "ok"
+    except Exception as exc:
+        checks["redis"] = f"unavailable: {exc}"
+        healthy = False
+
+    if not healthy:
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={"status": "unhealthy", "checks": checks},

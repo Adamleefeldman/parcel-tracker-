@@ -79,6 +79,7 @@ services:
       STORAGE_REGION: auto
       STORAGE_PUBLIC_URL: http://localhost:9000/parceltrack-local
       REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: DEBUG
       EXPO_PUSH_URL: https://exp.host/--/api/v2/push/send
       # Task 3 — CORS allowlist for the local frontends.
       CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173,http://localhost:8081
@@ -96,7 +97,16 @@ services:
   worker:
     image: parceltrack:dev
     container_name: parceltrack-worker
-    command: celery -A app.background.tasks worker --loglevel=info
+    # --concurrency=2: explicit concurrency prevents the default (CPU count)
+    # from being miscalculated inside a container with limited CPU shares.
+    # --without-gossip --without-mingle: skip peer-discovery on startup/shutdown
+    # for faster SIGTERM response.
+    command: >
+      celery -A app.background.tasks worker
+      --loglevel=info
+      --concurrency=2
+      --without-gossip
+      --without-mingle
     environment: *app_env
     volumes:
       - ./app:/app/app
@@ -110,17 +120,23 @@ services:
     # Worker is not an HTTP server — disable the inherited Dockerfile HEALTHCHECK.
     healthcheck:
       disable: true
+    # Allow in-flight tasks to finish before the container is killed.
+    stop_grace_period: 30s
     restart: unless-stopped
 
   beat:
     image: parceltrack:dev
     container_name: parceltrack-beat
-    # Beat persists its schedule to a file. /app is read-only for the app user,
-    # so write it to /tmp inside the container instead.
-    command: celery -A app.background.tasks beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    # Schedule file persisted to a named volume so it survives container restarts.
+    # Previously used /tmp which is ephemeral — missed runs after restarts.
+    command: >
+      celery -A app.background.tasks beat
+      --loglevel=info
+      --schedule=/var/lib/celery/celerybeat-schedule
     environment: *app_env
     volumes:
       - ./app:/app/app
+      - beat_schedule:/var/lib/celery
     depends_on:
       redis:
         condition: service_healthy
@@ -129,8 +145,11 @@ services:
     # Beat is not an HTTP server — disable the inherited Dockerfile HEALTHCHECK.
     healthcheck:
       disable: true
+    stop_grace_period: 30s
     restart: unless-stopped
 
 volumes:
   postgres_data:
     name: parceltrack_postgres_data
+  beat_schedule:
+    name: parceltrack_beat_schedule

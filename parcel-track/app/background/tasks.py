@@ -9,10 +9,16 @@ Start the scheduler (for periodic tasks):
     celery -A app.background.tasks beat --loglevel=info
 """
 
+import logging
+
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import after_setup_logger, after_setup_task_logger
 
 from app.core.config import get_settings
+from app.core.logging import setup_logging
+
+logger = logging.getLogger("parceltrack.celery")
 
 settings = get_settings()
 
@@ -29,6 +35,7 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    worker_hijack_root_logger=False,
     beat_schedule={
         # Run every hour to check for vessels approaching without clearing docs
         "check-clearing-doc-deadlines": {
@@ -37,6 +44,19 @@ celery_app.conf.update(
         },
     },
 )
+
+
+# ── Logging setup for Celery workers ─────────────────────────────────────────
+
+
+@after_setup_logger.connect
+def _setup_celery_logger(**kwargs):
+    setup_logging()
+
+
+@after_setup_task_logger.connect
+def _setup_celery_task_logger(**kwargs):
+    setup_logging()
 
 
 # ── Tasks ──────────────────────────────────────────────────────────────────────
@@ -59,6 +79,8 @@ def check_clearing_doc_deadlines():
     from app.core.enums import ClearingDocsStatus, NotificationType, ShipmentStatus, UserRole
     from app.db.database import AsyncSessionLocal
     from app.db.models import BillOfLading, ClearingDocs, Shipment, Vessel
+
+    logger.info("Running clearing doc deadline check")
 
     async def _run():
         async with AsyncSessionLocal() as db:
@@ -97,6 +119,7 @@ def check_clearing_doc_deadlines():
                     )
 
             await db.commit()
+            logger.info("Clearing doc deadline check complete, matched %d vessels", len(vessels))
 
     asyncio.run(_run())
 
@@ -113,5 +136,7 @@ def send_push_notification(expo_token: str, title: str, body: str):
     payload = {"to": expo_token, "title": title, "body": body, "sound": "default"}
     try:
         httpx.post(settings.EXPO_PUSH_URL, json=payload, timeout=5.0)
-    except Exception:  # noqa: S110
-        pass  # non-fatal — push is best-effort
+    except Exception:
+        logger.warning(
+            "Push notification task failed for token=%s...", expo_token[:8], exc_info=True
+        )

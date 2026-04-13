@@ -8,7 +8,7 @@ import json
 import uuid
 from decimal import Decimal
 
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,7 +58,8 @@ class ShipmentService:
         exists = await db.execute(select(Shipment).where(Shipment.reference == reference))
         if exists.scalar_one_or_none():
             raise HTTPException(
-                status_code=400, detail=f"Shipment reference '{reference}' already exists"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Shipment reference '{reference}' already exists",
             )
 
         shipment = Shipment(reference=reference, created_by=actor.id)
@@ -93,7 +94,7 @@ class ShipmentService:
         )
         shipment = result.scalar_one_or_none()
         if not shipment:
-            raise HTTPException(status_code=404, detail="Shipment not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shipment not found")
         return shipment
 
     @staticmethod
@@ -101,7 +102,7 @@ class ShipmentService:
         result = await db.execute(select(Shipment).where(Shipment.id == shipment_id))
         shipment = result.scalar_one_or_none()
         if not shipment:
-            raise HTTPException(status_code=404, detail="Shipment not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shipment not found")
 
         for key, value in data.items():
             if value is not None:
@@ -112,7 +113,8 @@ class ShipmentService:
         except IntegrityError:
             await db.rollback()
             raise HTTPException(
-                status_code=409, detail="Shipment reference already exists"
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Shipment reference already exists",
             ) from None
 
         await db.refresh(shipment)
@@ -135,7 +137,8 @@ class ShipmentService:
         current = shipment.status
         if new_status not in VALID_TRANSITIONS.get(current, []):
             raise HTTPException(
-                status_code=400, detail=f"Cannot transition from '{current}' to '{new_status}'"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot transition from '{current}' to '{new_status}'",
             )
 
         await ShipmentService._check_preconditions(db, shipment, new_status)

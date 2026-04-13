@@ -6,6 +6,7 @@ NotificationService handles two concerns:
 Called from service layer on state transitions — never from route handlers directly.
 """
 
+import logging
 import uuid
 
 import httpx
@@ -16,6 +17,8 @@ from sqlalchemy.orm import selectinload
 from app.core.config import get_settings
 from app.core.enums import NotificationType, UserRole
 from app.db.models import Notification, ShipmentUser, User
+
+logger = logging.getLogger("parceltrack.notifications")
 
 settings = get_settings()
 
@@ -136,5 +139,5 @@ class NotificationService:
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 await client.post(settings.EXPO_PUSH_URL, json=payload)
-        except Exception:  # noqa: S110
-            pass  # Push failure is non-fatal — notification is already in DB
+        except Exception:
+            logger.warning("Push notification failed for token=%s...", token[:8], exc_info=True)

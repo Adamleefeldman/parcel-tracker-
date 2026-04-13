@@ -9,9 +9,11 @@ from typing import Optional
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -193,6 +195,10 @@ class ShipmentUser(Base):
 
 class PurchaseOrder(Base):
     __tablename__ = "purchase_orders"
+    __table_args__ = (
+        CheckConstraint("quantity >= 0", name="ck_purchase_orders_quantity_non_negative"),
+        CheckConstraint("total_value >= 0", name="ck_purchase_orders_total_value_non_negative"),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     shipment_id: Mapped[uuid.UUID] = mapped_column(
@@ -230,6 +236,7 @@ class PurchaseOrder(Base):
 
 class Invoice(Base):
     __tablename__ = "invoices"
+    __table_args__ = (CheckConstraint("value >= 0", name="ck_invoices_value_non_negative"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
     shipment_id: Mapped[uuid.UUID] = mapped_column(
@@ -256,6 +263,7 @@ class Invoice(Base):
 
 class Payment(Base):
     __tablename__ = "payments"
+    __table_args__ = (CheckConstraint("amount > 0", name="ck_payments_amount_positive"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
     shipment_id: Mapped[uuid.UUID] = mapped_column(
@@ -284,6 +292,10 @@ class Payment(Base):
 
 class BillOfLading(Base):
     __tablename__ = "bills_of_lading"
+    __table_args__ = (
+        CheckConstraint("container_count > 0", name="ck_bills_of_lading_container_count_positive"),
+        CheckConstraint("gross_weight_kg > 0", name="ck_bills_of_lading_gross_weight_positive"),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     shipment_id: Mapped[uuid.UUID] = mapped_column(
@@ -415,6 +427,15 @@ class Container(Base):
 
 class ClearingDocs(Base):
     __tablename__ = "clearing_docs"
+    __table_args__ = (
+        CheckConstraint(
+            "duty_rate IS NULL OR duty_rate >= 0", name="ck_clearing_docs_duty_rate_non_negative"
+        ),
+        CheckConstraint(
+            "estimated_duty_vat IS NULL OR estimated_duty_vat >= 0",
+            name="ck_clearing_docs_estimated_duty_vat_non_negative",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     shipment_id: Mapped[uuid.UUID] = mapped_column(
@@ -448,6 +469,11 @@ class ClearingDocs(Base):
 
 class CustomsRecord(Base):
     __tablename__ = "customs_records"
+    __table_args__ = (
+        CheckConstraint(
+            "duty_paid IS NULL OR duty_paid >= 0", name="ck_customs_records_duty_paid_non_negative"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     container_id: Mapped[uuid.UUID] = mapped_column(
@@ -543,10 +569,16 @@ class DeliveryContainer(Base):
 
     id: Mapped[uuid.UUID] = uuid_pk()
     delivery_point_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("delivery_points.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("delivery_points.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     container_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("containers.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("containers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
 
     delivery_point: Mapped["DeliveryPoint"] = relationship(back_populates="container_assignments")
@@ -586,6 +618,10 @@ class DeliverySchedule(Base):
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        # Composite index for the most common lookup: all docs for a given entity.
+        Index("ix_documents_entity", "entity_type", "entity_id"),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     uploaded_by: Mapped[uuid.UUID] = mapped_column(
@@ -611,13 +647,19 @@ class AuditLog(Base):
     """Immutable record of every write operation. Never updated or deleted."""
 
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        # Supports "show audit history for shipment X ordered by time" (most common query).
+        Index("ix_audit_logs_shipment_time", "shipment_id", "created_at"),
+        # Supports "show all actions by user X ordered by time".
+        Index("ix_audit_logs_actor_time", "actor_id", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     shipment_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("shipments.id"), nullable=True, index=True
     )
     actor_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
     action: Mapped[str] = mapped_column(
         String(100), nullable=False
@@ -627,7 +669,9 @@ class AuditLog(Base):
     old_value: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     new_value: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
-    created_at: Mapped[datetime] = now_utc()
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
 
     shipment: Mapped[Optional["Shipment"]] = relationship(back_populates="audit_logs")
 
@@ -643,7 +687,7 @@ class Notification(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     shipment_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("shipments.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("shipments.id"), nullable=True, index=True
     )
     type: Mapped[NotificationType] = mapped_column(SAEnum(NotificationType), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
