@@ -498,7 +498,7 @@ class TestPreconditions:
                 "value": "10000.00",
                 "currency": "USD",
             },
-            headers=h,
+            headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 400
         assert "Cannot transition from 'ShipmentStatus.DRAFT'" in r.json()["detail"]
@@ -642,7 +642,7 @@ class TestPreconditions:
                 "value": "15000.00",  # 50% over the 10000 PO total — well beyond the 2% threshold
                 "currency": "USD",
             },
-            headers=h,
+            headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 400
         assert "Invoice must be uploaded before proceeding" in r.json()["detail"]
@@ -672,7 +672,7 @@ class TestPreconditions:
                 "currency": "USD",
                 "payment_type": "partial",
             },
-            headers=h,
+            headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 200, r.json()
         assert await self._get_status(client, sid, h) == "invoice_received"
@@ -857,7 +857,7 @@ class TestRoleEnforcement:
                 "value": "10000.00",
                 "currency": "USD",
             },
-            headers=uk_h,
+            headers={**uk_h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 403
 
@@ -881,7 +881,7 @@ class TestRoleEnforcement:
                 "currency": "USD",
                 "payment_type": "full",
             },
-            headers=uk_h,
+            headers={**uk_h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 403
 
