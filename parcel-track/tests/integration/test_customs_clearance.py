@@ -75,7 +75,7 @@ async def _build_awaiting_customs_state(client: AsyncClient, token: str) -> tupl
     # 5. Create invoice (matches PO value — no discrepancy flag)
     r = await client.post(
         f"/api/v1/shipments/{ship_id}/invoice",
-        headers=hdrs,
+        headers={**hdrs, "Idempotency-Key": str(uuid.uuid4())},
         json={
             "invoice_number": "INV-001",
             "invoice_date": "2026-01-15",
@@ -88,7 +88,7 @@ async def _build_awaiting_customs_state(client: AsyncClient, token: str) -> tupl
     # 6. Confirm payment
     r = await client.post(
         f"/api/v1/shipments/{ship_id}/payments",
-        headers=hdrs,
+        headers={**hdrs, "Idempotency-Key": str(uuid.uuid4())},
         json={
             "swift_ref": "SWIFT001",
             "payment_date": "2026-01-20",

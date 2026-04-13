@@ -16,6 +16,7 @@ All transitions are driven through the HTTP API exactly as a real client
 would use it.  Infrastructure (S3) is mocked globally in conftest.py.
 """
 
+import uuid
 from datetime import date
 
 from httpx import AsyncClient
@@ -141,7 +142,7 @@ class TestSequentialWalkthrough:
                 "value": "10000.00",  # exactly matches PO total
                 "currency": "USD",
             },
-            headers=h,
+            headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 200, r.json()
         assert await self._get_status(client, sid, h) == "invoice_received"
@@ -162,7 +163,7 @@ class TestSequentialWalkthrough:
                 "currency": "USD",
                 "payment_type": "full",
             },
-            headers=h,
+            headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 200, r.json()
         assert await self._get_status(client, sid, h) == "payment_confirmed"
@@ -375,7 +376,7 @@ async def _advance_to(
             "value": "10000.00",
             "currency": "USD",
         },
-        headers=h,
+        headers={**h, "Idempotency-Key": str(uuid.uuid4())},
     )
     assert r.status_code == 200, f"_advance_to({target!r}): create invoice failed: {r.json()}"
     if target == "invoice_received":
@@ -390,7 +391,7 @@ async def _advance_to(
             "currency": "USD",
             "payment_type": "full",
         },
-        headers=h,
+        headers={**h, "Idempotency-Key": str(uuid.uuid4())},
     )
     assert r.status_code == 200, f"_advance_to({target!r}): add payment failed: {r.json()}"
     if target == "payment_confirmed":

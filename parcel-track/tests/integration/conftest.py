@@ -40,6 +40,24 @@ async def override_get_db():
 app.dependency_overrides[get_db] = override_get_db
 
 
+# ── Redis client reset ────────────────────────────────────────────────────────
+# The Redis async client is a module-level singleton. pytest-asyncio creates a
+# fresh event loop per test, so the cached client from a previous test is bound
+# to a closed loop — causing "RuntimeError: Event loop is closed". Resetting
+# the singleton before each test forces a new connection on the current loop.
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_redis():
+    from app.core import redis as redis_module
+
+    redis_module._redis_client = None
+    yield
+    if redis_module._redis_client is not None:
+        await redis_module._redis_client.aclose()
+        redis_module._redis_client = None
+
+
 # ── Infrastructure mocks ──────────────────────────────────────────────────────
 
 
