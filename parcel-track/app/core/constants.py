@@ -10,3 +10,4 @@ scattered as magic literals across the route decorators.
 RATE_LIMIT_INVITE = "10/minute"  # invite + accept-invite endpoints
 RATE_LIMIT_AUTH = "5/minute"  # login (brute-force sensitive)
 RATE_LIMIT_REFRESH = "20/minute"  # token refresh + logout
+RATE_LIMIT_UPLOAD = "30/minute"  # presigned upload-URL generation
