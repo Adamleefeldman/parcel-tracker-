@@ -13,7 +13,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.constants import RATE_LIMIT_AUTH, RATE_LIMIT_INVITE, RATE_LIMIT_REFRESH
+from app.core.constants import (
+    RATE_LIMIT_AUTH,
+    RATE_LIMIT_INVITE,
+    RATE_LIMIT_REFRESH,
+    RATE_LIMIT_UPLOAD,
+)
 from app.core.enums import (
     BLStatus,
     ClearingDocsStatus,
@@ -1099,7 +1104,9 @@ doc_router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 @doc_router.post("/upload-url", response_model=UploadUrlResponse)
+@limiter.limit(RATE_LIMIT_UPLOAD)
 async def get_upload_url(
+    request: Request,
     body: UploadUrlRequest,
     actor: User = Depends(get_current_user),
 ):
