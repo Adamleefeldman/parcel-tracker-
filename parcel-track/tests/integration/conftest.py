@@ -107,6 +107,22 @@ def mock_storage_service():
         yield
 
 
+# ── Celery push-notification dispatch ────────────────────────────────────────
+# NotificationService.send enqueues `send_push_notification.delay(notif_id)`.
+# Under the integration test suite we have no Celery broker, no Expo credentials,
+# and no interest in making outbound HTTP calls — so we replace `.delay` with a
+# no-op. Tests that need to assert push behaviour can override this fixture
+# locally with a stub that records the calls instead.
+
+
+@pytest.fixture(autouse=True)
+def mock_push_task():
+    from app.background import tasks as bg_tasks
+
+    with patch.object(bg_tasks.send_push_notification, "delay", lambda *a, **kw: None):
+        yield
+
+
 # ── Shared helper functions ───────────────────────────────────────────────────
 
 

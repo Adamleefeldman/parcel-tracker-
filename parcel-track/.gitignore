@@ -1,2 +1,32 @@
-# macOS metadata
+# macOS
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+venv/
+
+# Environment variables
+.env
+
+# Test / coverage artefacts
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+
+# Mypy / ruff caches
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.idea/
+.vscode/
