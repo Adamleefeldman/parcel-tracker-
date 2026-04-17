@@ -1,12 +1,5 @@
-# Python
-.venv/
-__pycache__/
-*.pyc
-*.pyo
-*.egg-info/
-
-# Environment
-.env
-
 # macOS
 .DS_Store
+
+# Environment variables (root-level, if any)
+.env

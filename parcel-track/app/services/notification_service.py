@@ -9,18 +9,14 @@ Called from service layer on state transitions — never from route handlers dir
 import logging
 import uuid
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.config import get_settings
 from app.core.enums import NotificationType, UserRole
 from app.db.models import Notification, ShipmentUser, User
 
 logger = logging.getLogger("parceltrack.notifications")
-
-settings = get_settings()
 
 
 # ── Notification templates ─────────────────────────────────────────────────────
@@ -121,23 +117,15 @@ class NotificationService:
         db.add(notif)
         await db.flush()
 
-        # Dispatch push if user has a token
+        # Dispatch push out-of-band via Celery so the request path never waits
+        # on Expo. We only enqueue when the user actually has a token to avoid
+        # spawning a no-op task. The task takes the notification id (not the
+        # raw token) so that a token refresh between enqueue and dispatch is
+        # picked up. The caller is responsible for committing — the worker
+        # only polls after the request returns, so it will see the row.
         user_result = await db.execute(select(User).where(User.id == user_id))
         user = user_result.scalar_one_or_none()
         if user and user.expo_push_token:
-            await NotificationService._send_push(user.expo_push_token, title, message)
-            notif.push_sent = True
+            from app.background.tasks import send_push_notification
 
-    @staticmethod
-    async def _send_push(token: str, title: str, body: str) -> None:
-        payload = {
-            "to": token,
-            "title": title,
-            "body": body,
-            "sound": "default",
-        }
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                await client.post(settings.EXPO_PUSH_URL, json=payload)
-        except Exception:
-            logger.warning("Push notification failed for token=%s...", token[:8], exc_info=True)
+            send_push_notification.delay(str(notif.id))

@@ -124,19 +124,80 @@ def check_clearing_doc_deadlines():
     asyncio.run(_run())
 
 
-@celery_app.task(name="app.background.tasks.send_push_notification")
-def send_push_notification(expo_token: str, title: str, body: str):
+@celery_app.task(
+    name="app.background.tasks.send_push_notification",
+    bind=True,
+    autoretry_for=(),  # custom retry below — we only retry transient provider errors
+    max_retries=3,
+)
+def send_push_notification(self, notification_id: str):
     """
-    Async push dispatch — called from notification service when push can be deferred.
-    Currently notification_service sends directly (synchronously); this task exists
-    for high-volume scenarios where push should be queued.
-    """
-    import httpx
+    Dispatch an Expo push for a single Notification row.
 
-    payload = {"to": expo_token, "title": title, "body": body, "sound": "default"}
+    Contract:
+      - Takes the notification id (string UUID). The task re-reads the row so
+        that a token refresh between enqueue and dispatch is honoured.
+      - Uses the shared integrations HTTP helper (timeouts, retries, breaker).
+      - Marks `notification.push_sent = True` on success.
+      - Retries with backoff on `IntegrationTimeout` / `IntegrationUnavailable`
+        (Expo 5xx or network issues).
+      - Gives up silently on 4xx — usually `DeviceNotRegistered` for a stale
+        token. Retrying won't help; the token needs to be refreshed client-side.
+    """
+    import asyncio
+    import uuid as _uuid
+
+    from sqlalchemy import select
+
+    from app.db.database import AsyncSessionLocal
+    from app.db.models import Notification, User
+    from app.integrations._exceptions import (
+        IntegrationError,
+        IntegrationTimeout,
+        IntegrationUnavailable,
+    )
+    from app.integrations._http import build_client, request
+
+    async def _run() -> None:
+        async with AsyncSessionLocal() as db:
+            notif = await db.get(Notification, _uuid.UUID(notification_id))
+            if notif is None:
+                # Caller committed something else but the notification row is gone
+                # — nothing to do. (Shouldn't happen in practice; safeguard only.)
+                logger.warning("send_push_notification: row %s not found", notification_id)
+                return
+            if notif.push_sent:
+                return  # idempotent — retries are safe
+            user = (
+                await db.execute(select(User).where(User.id == notif.user_id))
+            ).scalar_one_or_none()
+            if user is None or not user.expo_push_token:
+                return
+
+            payload = {
+                "to": user.expo_push_token,
+                "title": notif.title,
+                "body": notif.message,
+                "sound": "default",
+            }
+
+            async with build_client("expo") as client:
+                await request(
+                    "expo",
+                    client,
+                    "POST",
+                    settings.EXPO_PUSH_URL,
+                    json=payload,
+                )
+
+            notif.push_sent = True
+            await db.commit()
+
     try:
-        httpx.post(settings.EXPO_PUSH_URL, json=payload, timeout=5.0)
-    except Exception:
-        logger.warning(
-            "Push notification task failed for token=%s...", expo_token[:8], exc_info=True
-        )
+        asyncio.run(_run())
+    except (IntegrationTimeout, IntegrationUnavailable) as exc:
+        # Transient — let Celery retry with exponential backoff.
+        raise self.retry(exc=exc, countdown=2**self.request.retries) from exc
+    except IntegrationError:
+        # 4xx / auth / rate-limit — retrying won't help; log and drop.
+        logger.warning("push_notification permanent failure id=%s", notification_id, exc_info=True)

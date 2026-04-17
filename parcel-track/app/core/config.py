@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     # Push
     EXPO_PUSH_URL: str = "https://exp.host/--/api/v2/push/send"
 
+    # Outbound integrations — shared HTTP helper (see app/integrations/_http.py).
+    INTEGRATION_HTTP_TIMEOUT_SECONDS: float = 10.0
+    INTEGRATION_HTTP_RETRIES: int = 2
+    INTEGRATION_CIRCUIT_BREAKER_THRESHOLD: int = 5
+    INTEGRATION_CIRCUIT_BREAKER_COOLDOWN_SECONDS: int = 60
+
     # Rate limiting — comma-separated trusted proxy IPs/CIDRs.
     # Only set in production behind a reverse proxy (e.g. Cloudflare).
     TRUSTED_PROXIES: str = ""
