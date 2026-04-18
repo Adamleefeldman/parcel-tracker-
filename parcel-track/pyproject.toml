@@ -34,6 +34,8 @@ dependencies = [
     "slowapi>=0.1.9",
     # Logging
     "python-json-logger>=2.0.7",
+    "sentry-sdk[fastapi]>=2.58.0",
+    "prometheus-fastapi-instrumentator>=7.1.0",
 ]
 
 [dependency-groups]

@@ -5,9 +5,13 @@ All routers registered here. Exception handlers provide consistent error shape.
 
 import logging
 
+import sentry_sdk
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +42,14 @@ setup_logging()
 
 settings = get_settings()
 logger = logging.getLogger("parceltrack.api")
+
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.SENTRY_ENVIRONMENT or settings.APP_ENV,
+        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+        integrations=[StarletteIntegration(), FastApiIntegration()],
+    )
 
 app = FastAPI(
     title="ParcelTrack API",
@@ -177,3 +189,13 @@ app.include_router(clearing_router, prefix=PREFIX)
 app.include_router(delivery_router, prefix=PREFIX)
 app.include_router(doc_router, prefix=PREFIX)
 app.include_router(notif_router, prefix=PREFIX)
+
+# ── Prometheus metrics ────────────────────────────────────────────────────────
+#
+# Exposes /metrics for Prometheus scraping. Excluded from OpenAPI schema and
+# from its own instrumentation to avoid noisy self-referential metrics.
+
+Instrumentator(
+    should_group_status_codes=True,
+    excluded_handlers=["/health", "/ready", "/metrics"],
+).instrument(app).expose(app, include_in_schema=False)

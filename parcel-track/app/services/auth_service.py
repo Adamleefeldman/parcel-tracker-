@@ -4,7 +4,14 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.enums import UserRole
+from app.core.redis import (
+    clear_login_failures,
+    get_lockout_ttl,
+    increment_login_failure,
+    is_login_locked,
+)
 from app.core.security import (
     create_access_token,
     create_invite_token,
@@ -128,15 +135,36 @@ class AuthService:
         db: AsyncSession,
         request: LoginRequest,
     ) -> dict:
+        settings = get_settings()
+
+        if await is_login_locked(request.email, settings.LOGIN_MAX_ATTEMPTS):
+            retry_after = await get_lockout_ttl(request.email)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Account temporarily locked due to too many failed login attempts",
+                headers={"Retry-After": str(retry_after)},
+            )
+
         result = await db.execute(select(User).where(User.email == request.email, User.is_active))
         user = result.scalar_one_or_none()
 
         if not user or not verify_password(request.password, user.hashed_password):
+            count = await increment_login_failure(
+                request.email, settings.LOGIN_LOCKOUT_WINDOW_SECONDS
+            )
+            if count >= settings.LOGIN_MAX_ATTEMPTS:
+                retry_after = await get_lockout_ttl(request.email)
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Account temporarily locked due to too many failed login attempts",
+                    headers={"Retry-After": str(retry_after)},
+                )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
             )
 
+        await clear_login_failures(request.email)
         access_token = create_access_token(str(user.id), user.role)
         raw_refresh, refresh_hash = create_refresh_token()
 
