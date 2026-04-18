@@ -56,3 +56,42 @@ async def is_token_revoked(jti: str) -> bool:
     """Return True if the given jti has been revoked."""
     redis = get_redis_client()
     return await redis.exists(f"{_JTI_PREFIX}{jti}") == 1
+
+
+# ── Login lockout ──────────────────────────────────────────────────────────────
+#
+# Per-account failure counter keyed auth:lockout:<email>.
+# The TTL is set only on the first increment so the window is fixed from the
+# first failure — it does not slide on each subsequent attempt.
+
+_LOCKOUT_PREFIX = "auth:lockout:"
+
+
+async def increment_login_failure(email: str, window_seconds: int) -> int:
+    """Increment the failure counter for an email. Returns the new count."""
+    redis = get_redis_client()
+    key = f"{_LOCKOUT_PREFIX}{email}"
+    count = await redis.incr(key)
+    if count == 1:
+        await redis.expire(key, window_seconds)
+    return count
+
+
+async def is_login_locked(email: str, threshold: int) -> bool:
+    """Return True if the email has reached or exceeded the failure threshold."""
+    redis = get_redis_client()
+    value = await redis.get(f"{_LOCKOUT_PREFIX}{email}")
+    return value is not None and int(value) >= threshold
+
+
+async def get_lockout_ttl(email: str) -> int:
+    """Return remaining TTL in seconds for the lockout key (0 if not locked)."""
+    redis = get_redis_client()
+    ttl = await redis.ttl(f"{_LOCKOUT_PREFIX}{email}")
+    return max(ttl, 0)
+
+
+async def clear_login_failures(email: str) -> None:
+    """Clear the failure counter after a successful login."""
+    redis = get_redis_client()
+    await redis.delete(f"{_LOCKOUT_PREFIX}{email}")

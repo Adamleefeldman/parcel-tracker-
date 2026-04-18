@@ -11,9 +11,11 @@ Start the scheduler (for periodic tasks):
 
 import logging
 
+import sentry_sdk
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import after_setup_logger, after_setup_task_logger
+from sentry_sdk.integrations.celery import CeleryIntegration
 
 from app.core.config import get_settings
 from app.core.logging import setup_logging
@@ -21,6 +23,14 @@ from app.core.logging import setup_logging
 logger = logging.getLogger("parceltrack.celery")
 
 settings = get_settings()
+
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.SENTRY_ENVIRONMENT or settings.APP_ENV,
+        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+        integrations=[CeleryIntegration()],
+    )
 
 celery_app = Celery(
     "parceltrack",

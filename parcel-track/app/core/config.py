@@ -64,6 +64,15 @@ class Settings(BaseSettings):
     INTEGRATION_CIRCUIT_BREAKER_THRESHOLD: int = 5
     INTEGRATION_CIRCUIT_BREAKER_COOLDOWN_SECONDS: int = 60
 
+    # Login lockout — Redis-backed per-account failure counter.
+    LOGIN_MAX_ATTEMPTS: int = 5
+    LOGIN_LOCKOUT_WINDOW_SECONDS: int = 900  # 15-minute sliding window
+
+    # Sentry error tracking.
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+    SENTRY_ENVIRONMENT: str = ""  # defaults to APP_ENV if empty
+
     # Rate limiting — comma-separated trusted proxy IPs/CIDRs.
     # Only set in production behind a reverse proxy (e.g. Cloudflare).
     TRUSTED_PROXIES: str = ""
