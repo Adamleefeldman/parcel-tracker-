@@ -259,7 +259,7 @@ class TestDeliveryScheduleValidation:
                 "time_window_end": "12:00",
                 "haulier": "TestHaulier",
             },
-            headers=h,
+            headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 422
 
@@ -292,7 +292,7 @@ class TestDeliveryScheduleValidation:
                 "time_window_end": "09:00",
                 "haulier": "TestHaulier",
             },
-            headers=h,
+            headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 422
 

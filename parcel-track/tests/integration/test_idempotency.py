@@ -1,9 +1,10 @@
 """
 Idempotency key tests.
 
-Validates the ``require_idempotency`` FastAPI dependency on the invoice and
-payment POST endpoints.  Missing header → 400.  Duplicate key → cached
-response returned without creating a second resource.
+Validates the ``require_idempotency`` FastAPI dependency on invoice, payment,
+vessel-update, customs-note, delivery-schedule, and delivery-status endpoints.
+Missing header → 400.  Duplicate key → cached response returned without
+re-executing the handler.
 """
 
 import uuid
@@ -147,3 +148,158 @@ class TestIdempotencyBehaviour:
         )
         assert r2.status_code == 200
         assert r1.json()["id"] != r2.json()["id"]
+
+    async def test_duplicate_vessel_update_key_returns_cached_response(
+        self, client: AsyncClient, admin_token: str
+    ):
+        h = {"Authorization": f"Bearer {admin_token}"}
+        sid, _ = await advance_to(client, h, "in_transit", ref="IDEM-VU-DUP")
+        key = str(uuid.uuid4())
+
+        body = {"status": "in_transit", "current_position_note": "Bay of Biscay"}
+
+        r1 = await client.post(
+            f"/api/v1/shipments/{sid}/vessel/updates",
+            json=body,
+            headers={**h, "Idempotency-Key": key},
+        )
+        assert r1.status_code == 200
+
+        r2 = await client.post(
+            f"/api/v1/shipments/{sid}/vessel/updates",
+            json=body,
+            headers={**h, "Idempotency-Key": key},
+        )
+        assert r2.status_code == 200
+        # Same vessel ID returned — only one update row created
+        assert r1.json()["id"] == r2.json()["id"]
+
+    async def test_duplicate_customs_note_key_returns_cached_response(
+        self, client: AsyncClient, admin_token: str
+    ):
+        h = {"Authorization": f"Bearer {admin_token}"}
+        sid, ctx = await advance_to(client, h, "in_transit", ref="IDEM-CN-DUP")
+        cid = ctx["container_ids"][0]
+
+        # Create a customs record so the note endpoint has something to attach to
+        r = await client.put(
+            f"/api/v1/shipments/{sid}/containers/{cid}/customs",
+            json={"status": "examination", "hold_reason": "Random inspection"},
+            headers=h,
+        )
+        assert r.status_code == 200
+
+        key = str(uuid.uuid4())
+        body = {"note": "Hold for inspection"}
+
+        r1 = await client.post(
+            f"/api/v1/shipments/{sid}/containers/{cid}/customs/notes",
+            json=body,
+            headers={**h, "Idempotency-Key": key},
+        )
+        assert r1.status_code == 200
+
+        r2 = await client.post(
+            f"/api/v1/shipments/{sid}/containers/{cid}/customs/notes",
+            json=body,
+            headers={**h, "Idempotency-Key": key},
+        )
+        assert r2.status_code == 200
+        assert r1.json() == r2.json()
+
+    async def test_duplicate_schedule_delivery_key_returns_cached_response(
+        self, client: AsyncClient, admin_token: str
+    ):
+        h = {"Authorization": f"Bearer {admin_token}"}
+        sid, ctx = await advance_to(client, h, "cleared", ref="IDEM-DS-DUP")
+        cid = ctx["container_ids"][0]
+
+        # Create a delivery point
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/delivery/points",
+            json={
+                "recipient_name": "Test Recipient",
+                "address": "1 Test St, London",
+                "contact_name": "Contact",
+                "contact_phone": "07700900000",
+                "container_ids": [cid],
+            },
+            headers=h,
+        )
+        assert r.status_code == 200
+        point_id = r.json()["id"]
+
+        key = str(uuid.uuid4())
+        body = {
+            "delivery_date": "2026-03-01",
+            "time_window_start": "08:00",
+            "time_window_end": "12:00",
+            "haulier": "Test Haulier",
+        }
+
+        r1 = await client.post(
+            f"/api/v1/shipments/{sid}/delivery/points/{point_id}/schedule",
+            json=body,
+            headers={**h, "Idempotency-Key": key},
+        )
+        assert r1.status_code == 200
+
+        r2 = await client.post(
+            f"/api/v1/shipments/{sid}/delivery/points/{point_id}/schedule",
+            json=body,
+            headers={**h, "Idempotency-Key": key},
+        )
+        assert r2.status_code == 200
+        assert r1.json() == r2.json()
+
+    async def test_duplicate_delivery_status_update_key_returns_cached_response(
+        self, client: AsyncClient, admin_token: str
+    ):
+        h = {"Authorization": f"Bearer {admin_token}"}
+        sid, ctx = await advance_to(client, h, "cleared", ref="IDEM-DSU-DUP")
+        cid = ctx["container_ids"][0]
+
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/delivery/points",
+            json={
+                "recipient_name": "Test Recipient",
+                "address": "1 Test St, London",
+                "contact_name": "Contact",
+                "contact_phone": "07700900000",
+                "container_ids": [cid],
+            },
+            headers=h,
+        )
+        assert r.status_code == 200
+        point_id = r.json()["id"]
+
+        # Schedule it first
+        r = await client.post(
+            f"/api/v1/shipments/{sid}/delivery/points/{point_id}/schedule",
+            json={
+                "delivery_date": "2026-03-01",
+                "time_window_start": "08:00",
+                "time_window_end": "12:00",
+                "haulier": "Test Haulier",
+            },
+            headers={**h, "Idempotency-Key": str(uuid.uuid4())},
+        )
+        assert r.status_code == 200
+
+        key = str(uuid.uuid4())
+        body = {"status": "failed", "failure_reason": "No access"}
+
+        r1 = await client.patch(
+            f"/api/v1/shipments/{sid}/delivery/points/{point_id}/status",
+            json=body,
+            headers={**h, "Idempotency-Key": key},
+        )
+        assert r1.status_code == 200
+
+        r2 = await client.patch(
+            f"/api/v1/shipments/{sid}/delivery/points/{point_id}/status",
+            json=body,
+            headers={**h, "Idempotency-Key": key},
+        )
+        assert r2.status_code == 200
+        assert r1.json() == r2.json()

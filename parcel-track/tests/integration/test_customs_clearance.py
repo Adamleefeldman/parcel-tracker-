@@ -8,6 +8,8 @@ Covers:
   - Clearing container 2 triggers automatic shipment → cleared transition
 """
 
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -150,7 +152,7 @@ async def _build_awaiting_customs_state(client: AsyncClient, token: str) -> tupl
     # 10. Record vessel arrival → containers → AWAITING_CUSTOMS
     r = await client.post(
         f"/api/v1/shipments/{ship_id}/vessel/updates",
-        headers=hdrs,
+        headers={**hdrs, "Idempotency-Key": str(uuid.uuid4())},
         json={
             "status": "arrived",
             "current_position_note": "Arrived at Felixstowe",
@@ -207,7 +209,11 @@ class TestCustomsClearance:
         customs_url = f"/api/v1/shipments/{ship_id}/containers/{c1_id}/customs"
 
         # Cannot add note before customs record exists
-        r = await client.post(f"{customs_url}/notes", headers=hdrs, json={"note": "Too early"})
+        r = await client.post(
+            f"{customs_url}/notes",
+            headers={**hdrs, "Idempotency-Key": str(uuid.uuid4())},
+            json={"note": "Too early"},
+        )
         assert r.status_code == 404
 
         # Create customs record first
@@ -217,7 +223,7 @@ class TestCustomsClearance:
         # Now add note
         r = await client.post(
             f"{customs_url}/notes",
-            headers=hdrs,
+            headers={**hdrs, "Idempotency-Key": str(uuid.uuid4())},
             json={"note": "Hold released pending duty payment confirmation"},
         )
         assert r.status_code == 200, r.text

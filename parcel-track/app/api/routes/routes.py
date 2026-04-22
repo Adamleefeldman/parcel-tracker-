@@ -698,8 +698,12 @@ async def add_vessel_update(
     body: VesselUpdateCreate,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_admin),
+    idempotency: IdempotencyResult = Depends(require_idempotency),
     request: Request = None,
 ):
+    if idempotency.cached_response:
+        return idempotency.cached_response
+
     bl_result = await db.execute(
         select(BillOfLading)
         .where(BillOfLading.shipment_id == shipment_id)
@@ -742,6 +746,7 @@ async def add_vessel_update(
             c.port_status = PortStatus.AWAITING_CUSTOMS
             c.status = ContainerStatus.AWAITING_CUSTOMS
 
+    await idempotency.store(VesselOut.model_validate(vessel).model_dump(mode="json"))
     return vessel
 
 
@@ -890,7 +895,11 @@ async def add_customs_note(
     body: CustomsNoteCreate,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_shipment_member),
+    idempotency: IdempotencyResult = Depends(require_idempotency),
 ):
+    if idempotency.cached_response:
+        return idempotency.cached_response
+
     if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):
         raise HTTPException(403, "Insufficient role")
 
@@ -902,7 +911,9 @@ async def add_customs_note(
         raise HTTPException(404, "No customs record for this container")
 
     db.add(CustomsNote(customs_record_id=record.id, created_by=actor.id, note=body.note))
-    return {"message": "Note added"}
+    result = {"message": "Note added"}
+    await idempotency.store(result)
+    return result
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -1018,8 +1029,12 @@ async def schedule_delivery(
     body: DeliveryScheduleCreate,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_shipment_member),
+    idempotency: IdempotencyResult = Depends(require_idempotency),
     request: Request = None,
 ):
+    if idempotency.cached_response:
+        return idempotency.cached_response
+
     if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):
         raise HTTPException(403, "Only admin or UK agent can schedule delivery")
 
@@ -1045,7 +1060,9 @@ async def schedule_delivery(
             ),
         )
 
-    return {"message": "Delivery scheduled"}
+    resp = {"message": "Delivery scheduled"}
+    await idempotency.store(resp)
+    return resp
 
 
 @delivery_router.patch("/points/{point_id}/status")
@@ -1055,8 +1072,12 @@ async def update_delivery_status(
     body: DeliveryStatusUpdate,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_shipment_member),
+    idempotency: IdempotencyResult = Depends(require_idempotency),
     request: Request = None,
 ):
+    if idempotency.cached_response:
+        return idempotency.cached_response
+
     if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):
         raise HTTPException(403, "Only admin or UK agent can update delivery status")
 
@@ -1093,7 +1114,9 @@ async def update_delivery_status(
                 db, shipment, ShipmentStatus.COMPLETE, actor, get_client_ip(request)
             )
 
-    return {"message": f"Delivery status updated to {new_status}"}
+    resp = {"message": f"Delivery status updated to {new_status}"}
+    await idempotency.store(resp)
+    return resp
 
 
 # ════════════════════════════════════════════════════════════════════════════════
