@@ -303,7 +303,7 @@ class TestSequentialWalkthrough:
         r = await client.patch(
             f"/api/v1/shipments/{sid}/delivery/points/{point_id}/status",
             json={"status": "delivered"},
-            headers=h,
+            headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 200, r.json()
         assert await self._get_status(client, sid, h) == "complete"
@@ -548,7 +548,7 @@ class TestPreconditions:
         r = await client.patch(
             f"/api/v1/shipments/{sid}/delivery/points/{point_id}/status",
             json={"status": "delivered"},
-            headers=h,
+            headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 200
         assert await self._get_status(client, sid, h) == "complete"
@@ -766,7 +766,7 @@ class TestPreconditions:
         r = await client.patch(
             f"/api/v1/shipments/{sid}/delivery/points/{point_id_0}/status",
             json={"status": "delivered"},
-            headers=h,
+            headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 200, r.json()
         # Second point still pending — state must not advance
