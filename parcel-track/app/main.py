@@ -16,7 +16,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.routes.routes import (
+from app.api.routes import (
     auth_router,
     bl_router,
     clearing_router,

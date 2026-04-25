@@ -1,0 +1,31 @@
+"""Per-resource route modules. Import routers from here."""
+
+from app.api.routes.auth import auth_router
+from app.api.routes.bl import bl_router
+from app.api.routes.clearing import clearing_router
+from app.api.routes.containers import container_router
+from app.api.routes.customs import customs_router
+from app.api.routes.delivery import delivery_router
+from app.api.routes.documents import doc_router
+from app.api.routes.invoices import invoice_router
+from app.api.routes.notifications import notif_router
+from app.api.routes.payments import payment_router
+from app.api.routes.po import po_router
+from app.api.routes.shipments import shipment_router
+from app.api.routes.vessels import vessel_router
+
+__all__ = [
+    "auth_router",
+    "bl_router",
+    "clearing_router",
+    "container_router",
+    "customs_router",
+    "delivery_router",
+    "doc_router",
+    "invoice_router",
+    "notif_router",
+    "payment_router",
+    "po_router",
+    "shipment_router",
+    "vessel_router",
+]
