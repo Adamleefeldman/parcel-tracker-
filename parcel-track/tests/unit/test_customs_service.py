@@ -69,10 +69,11 @@ async def test_cleared_cascades_to_container_fields():
 
     db = _make_db(record, container, [_make_container(ContainerStatus.CLEARED)], record)
 
-    with patch("app.services.customs_service.NotificationService.notify_shipment_roles"), \
-         patch("app.services.customs_service.ShipmentService.get", return_value=MagicMock()), \
-         patch("app.services.customs_service.ShipmentService.transition_status"):
-
+    with (
+        patch("app.services.customs_service.NotificationService.notify_shipment_roles"),
+        patch("app.services.customs_service.ShipmentService.get", return_value=MagicMock()),
+        patch("app.services.customs_service.ShipmentService.transition_status"),
+    ):
         await CustomsService.upsert(
             db, uuid.uuid4(), uuid.uuid4(), _make_body(CustomsStatus.CLEARED), actor, None
         )
@@ -95,10 +96,11 @@ async def test_all_containers_cleared_triggers_shipment_transition():
     db = _make_db(record, container, [_make_container(ContainerStatus.CLEARED)], record)
 
     shipment_mock = MagicMock()
-    with patch("app.services.customs_service.NotificationService.notify_shipment_roles"), \
-         patch("app.services.customs_service.ShipmentService.get", return_value=shipment_mock), \
-         patch("app.services.customs_service.ShipmentService.transition_status") as mock_trans:
-
+    with (
+        patch("app.services.customs_service.NotificationService.notify_shipment_roles"),
+        patch("app.services.customs_service.ShipmentService.get", return_value=shipment_mock),
+        patch("app.services.customs_service.ShipmentService.transition_status") as mock_trans,
+    ):
         await CustomsService.upsert(
             db, uuid.uuid4(), uuid.uuid4(), _make_body(CustomsStatus.CLEARED), actor, None
         )
@@ -125,9 +127,10 @@ async def test_not_all_cleared_does_not_trigger_transition():
         record,
     )
 
-    with patch("app.services.customs_service.NotificationService.notify_shipment_roles"), \
-         patch("app.services.customs_service.ShipmentService.transition_status") as mock_trans:
-
+    with (
+        patch("app.services.customs_service.NotificationService.notify_shipment_roles"),
+        patch("app.services.customs_service.ShipmentService.transition_status") as mock_trans,
+    ):
         await CustomsService.upsert(
             db, uuid.uuid4(), uuid.uuid4(), _make_body(CustomsStatus.CLEARED), actor, None
         )

@@ -26,7 +26,6 @@ class ClearingService:
             return ClearingDocsStatus.PARTIAL
         return None
 
-
     @staticmethod
     async def upsert(
         db: AsyncSession,

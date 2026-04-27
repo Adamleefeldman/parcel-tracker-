@@ -62,9 +62,7 @@ class CustomsService:
         if body.duty_paid is not None:
             record.duty_paid = body.duty_paid
 
-        container_result = await db.execute(
-            select(Container).where(Container.id == container_id)
-        )
+        container_result = await db.execute(select(Container).where(Container.id == container_id))
         container = container_result.scalar_one_or_none()
 
         if new_status == CustomsStatus.CLEARED:

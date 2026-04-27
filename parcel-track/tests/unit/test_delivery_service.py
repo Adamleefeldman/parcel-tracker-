@@ -42,10 +42,12 @@ async def test_all_delivered_triggers_complete_transition():
     db.execute.side_effect = [point_result, all_points_result]
 
     shipment_mock = MagicMock()
-    with patch("app.services.delivery_service.ShipmentService.get", return_value=shipment_mock), \
-         patch("app.services.delivery_service.ShipmentService.transition_status") as mock_trans:
-
+    with (
+        patch("app.services.delivery_service.ShipmentService.get", return_value=shipment_mock),
+        patch("app.services.delivery_service.ShipmentService.transition_status") as mock_trans,
+    ):
         from app.core.enums import UserRole
+
         actor.role = UserRole.ADMIN
         resp = await DeliveryService.update_status(
             db, uuid.uuid4(), uuid.uuid4(), body, actor, None
@@ -86,6 +88,7 @@ async def test_not_all_delivered_no_transition():
 
     with patch("app.services.delivery_service.ShipmentService.transition_status") as mock_trans:
         from app.core.enums import UserRole
+
         actor.role = UserRole.ADMIN
         await DeliveryService.update_status(db, uuid.uuid4(), uuid.uuid4(), body, actor, None)
 
@@ -117,6 +120,7 @@ async def test_failed_delivery_resets_to_awaiting_schedule():
 
     with patch("app.services.delivery_service.ShipmentService.transition_status") as mock_trans:
         from app.core.enums import UserRole
+
         actor.role = UserRole.ADMIN
         await DeliveryService.update_status(db, uuid.uuid4(), uuid.uuid4(), body, actor, None)
 

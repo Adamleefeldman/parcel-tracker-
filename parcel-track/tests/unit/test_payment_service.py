@@ -26,9 +26,9 @@ def _make_db(*, invoice_value: Decimal, paid_total: Decimal, shipment_status: Sh
     sum_result.scalar.return_value = paid_total
 
     db.execute.side_effect = [
-        None,           # flush of Payment (execute not called for add/flush)
-        inv_result,     # invoice fetch
-        sum_result,     # SUM query
+        None,  # flush of Payment (execute not called for add/flush)
+        inv_result,  # invoice fetch
+        sum_result,  # SUM query
     ]
     return db, invoice
 
@@ -54,11 +54,13 @@ async def test_payment_does_not_transition_when_underpaid():
     db.execute.side_effect = [inv_result, sum_result]
 
     import uuid
-    with patch("app.services.payment_service.Payment") as MockPayment, \
-         patch("app.services.payment_service.ShipmentService.get"), \
-         patch("app.services.payment_service.ShipmentService.transition_status") as mock_trans, \
-         patch("app.services.payment_service.NotificationService.notify_shipment_roles"):
 
+    with (
+        patch("app.services.payment_service.Payment") as MockPayment,
+        patch("app.services.payment_service.ShipmentService.get"),
+        patch("app.services.payment_service.ShipmentService.transition_status") as mock_trans,
+        patch("app.services.payment_service.NotificationService.notify_shipment_roles"),
+    ):
         MockPayment.return_value = MagicMock()
         await PaymentService.add(db, uuid.uuid4(), body, actor, None)
 
@@ -74,8 +76,12 @@ async def test_payment_transitions_when_fully_paid():
     actor.id = "actor-1"
 
     body = MagicMock()
-    body.model_dump.return_value = {"amount": Decimal("1000.00"), "payment_date": "2026-01-01",
-                                    "swift_ref": "SW1", "payment_method": "WIRE"}
+    body.model_dump.return_value = {
+        "amount": Decimal("1000.00"),
+        "payment_date": "2026-01-01",
+        "swift_ref": "SW1",
+        "payment_method": "WIRE",
+    }
 
     db = AsyncMock()
     invoice_mock = MagicMock()
@@ -92,11 +98,13 @@ async def test_payment_transitions_when_fully_paid():
     shipment_mock.status = ShipmentStatus.INVOICE_RECEIVED
 
     import uuid
-    with patch("app.services.payment_service.Payment") as MockPayment, \
-         patch("app.services.payment_service.ShipmentService.get", return_value=shipment_mock), \
-         patch("app.services.payment_service.ShipmentService.transition_status") as mock_trans, \
-         patch("app.services.payment_service.NotificationService.notify_shipment_roles"):
 
+    with (
+        patch("app.services.payment_service.Payment") as MockPayment,
+        patch("app.services.payment_service.ShipmentService.get", return_value=shipment_mock),
+        patch("app.services.payment_service.ShipmentService.transition_status") as mock_trans,
+        patch("app.services.payment_service.NotificationService.notify_shipment_roles"),
+    ):
         MockPayment.return_value = MagicMock()
         await PaymentService.add(db, uuid.uuid4(), body, actor, None)
 
@@ -130,11 +138,13 @@ async def test_payment_does_not_double_transition_when_already_confirmed():
     shipment_mock.status = ShipmentStatus.PAYMENT_CONFIRMED  # already advanced
 
     import uuid
-    with patch("app.services.payment_service.Payment") as MockPayment, \
-         patch("app.services.payment_service.ShipmentService.get", return_value=shipment_mock), \
-         patch("app.services.payment_service.ShipmentService.transition_status") as mock_trans, \
-         patch("app.services.payment_service.NotificationService.notify_shipment_roles"):
 
+    with (
+        patch("app.services.payment_service.Payment") as MockPayment,
+        patch("app.services.payment_service.ShipmentService.get", return_value=shipment_mock),
+        patch("app.services.payment_service.ShipmentService.transition_status") as mock_trans,
+        patch("app.services.payment_service.NotificationService.notify_shipment_roles"),
+    ):
         MockPayment.return_value = MagicMock()
         await PaymentService.add(db, uuid.uuid4(), body, actor, None)
 

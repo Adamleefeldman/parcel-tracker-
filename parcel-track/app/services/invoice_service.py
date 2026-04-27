@@ -20,7 +20,6 @@ class InvoiceService:
         """Return True when invoice/PO value differ by more than 2%."""
         return abs(invoice_value - po_value) / po_value > 0.02
 
-
     @staticmethod
     async def create(
         db: AsyncSession,
