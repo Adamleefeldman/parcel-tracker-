@@ -61,6 +61,34 @@ pre-commit install --hook-type pre-push
 - **Pre-commit**: ruff lint + format (milliseconds)
 - **Pre-push**: mypy type check (seconds)
 
+## Cloudflare R2 setup
+
+File uploads use the presigned-URL pattern: clients PUT directly to R2 and
+the API only stores the object key. Bucket + token are managed by the account
+admin; the values below go in `.env`:
+
+```
+STORAGE_BUCKET=parceltrack-documents
+STORAGE_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
+STORAGE_ACCESS_KEY_ID=<R2 access key id>
+STORAGE_SECRET_ACCESS_KEY=<R2 secret access key>
+STORAGE_REGION=auto
+STORAGE_PUBLIC_URL=https://<account-id>.r2.cloudflarestorage.com/parceltrack-documents
+```
+
+CORS on the bucket must allow `PUT` and `GET` from the mobile app origin.
+Use `*` for `AllowedOrigins` during development, then lock it down to the
+real app origin before production.
+
+Verify the round-trip end-to-end (uploads bytes, HEAD-checks them, downloads
+and compares, then cleans up):
+
+```bash
+uv run python scripts/smoke_r2.py
+```
+
+Exits 0 on success, 1 with the failing step on stderr.
+
 ## Running tests
 
 ```bash

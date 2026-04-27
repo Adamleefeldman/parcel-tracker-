@@ -18,7 +18,7 @@ from app.schemas.schemas import (
     UploadUrlRequest,
     UploadUrlResponse,
 )
-from app.services.storage_service import StorageService
+from app.services.storage_service import StorageObjectNotFound, StorageService
 
 doc_router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -48,15 +48,32 @@ async def confirm_upload(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
-    """Step 2: client confirms upload completed. API records the document in DB."""
+    """Step 2: client confirms upload completed. API records the document in DB.
+
+    Trust nothing the client says about the upload — HEAD the object in R2 and
+    use the size/content-type the bucket actually reports. A missing object
+    means the presigned PUT never succeeded; reject with 400 so the client
+    retries instead of leaving an orphan ``Document`` row.
+    """
+    try:
+        meta = StorageService.verify_upload(body.file_key)
+    except StorageObjectNotFound as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if meta["size"] > StorageService.MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(f"file exceeds maximum size of {StorageService.MAX_FILE_SIZE_BYTES} bytes"),
+        )
+
     doc = Document(
         uploaded_by=actor.id,
         entity_type=DocumentEntityType(entity_type),
         entity_id=entity_id,
         file_key=body.file_key,
         file_name=body.file_name,
-        mime_type=body.mime_type,
-        file_size_bytes=body.file_size_bytes,
+        mime_type=meta["content_type"] or body.mime_type,
+        file_size_bytes=meta["size"],
     )
     db.add(doc)
     await db.flush()

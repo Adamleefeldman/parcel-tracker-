@@ -76,16 +76,18 @@ def mock_storage_service():
     """
     Prevent every test from reaching AWS S3.
 
-    StorageService has three methods that talk to the network:
+    StorageService has four methods that talk to the network:
       - generate_file_key  → builds an S3 object key string
       - get_upload_url     → calls boto3 to generate a pre-signed PUT URL
       - get_download_url   → calls boto3 to generate a pre-signed GET URL
+      - verify_upload      → HEADs the bucket to confirm a presigned PUT landed
 
     Tests that exercise document-related flows (e.g. submit_po) need a
     Document row to exist in the DB.  That row is created via the
-    POST /documents/confirm endpoint, which internally calls get_download_url.
-    Without this mock that call crashes immediately because there are no
-    AWS credentials in the test environment.
+    POST /documents/confirm endpoint, which calls verify_upload (must succeed)
+    and get_download_url (must return a URL).  Without this mock both calls
+    crash immediately because there are no AWS credentials in the test
+    environment.
 
     Using autouse=True means every test in this suite is protected
     automatically — no individual test needs to remember to opt in.
@@ -102,6 +104,14 @@ def mock_storage_service():
         patch(
             "app.services.storage_service.StorageService.get_download_url",
             return_value="https://fake-s3.example.com/download",
+        ),
+        patch(
+            "app.services.storage_service.StorageService.verify_upload",
+            return_value={
+                "size": 1024,
+                "etag": "fake-etag",
+                "content_type": "application/pdf",
+            },
         ),
     ):
         yield
