@@ -21,6 +21,11 @@ from __future__ import annotations
 import asyncio
 import sys
 import uuid
+from pathlib import Path
+
+# Ensure the project root is on sys.path so `app` is importable when this
+# script is run directly with `uv run python scripts/smoke_r2.py`.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import httpx
 
