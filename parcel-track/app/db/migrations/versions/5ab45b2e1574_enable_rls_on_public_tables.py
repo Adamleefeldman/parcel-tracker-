@@ -1,7 +1,7 @@
 """enable rls on public tables
 
 Revision ID: 5ab45b2e1574
-Revises: a1b2c3d4e5f6
+Revises: b2c3d4e5f6a7
 Create Date: 2026-04-29 13:50:40.861281
 
 Enables Row Level Security on every public table with no policies attached.
@@ -26,7 +26,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "5ab45b2e1574"
-down_revision: str | None = "a1b2c3d4e5f6"
+down_revision: str | None = "b2c3d4e5f6a7"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
