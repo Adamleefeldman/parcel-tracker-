@@ -371,8 +371,11 @@ class VesselUpdate(Base):
     vessel_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("vessels.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    created_by: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    # Nullable: background-task writes (e.g. VesselFinder poller) have no
+    # acting user. NULL means "system-generated"; pair with `source` to
+    # identify the writer. Route-layer writes always set this.
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     status: Mapped[VesselUpdateStatus] = mapped_column(SAEnum(VesselUpdateStatus), nullable=False)
     current_position_note: Mapped[str | None] = mapped_column(Text, nullable=True)

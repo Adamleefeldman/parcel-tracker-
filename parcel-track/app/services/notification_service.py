@@ -42,6 +42,10 @@ NOTIFICATION_TEMPLATES: dict[NotificationType, tuple[str, str]] = {
         "Vessel departed",
         "Your shipment has departed from the port of loading.",
     ),
+    NotificationType.VESSEL_APPROACHING: (
+        "Vessel approaching",
+        "Your shipment is approaching the destination port.",
+    ),
     NotificationType.VESSEL_DELAYED: (
         "Vessel delayed",
         "The vessel has been delayed. ETA has been revised.",
