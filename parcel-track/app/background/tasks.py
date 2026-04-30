@@ -52,6 +52,15 @@ celery_app.conf.update(
             "task": "app.background.tasks.check_clearing_doc_deadlines",
             "schedule": crontab(minute=0),  # top of every hour
         },
+        # Poll VesselFinder for AIS positions on every fleet vessel.
+        # `schedule` accepts a bare number (seconds) — this form supports
+        # intervals > 60 minutes cleanly (which crontab does not).
+        # The task itself no-ops when VESSELFINDER_ENABLED is false, so
+        # registering the entry is safe even when the feature is dormant.
+        "poll-vesselfinder": {
+            "task": "app.background.tasks.poll_vesselfinder",
+            "schedule": settings.VESSELFINDER_POLL_INTERVAL_MINUTES * 60,
+        },
     },
 )
 
@@ -211,3 +220,55 @@ def send_push_notification(self, notification_id: str):
     except IntegrationError:
         # 4xx / auth / rate-limit — retrying won't help; log and drop.
         logger.warning("push_notification permanent failure id=%s", notification_id, exc_info=True)
+
+
+@celery_app.task(
+    name="app.background.tasks.poll_vesselfinder",
+    bind=True,
+    max_retries=3,
+)
+def poll_vesselfinder(self):
+    """Periodic VesselFinder fleet poll (P1.5).
+
+    Beat fires this every `VESSELFINDER_POLL_INTERVAL_MINUTES`. The task is
+    a thin shell — all logic lives in `VesselPollService.poll_vessels_once`.
+
+    Disabled by default: returns immediately when `VESSELFINDER_ENABLED` is
+    false so the entry can stay in the beat schedule even before the API
+    key + fleet are wired up in production.
+
+    Retry policy: transient integration errors (timeouts, 5xx, circuit open)
+    bounce with exponential backoff. Auth errors (`IntegrationAuthError`)
+    are NOT retried — they mean the key is wrong or the fleet config is
+    missing, and a thousand retries won't fix that. Per-vessel errors
+    inside the service layer are caught there and don't bubble up.
+    """
+    import asyncio
+
+    from app.db.database import AsyncSessionLocal
+    from app.integrations._exceptions import (
+        IntegrationError,
+        IntegrationRateLimited,
+        IntegrationTimeout,
+        IntegrationUnavailable,
+    )
+    from app.services.vessel_poll_service import VesselPollService
+
+    if not settings.VESSELFINDER_ENABLED:
+        logger.debug("poll_vesselfinder skipped — VESSELFINDER_ENABLED is false")
+        return {"skipped": "disabled"}
+
+    async def _run() -> dict[str, int]:
+        async with AsyncSessionLocal() as db:
+            summary = await VesselPollService().poll_vessels_once(db)
+            return summary.as_dict()
+
+    try:
+        return asyncio.run(_run())
+    except (IntegrationTimeout, IntegrationUnavailable, IntegrationRateLimited) as exc:
+        raise self.retry(exc=exc, countdown=2**self.request.retries) from exc
+    except IntegrationError:
+        # Auth error or other terminal integration fault — log and drop.
+        # Retrying won't fix a bad key.
+        logger.warning("poll_vesselfinder permanent failure", exc_info=True)
+        return {"error": "permanent"}

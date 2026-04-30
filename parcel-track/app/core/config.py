@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import model_validator
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings
 
 # Reject SECRET_KEY values that are obviously not real secrets.
@@ -63,6 +63,25 @@ class Settings(BaseSettings):
     INTEGRATION_HTTP_RETRIES: int = 2
     INTEGRATION_CIRCUIT_BREAKER_THRESHOLD: int = 5
     INTEGRATION_CIRCUIT_BREAKER_COOLDOWN_SECONDS: int = 60
+
+    # VesselFinder polling worker (P1.5).
+    # Fleet-subscription model: one /vesselslist call returns all tracked vessels,
+    # so cadence is bounded by the subscription tier rather than per-call credits.
+    # Disabled by default — flip the flag once secrets are wired in the hosting
+    # platform AND scripts/smoke_vesselfinder.py round-trips successfully.
+    VESSELFINDER_ENABLED: bool = False
+    VESSELFINDER_BASE_URL: str = "https://api.vesselfinder.com"
+    VESSELFINDER_FLEET_KEY: SecretStr = SecretStr("")
+    VESSELFINDER_POLL_INTERVAL_MINUTES: int = 30
+    # Only update Vessel.eta when the new ETA differs from the stored one by at
+    # least this many hours — keeps churn off the audit log for jitter.
+    VESSELFINDER_ETA_CHANGE_THRESHOLD_HOURS: int = 2
+    # Trigger a "DELAYED" derived status when the revised ETA exceeds the
+    # originally stored ETA by more than this many hours.
+    VESSELFINDER_DELAYED_THRESHOLD_HOURS: int = 24
+    # Trigger "APPROACHING" when the vessel's current position is within this
+    # many nautical miles of the port_of_discharge centroid.
+    VESSELFINDER_APPROACHING_RADIUS_NM: float = 50.0
 
     # Login lockout — Redis-backed per-account failure counter.
     LOGIN_MAX_ATTEMPTS: int = 5
