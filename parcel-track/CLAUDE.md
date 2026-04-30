@@ -16,6 +16,10 @@
 - Check in before building, mark items done as you go.
 - Never start a new task without updating the task file.
 
+## Commit Rules
+- Stage only files directly required by the feature or fix: source code, migrations, tests, and env/config documentation (e.g. `.env.example`).
+- Do not commit planning artifacts (`tasks/todo.md`, scratch notes, etc.).
+
 ## Planning Rules
 - Enter plan mode for any 3+ step task.
 - Outline every step before writing code.
