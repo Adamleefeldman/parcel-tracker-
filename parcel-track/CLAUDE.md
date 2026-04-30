@@ -132,7 +132,7 @@ into route handlers.
 | DB engine + session factory | `app/db/database.py` |
 | Celery tasks + beat schedule | `app/background/tasks.py` |
 | Storage (presigned URLs) | `app/services/storage_service.py` |
-| Notification dispatch — push call is still synchronous, see ROADMAP Task 2 | `app/services/notification_service.py` |
+| Notification dispatch — push enqueued via Celery (`send_push_notification.delay`) | `app/services/notification_service.py` |
 | PO / Invoice / Payment services | `app/services/po_service.py`, `invoice_service.py`, `payment_service.py` |
 | Container / Customs / Clearing / Delivery services | `app/services/container_service.py`, `customs_service.py`, `clearing_service.py`, `delivery_service.py` |
 | Idempotency dependency | `app/middleware/idempotency.py` |
@@ -205,8 +205,9 @@ Both must be set. Never swap them. Production `config.py` validates that
 ## Current status & next work
 
 **P0** — COMPLETE (PR #6, `main` at `09da227`).
-**P1** — Tasks 1 + 2 merged (HTTP resilience helper + Celery push); Tasks 3–5 blocked on external accounts.
+**P1** — Tasks 1, 2, 3, 5 merged (HTTP resilience, Celery push, R2 end-to-end, VesselFinder polling). Task 4 (Destin8) still blocked on tier/credentials.
 **P2** — COMPLETE. All 7 hardening items done as of `p2-service-layer`.
+**P2.5** — RLS enabled on all 22 public tables (migration `5ab45b2e1574`, branch `p2-supabase-rls`).
 **P3** — TODO.
 
 Full task specs (acceptance criteria, file lists, poller algorithms) live in
@@ -214,19 +215,14 @@ Full task specs (acceptance criteria, file lists, poller algorithms) live in
 
 | # | Item | Status | Blocker |
 |---|---|---|---|
-| P1.3 | Cloudflare R2 end-to-end (`verify_upload`, `scripts/smoke_r2.py`) | BLOCKED | CF account + bucket |
 | P1.4 | Destin8 polling worker | BLOCKED | API credentials + tier choice |
-| P1.5 | VesselFinder polling worker | BLOCKED | plan/key |
 | P3 | Read caching, soft delete, API versioning, `/docs` lockdown, TZ audit, locust load test | TODO | product decisions |
 
 ### Open decisions (gate the blocked items)
 
-1. CF R2 account creation date (gates P1.3)
-2. Destin8 tier + endpoint URL (gates P1.4)
-3. VesselFinder plan (gates P1.5)
-4. Notification scope for customers — every vessel tick vs only `APPROACHING/DELAYED/ARRIVED` (affects P1.5 acceptance)
-5. Hosting target — Fly.io vs Railway (both run the Dockerfile as api + worker + beat)
-6. Data retention / GDPR policy (drives P3 soft-delete work)
+1. Destin8 tier + endpoint URL (gates P1.4)
+2. Hosting target — Fly.io vs Railway (both run the Dockerfile as api + worker + beat)
+3. Data retention / GDPR policy (drives P3 soft-delete work)
 
 ---
 

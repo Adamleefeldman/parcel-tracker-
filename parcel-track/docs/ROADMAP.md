@@ -3,10 +3,10 @@
 Detailed task specs for work beyond P0. CLAUDE.md carries only the high-level status
 table; the file-by-file breakdowns and acceptance criteria live here.
 
-## Status summary (as of 2026-04-27)
+## Status summary (as of 2026-04-30)
 
 - **P0** — COMPLETE (PR #6, `main` at `09da227`)
-- **P1** — PARTIALLY COMPLETE (Tasks 1 + 2 merged; Tasks 3–5 blocked on external accounts)
+- **P1** — PARTIALLY COMPLETE (Tasks 1, 2, 3, 5 merged; Task 4 Destin8 still blocked on tier/credentials)
 - **P2** — COMPLETE (all 7 items done; P2.18 service-layer extraction merged on `p2-service-layer`)
 - **P3** — TODO
 
@@ -18,14 +18,13 @@ table; the file-by-file breakdowns and acceptance criteria live here.
 
 | # | Task | Status | External dependency |
 |---|---|---|---|
-| 1 | Outbound-HTTP resilience helper | TODO | none |
-| 2 | Push notifications via Celery | TODO | none |
-| 3 | Cloudflare R2 end-to-end | BLOCKED | CF account + bucket |
+| 1 | Outbound-HTTP resilience helper | DONE (PR #7) | none |
+| 2 | Push notifications via Celery | DONE (PR #7) | none |
+| 3 | Cloudflare R2 end-to-end | DONE (PR #12) | CF account + bucket |
 | 4 | Destin8 polling worker | BLOCKED | Destin8 API credentials + tier |
-| 5 | VesselFinder polling worker | BLOCKED | VesselFinder plan + key |
+| 5 | VesselFinder polling worker | DONE (PR #13) | VesselFinder plan + key |
 
-**First branch:** Tasks 1 + 2 together (one PR, ~500 lines, no external accounts needed).
-Land Task 1 files + tests first (green CI on helper alone), then layer Task 2 on top.
+Only Task 4 (Destin8) remains. Same shape as Task 5 — see spec below; gated on tier choice.
 
 ---
 
@@ -98,7 +97,7 @@ via `httpx.AsyncClient`. This task wires them together.
 
 ---
 
-### Task 3 — Cloudflare R2 end-to-end (BLOCKED on CF account)
+### Task 3 — Cloudflare R2 end-to-end (DONE — PR #12, `718d5ee`)
 
 **Operational steps (your work):**
 - Create Cloudflare account + R2 bucket `parceltrack-documents`
@@ -161,7 +160,7 @@ budget, and rate-limit self-imposition.
 
 ---
 
-### Task 5 — VesselFinder polling worker (BLOCKED on plan/key)
+### Task 5 — VesselFinder polling worker (DONE — PR #13, `fc95515`)
 
 **Decision required:** free tier ≈ 1 update per vessel per few hours; paid = finer
 granularity. Drives `VESSELFINDER_POLL_INTERVAL_MINUTES` default.
@@ -212,17 +211,16 @@ Same shape as Task 4. Key differences:
 
 ---
 
-## Open decisions (required before tasks 3–5 and P3)
+## Open decisions (required before remaining work)
 
-1. **CF R2 account** — when will you create it? (gates Task 3)
-2. **Destin8 tier + exact endpoint URL** — drives poll cadence and rate-limit budget (gates Task 4)
-3. **VesselFinder plan** — free vs paid drives polling interval (gates Task 5)
-4. **Notification scope for customers** — every vessel status change, or only
-   `APPROACHING / DELAYED / ARRIVED`? (affects Task 5 acceptance criteria)
-5. **Hosting** — Fly.io or Railway recommended (both run the Dockerfile directly,
+1. **Destin8 tier + exact endpoint URL** — drives poll cadence and rate-limit budget (gates Task 4)
+2. **Hosting** — Fly.io or Railway recommended (both run the Dockerfile directly,
    support api + worker + beat as three processes from one image; Postgres stays on
    Supabase, Redis on Upstash or managed)
-6. **Data retention / GDPR** — drives P3 #21 soft-delete + archival policy
+3. **Data retention / GDPR** — drives P3 #21 soft-delete + archival policy
+
+Resolved: CF R2 account (Task 3 done); VesselFinder plan + customer notification scope
+(Task 5 done — only `APPROACHING / DELAYED / ARRIVED` transitions notify).
 
 ---
 
