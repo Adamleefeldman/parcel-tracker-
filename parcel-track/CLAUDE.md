@@ -16,6 +16,10 @@
 - Check in before building, mark items done as you go.
 - Never start a new task without updating the task file.
 
+## Commit Rules
+- Stage only files directly required by the feature or fix: source code, migrations, tests, and env/config documentation (e.g. `.env.example`).
+- Do not commit planning artifacts (`tasks/todo.md`, scratch notes, etc.).
+
 ## Planning Rules
 - Enter plan mode for any 3+ step task.
 - Outline every step before writing code.
@@ -77,8 +81,12 @@ All commands run from here unless otherwise noted.
 - **Containers track state independently from BL upload onward.** Individual containers
   can clear customs at different times. The shipment-level `CLEARED` state only advances
   when the *last* container clears — the shipment never advances prematurely.
-- **FastAPI is the real security layer.** Supabase RLS uses a blanket allow-all policy;
-  enforcement lives entirely in FastAPI middleware and the service layer.
+- **FastAPI is the real security layer.** RLS is enabled on every public table with
+  zero policies, which denies the Supabase `anon`/`authenticated` roles by default.
+  The FastAPI runtime role has `BYPASSRLS`, so application queries are unaffected.
+  Authorization beyond that (per-user/per-role checks) lives entirely in FastAPI
+  middleware and the service layer. Do **not** add allow-all policies — they
+  re-open PostgREST to the public anon key.
 - **Presigned URL pattern for file uploads.** The server never proxies file bytes.
   Client gets a presigned PUT URL from FastAPI → PUTs directly to R2 → POSTs confirm
   back to FastAPI.
@@ -188,7 +196,7 @@ Both must be set. Never swap them. Production `config.py` validates that
 | Business logic in route handlers | All logic in service layer; routes only validate + call services |
 | Returning ORM objects directly | Always use `response_model=` with Pydantic schemas |
 | R2 "S3" references look wrong | They are correct — R2 is S3-compatible, boto3 is the right client |
-| Supabase RLS warnings | Blanket allow-all policy is intentional; FastAPI is the real guard |
+| Supabase RLS warnings | RLS is enabled with no policies (deny-all). FastAPI runs as a BYPASSRLS role, so app queries still work. Do **not** add allow-all policies — they re-open PostgREST to the public anon key |
 | Trusting `X-Forwarded-For` blindly | Goes through `app/core/network.py` — only honoured in prod behind a trusted proxy |
 | Forgetting `Idempotency-Key` on `POST /payments` or `POST /invoices` | Returns 400. All clients must generate and send a UUID per logical request |
 
