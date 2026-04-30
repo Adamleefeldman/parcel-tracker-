@@ -77,7 +77,7 @@ class VesselStatus(str, Enum):  # noqa: UP042
 
 class VesselUpdateStatus(str, Enum):  # noqa: UP042
     IN_TRANSIT = "in_transit"
-    AT_WAYPOINT = "at_waypoint"  # reserved for future manual waypoint updates; not produced by the AIS poller
+    AT_WAYPOINT = "at_waypoint"  # reserved for manual waypoint updates; not produced by AIS poller
     APPROACHING = "approaching"
     ARRIVED = "arrived"
     DELAYED = "delayed"
