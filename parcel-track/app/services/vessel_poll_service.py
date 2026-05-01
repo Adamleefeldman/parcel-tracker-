@@ -245,7 +245,7 @@ class VesselPollService:
         # Index by IMO for O(1) match lookups. Lower-cased + stripped to be
         # tolerant of upstream whitespace / case drift.
         positions_by_imo: dict[str, FleetVesselPosition] = {
-            p.imo.strip(): p for p in positions if p.imo
+            p.imo.strip().lower(): p for p in positions if p.imo
         }
 
         # ── Find candidate vessels ────────────────────────────────────────────
@@ -301,7 +301,7 @@ class VesselPollService:
             summary.skipped_no_imo += 1
             return
 
-        position = positions_by_imo.get(vessel.imo_number.strip())
+        position = positions_by_imo.get(vessel.imo_number.strip().lower())
         if position is None:
             # The vessel exists in our DB with a DEPARTED/ETD_SET status but
             # is not in the VesselFinder fleet. Almost always means ops needs
