@@ -1,7 +1,9 @@
 import logging
+from collections.abc import Callable
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, Session
 
 from app.core.config import get_settings
 
@@ -47,3 +49,35 @@ async def get_db() -> AsyncSession:
             raise
         finally:
             await session.close()
+
+
+# ── After-commit outbox ───────────────────────────────────────────────────────
+# Side effects that depend on persisted state (e.g. dispatching a Celery task
+# that re-reads a row) must not fire if the caller's transaction rolls back.
+# Callbacks queued via `enqueue_after_commit` run only after a successful
+# commit; on rollback the queue is dropped.
+
+
+_OUTBOX_KEY = "_after_commit_callbacks"
+
+
+def enqueue_after_commit(session: AsyncSession, callback: Callable[[], None]) -> None:
+    """Run `callback()` after the session's outermost transaction commits."""
+    session.sync_session.info.setdefault(_OUTBOX_KEY, []).append(callback)
+
+
+@event.listens_for(Session, "after_commit")
+def _run_after_commit_callbacks(session: Session) -> None:
+    callbacks = session.info.pop(_OUTBOX_KEY, None)
+    if not callbacks:
+        return
+    for cb in callbacks:
+        try:
+            cb()
+        except Exception:
+            logger.exception("after_commit callback failed")
+
+
+@event.listens_for(Session, "after_rollback")
+def _drop_after_commit_callbacks(session: Session) -> None:
+    session.info.pop(_OUTBOX_KEY, None)

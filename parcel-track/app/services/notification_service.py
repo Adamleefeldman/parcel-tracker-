@@ -125,11 +125,14 @@ class NotificationService:
         # on Expo. We only enqueue when the user actually has a token to avoid
         # spawning a no-op task. The task takes the notification id (not the
         # raw token) so that a token refresh between enqueue and dispatch is
-        # picked up. The caller is responsible for committing — the worker
-        # only polls after the request returns, so it will see the row.
+        # picked up. The dispatch is queued behind an after-commit hook so a
+        # rolled-back outer transaction never spawns a task that would lookup
+        # a row that does not exist.
         user_result = await db.execute(select(User).where(User.id == user_id))
         user = user_result.scalar_one_or_none()
         if user and user.expo_push_token:
             from app.background.tasks import send_push_notification
+            from app.db.database import enqueue_after_commit
 
-            send_push_notification.delay(str(notif.id))
+            notif_id_str = str(notif.id)
+            enqueue_after_commit(db, lambda: send_push_notification.delay(notif_id_str))
