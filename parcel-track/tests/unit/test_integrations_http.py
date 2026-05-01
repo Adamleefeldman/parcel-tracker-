@@ -7,6 +7,7 @@ mocking our own abstraction.
 
 from __future__ import annotations
 
+import logging
 import os
 
 os.environ.setdefault("APP_ENV", "testing")
@@ -178,16 +179,55 @@ async def test_circuit_opens_after_threshold_failures(_fake_redis):
     transport, _ = _counting_transport(resp_503)
     client = _http.build_client("testp", transport=transport)
 
-    # 5 failures worth — each call records 3 (retries_exhausted). We set the
-    # counter directly so we only need one real request to flip the trip.
+    # Pre-seed counter to 4. The next failed request increments it past
+    # the threshold of 5 and opens the breaker.
     await _fake_redis.set(_http._cb_failures_key("testp"), "4")
 
     with pytest.raises(IntegrationUnavailable):
         await _http.request("testp", client, "GET", "https://example.test/x")
 
-    # After threshold hits: open key exists, failures counter is reset.
+    # After threshold hits: open key exists. Counter is preserved (it is
+    # only cleared on a success observation, not on trip — clearing on trip
+    # was the TOCTOU bug).
     assert await _fake_redis.exists(_http._cb_open_key("testp")) == 1
-    assert await _fake_redis.exists(_http._cb_failures_key("testp")) == 0
+    assert int(await _fake_redis.get(_http._cb_failures_key("testp"))) >= 5
+
+
+async def test_concurrent_failures_open_breaker_exactly_once(_fake_redis):
+    """N concurrent failing requests must converge on a single open state.
+
+    Regression for the check-then-trip TOCTOU: every caller's INCR is atomic,
+    every caller's SETEX of the open key is idempotent, and the counter
+    accurately reflects the total number of failures observed.
+    """
+    import asyncio
+
+    from app.core.config import get_settings
+
+    threshold = get_settings().INTEGRATION_CIRCUIT_BREAKER_THRESHOLD
+    n = threshold + 5  # comfortably past the threshold
+
+    # Capture the warning-log emission count to verify a single trip.
+    trip_logs: list[str] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record):
+            if record.getMessage() == "circuit_breaker_opened":
+                trip_logs.append(record.getMessage())
+
+    handler = _Capture()
+    _http.logger.addHandler(handler)
+    try:
+        await asyncio.gather(*[_http._record_failure("concur") for _ in range(n)])
+    finally:
+        _http.logger.removeHandler(handler)
+
+    # Counter equals the total number of failures (no spurious reset on trip).
+    assert int(await _fake_redis.get(_http._cb_failures_key("concur"))) == n
+    # Breaker is open.
+    assert await _fake_redis.exists(_http._cb_open_key("concur")) == 1
+    # The "opened" log fires exactly once — at the moment of threshold crossing.
+    assert len(trip_logs) == 1
 
 
 async def test_open_circuit_short_circuits_without_transport_call(_fake_redis):

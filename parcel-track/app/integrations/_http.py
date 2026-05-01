@@ -82,13 +82,23 @@ async def _is_circuit_open(provider: str) -> bool:
 
 
 async def _record_failure(provider: str) -> bool:
-    """Increment the failure counter; trip the breaker if we hit the threshold.
+    """Increment the failure counter; trip the breaker once it hits the threshold.
+
+    Concurrency model:
+      - INCR is atomic — exactly one caller observes ``failures == threshold``.
+      - SETEX of the open key is idempotent — every caller seeing
+        ``failures >= threshold`` issues the same write, converging on the
+        same open state. No check-then-act window.
+      - The counter is NOT reset on trip. Resetting it from one caller while
+        another concurrent caller has already incremented it is the original
+        TOCTOU. Counter is reset only by ``_record_success`` (a success
+        observation, never racing with concurrent failures).
 
     The counter itself has no TTL — a provider that fails once a day forever
-    would eventually trip, which is fine. Resetting on any success keeps this
-    accurate for the common case of a provider that's mostly up.
+    would eventually trip, which is fine. ``_record_success`` clears it on
+    any successful response.
 
-    Returns True if this failure tripped the breaker open.
+    Returns True if the breaker is open as of this call.
     """
     settings = get_settings()
     redis = get_redis_client()
@@ -99,14 +109,15 @@ async def _record_failure(provider: str) -> bool:
             settings.INTEGRATION_CIRCUIT_BREAKER_COOLDOWN_SECONDS,
             "1",
         )
-        await redis.delete(_cb_failures_key(provider))
-        logger.warning(
-            "circuit_breaker_opened",
-            extra={
-                "provider": provider,
-                "cooldown_s": settings.INTEGRATION_CIRCUIT_BREAKER_COOLDOWN_SECONDS,
-            },
-        )
+        if failures == settings.INTEGRATION_CIRCUIT_BREAKER_THRESHOLD:
+            # Log only at the moment of crossing — not on every later observation.
+            logger.warning(
+                "circuit_breaker_opened",
+                extra={
+                    "provider": provider,
+                    "cooldown_s": settings.INTEGRATION_CIRCUIT_BREAKER_COOLDOWN_SECONDS,
+                },
+            )
         return True
     return False
 
