@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 from botocore.exceptions import ClientError
 
-from app.services.storage_service import StorageObjectNotFound, StorageService
+from app.services.storage_service import StorageMimeMismatch, StorageObjectNotFound, StorageService
 
 
 def _client_error(code: str, http_status: int) -> ClientError:
@@ -94,3 +94,47 @@ def test_verify_upload_reraises_other_client_errors():
     with patch("app.services.storage_service.get_s3", return_value=fake):
         with pytest.raises(ClientError):
             StorageService.verify_upload("k")
+
+
+def test_verify_upload_raises_mime_mismatch_when_type_differs():
+    """R2 stored a different ContentType than the one declared at presign time → error."""
+    fake = _FakeS3(
+        head_object_return={
+            "ContentLength": 100,
+            "ETag": '"abc"',
+            "ContentType": "image/jpeg",  # client uploaded JPEG despite claiming PDF
+        }
+    )
+    with patch("app.services.storage_service.get_s3", return_value=fake):
+        with pytest.raises(StorageMimeMismatch) as exc_info:
+            StorageService.verify_upload("some/key", expected_content_type="application/pdf")
+    assert "image/jpeg" in str(exc_info.value)
+    assert "application/pdf" in str(exc_info.value)
+
+
+def test_verify_upload_passes_when_types_match():
+    """Happy path: R2 ContentType matches declared type — no exception, metadata returned."""
+    fake = _FakeS3(
+        head_object_return={
+            "ContentLength": 500,
+            "ETag": '"def"',
+            "ContentType": "application/pdf",
+        }
+    )
+    with patch("app.services.storage_service.get_s3", return_value=fake):
+        meta = StorageService.verify_upload("some/key.pdf", expected_content_type="application/pdf")
+    assert meta["content_type"] == "application/pdf"
+
+
+def test_verify_upload_skips_mime_check_when_no_expected_type():
+    """Without expected_content_type, any ContentType from R2 is accepted (backward compat)."""
+    fake = _FakeS3(
+        head_object_return={
+            "ContentLength": 200,
+            "ETag": '"xyz"',
+            "ContentType": "image/png",
+        }
+    )
+    with patch("app.services.storage_service.get_s3", return_value=fake):
+        meta = StorageService.verify_upload("k")
+    assert meta["content_type"] == "image/png"

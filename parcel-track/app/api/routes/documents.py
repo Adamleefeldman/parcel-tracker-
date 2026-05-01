@@ -18,7 +18,7 @@ from app.schemas.schemas import (
     UploadUrlRequest,
     UploadUrlResponse,
 )
-from app.services.storage_service import StorageObjectNotFound, StorageService
+from app.services.storage_service import StorageMimeMismatch, StorageObjectNotFound, StorageService
 
 doc_router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -56,8 +56,10 @@ async def confirm_upload(
     retries instead of leaving an orphan ``Document`` row.
     """
     try:
-        meta = StorageService.verify_upload(body.file_key)
+        meta = StorageService.verify_upload(body.file_key, expected_content_type=body.mime_type)
     except StorageObjectNotFound as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except StorageMimeMismatch as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if meta["size"] > StorageService.MAX_FILE_SIZE_BYTES:
@@ -72,7 +74,7 @@ async def confirm_upload(
         entity_id=entity_id,
         file_key=body.file_key,
         file_name=body.file_name,
-        mime_type=meta["content_type"] or body.mime_type,
+        mime_type=meta["content_type"],
         file_size_bytes=meta["size"],
     )
     db.add(doc)
