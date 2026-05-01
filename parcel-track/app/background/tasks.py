@@ -148,6 +148,8 @@ def check_clearing_doc_deadlines():
     bind=True,
     autoretry_for=(),  # custom retry below — we only retry transient provider errors
     max_retries=3,
+    acks_late=True,
+    reject_on_worker_lost=True,
 )
 def send_push_notification(self, notification_id: str):
     """
