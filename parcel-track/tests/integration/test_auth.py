@@ -260,6 +260,31 @@ class TestTokenExpiry:
         )
         assert resp.status_code == 401
 
+    async def test_jwt_with_non_uuid_sub_rejected(self, client: AsyncClient):
+        from datetime import datetime, timedelta
+
+        from jose import jwt
+
+        from app.core.config import get_settings
+
+        settings = get_settings()
+
+        bad_sub_token = jwt.encode(
+            {
+                "sub": "not-a-uuid",
+                "role": "admin",
+                "exp": datetime.now(UTC) + timedelta(minutes=5),
+                "type": "access",
+            },
+            settings.SECRET_KEY,
+            algorithm=settings.JWT_ALGORITHM,
+        )
+        resp = await client.get(
+            "/api/v1/shipments",
+            headers={"Authorization": f"Bearer {bad_sub_token}"},
+        )
+        assert resp.status_code == 401
+
     async def test_expired_refresh_token_rejected(self, client: AsyncClient, admin_token: str):
         from datetime import datetime, timedelta
 
