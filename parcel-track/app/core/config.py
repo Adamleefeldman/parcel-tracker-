@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     INVITE_TOKEN_EXPIRE_HOURS: int = 72
+    # Bcrypt cost factor. 12 is the passlib 1.7+ default; raise as hardware speeds up.
+    BCRYPT_ROUNDS: int = 12
 
     # Storage
     STORAGE_BUCKET: str

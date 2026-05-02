@@ -143,3 +143,16 @@ def test_refresh_token_expiry_is_in_the_future():
 
 def test_invite_token_expiry_is_in_the_future():
     assert invite_token_expiry() > datetime.now(UTC)
+
+
+# ── bcrypt rounds wiring ──────────────────────────────────────────────────────
+
+
+def test_bcrypt_uses_configured_rounds():
+    from app.core.config import get_settings
+    from app.core.security import pwd_context
+
+    rounds = get_settings().BCRYPT_ROUNDS
+    h = pwd_context.hash("pw")
+    # bcrypt format: $2b$<rounds>$<22-char-salt><31-char-hash>
+    assert h.startswith(f"$2b${rounds:02d}$")
