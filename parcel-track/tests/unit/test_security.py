@@ -156,3 +156,15 @@ def test_bcrypt_uses_configured_rounds():
     h = pwd_context.hash("pw")
     # bcrypt format: $2b$<rounds>$<22-char-salt><31-char-hash>
     assert h.startswith(f"$2b${rounds:02d}$")
+
+
+# ── ShipmentMembership protocol ──────────────────────────────────────────────
+
+
+def test_admin_membership_satisfies_shipment_membership_protocol():
+    from app.core.enums import UserRole
+    from app.middleware.auth import ShipmentMembership, _AdminMembership
+
+    m = _AdminMembership()
+    assert isinstance(m, ShipmentMembership)
+    assert m.effective_role is UserRole.ADMIN

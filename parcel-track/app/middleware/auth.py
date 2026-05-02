@@ -7,6 +7,8 @@ Financial data is stripped via `financial_fields_allowed`.
 """
 
 import uuid
+from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -86,19 +88,33 @@ require_admin = require_role(UserRole.ADMIN)
 # ── Shipment-scoped access ────────────────────────────────────────────────────
 
 
+@runtime_checkable
+class ShipmentMembership(Protocol):
+    """Minimal contract every membership object exposes to callers."""
+
+    @property
+    def effective_role(self) -> UserRole: ...
+
+
+@dataclass(frozen=True)
+class _AdminMembership:
+    """Synthetic membership for admins — satisfies ShipmentMembership."""
+
+    effective_role: UserRole = UserRole.ADMIN
+
+
 async def get_shipment_member(
     shipment_id: uuid.UUID,
     current_user: User,
     db: AsyncSession,
-) -> ShipmentUser:
+) -> ShipmentMembership:
     """
     Checks that the current user is a member of the given shipment.
-    Returns the ShipmentUser record (which carries the effective role).
-    Admins are always granted access.
+    Returns an object exposing `effective_role` — either a ShipmentUser
+    row or a synthetic admin membership. Admins are always granted access.
     """
     if current_user.role == UserRole.ADMIN:
-        # Admins see all shipments — return a synthetic membership
-        return _AdminMembership(current_user)
+        return _AdminMembership()
 
     result = await db.execute(
         select(ShipmentUser).where(
@@ -115,18 +131,6 @@ async def get_shipment_member(
     return membership
 
 
-class _AdminMembership:
-    """Synthetic membership for admins — has full effective_role."""
-
-    def __init__(self, user: User):
-        self.user = user
-        self.role_override = None
-
-    @property
-    def effective_role(self) -> UserRole:
-        return UserRole.ADMIN
-
-
 async def require_shipment_member(
     shipment_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
@@ -134,7 +138,7 @@ async def require_shipment_member(
 ) -> User:
     """
     Dependency: verifies the current user is a member of the shipment (any role).
-    Admins bypass the check automatically via _AdminMembership.
+    Admins bypass the check automatically via the synthetic admin membership.
     Returns the User so route handlers need no signature changes.
     """
     await get_shipment_member(shipment_id, current_user, db)
@@ -151,7 +155,7 @@ def require_shipment_role(*roles: UserRole):
         shipment_id: uuid.UUID,
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
-    ) -> tuple[User, ShipmentUser]:
+    ) -> tuple[User, ShipmentMembership]:
         membership = await get_shipment_member(shipment_id, current_user, db)
         if membership.effective_role not in roles:
             raise HTTPException(

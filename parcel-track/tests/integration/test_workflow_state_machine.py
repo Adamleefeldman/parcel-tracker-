@@ -1116,7 +1116,7 @@ class TestRoleEnforcement:
         """
         Admin users can access any shipment without a ShipmentUser row.
 
-        require_shipment_member returns a synthetic _AdminMembership object when
+        require_shipment_member returns a synthetic admin ShipmentMembership when
         the actor is ADMIN, bypassing the database lookup entirely.  This ensures
         admins always have full visibility without needing to be manually added
         to every shipment in the system.
