@@ -18,6 +18,10 @@ class StorageObjectNotFound(Exception):
     """Raised when a HEAD against the configured bucket can't find the expected key."""
 
 
+class StorageMimeMismatch(Exception):
+    """Raised when R2's stored ContentType differs from the type declared at presign time."""
+
+
 def get_s3():
     global _s3_client
     if _s3_client is None:
@@ -92,7 +96,7 @@ class StorageService:
         return url
 
     @staticmethod
-    def verify_upload(file_key: str) -> dict:
+    def verify_upload(file_key: str, expected_content_type: str | None = None) -> dict:
         """
         HEAD the object in R2 to confirm a presigned PUT actually completed.
 
@@ -100,6 +104,10 @@ class StorageService:
         the real object as stored. Callers must use these values rather than
         whatever the client claimed in the confirm payload — the client is
         untrusted, only R2 is the source of truth.
+
+        If ``expected_content_type`` is provided, raises ``StorageMimeMismatch``
+        when R2's stored ContentType differs — guards against a client that PUTs
+        a different MIME than the one it declared at presign time.
 
         Raises ``StorageObjectNotFound`` when the key is absent (HTTP 404 /
         ``NoSuchKey`` / ``NotFound``). Other ``ClientError``s are re-raised so
@@ -115,10 +123,16 @@ class StorageService:
             if code in {"404", "NoSuchKey", "NotFound"} or status == "404":
                 raise StorageObjectNotFound(f"object not found in storage: {file_key}") from exc
             raise
+        actual_content_type = resp.get("ContentType") or "application/octet-stream"
+        if expected_content_type is not None and actual_content_type != expected_content_type:
+            raise StorageMimeMismatch(
+                f"uploaded ContentType '{actual_content_type}' does not match "
+                f"declared type '{expected_content_type}'"
+            )
         return {
             "size": int(resp["ContentLength"]),
             "etag": resp["ETag"].strip('"'),
-            "content_type": resp.get("ContentType") or "application/octet-stream",
+            "content_type": actual_content_type,
         }
 
     @staticmethod

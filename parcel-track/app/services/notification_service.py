@@ -61,7 +61,7 @@ NOTIFICATION_TEMPLATES: dict[NotificationType, tuple[str, str]] = {
     NotificationType.CONTAINER_CLEARED: ("Container cleared", "A container has cleared customs."),
     NotificationType.CLEARING_DOCS_URGENT: (
         "Clearing docs urgent",
-        "Vessel ETA is within 48 hours — clearing docs needed urgently.",
+        "Vessel ETA is within 2 days — clearing docs needed urgently.",
     ),
     NotificationType.DELIVERY_SCHEDULED: (
         "Delivery scheduled",

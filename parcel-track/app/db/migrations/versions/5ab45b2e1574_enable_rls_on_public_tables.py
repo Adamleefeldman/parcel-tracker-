@@ -20,6 +20,7 @@ Do NOT add allow-all policies on these tables — that re-opens PostgREST to
 the public anon key and defeats the purpose of this migration.
 """
 
+import os
 from collections.abc import Sequence
 
 from alembic import op
@@ -64,5 +65,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if os.environ.get("ALLOW_RLS_DOWNGRADE") != "1":
+        raise RuntimeError(
+            "Refusing to disable RLS on all tables. "
+            "Set ALLOW_RLS_DOWNGRADE=1 to override. "
+            "Disabling RLS exposes all tables to the Supabase public anon key."
+        )
     for table in RLS_TABLES:
         op.execute(f'ALTER TABLE "{table}" DISABLE ROW LEVEL SECURITY')

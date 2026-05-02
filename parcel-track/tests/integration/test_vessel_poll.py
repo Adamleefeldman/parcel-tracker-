@@ -220,6 +220,74 @@ async def test_poll_skips_when_imo_not_in_fleet(seeded_shipment):
     assert updates == []
 
 
+async def test_poll_matches_imo_case_insensitively():
+    """DB stores IMO in one case; upstream returns a different case.
+    Both sides are lowercased so the match still succeeds."""
+    async with TestSession() as db:
+        admin = User(
+            email=f"ci-{uuid.uuid4().hex[:8]}@test.com",
+            hashed_password="x",
+            name="CI Admin",
+            role=UserRole.ADMIN,
+        )
+        db.add(admin)
+        await db.flush()
+        shipment = Shipment(
+            reference=f"CI-{uuid.uuid4().hex[:6]}",
+            status=ShipmentStatus.IN_TRANSIT,
+            created_by=admin.id,
+        )
+        db.add(shipment)
+        await db.flush()
+        bl = BillOfLading(
+            shipment_id=shipment.id,
+            bl_number=f"BL-{uuid.uuid4().hex[:8]}",
+            bl_date=date(2026, 4, 1),
+            shipper_name="A",
+            consignee_name="B",
+            port_of_loading="Casablanca",
+            port_of_discharge="GBSOU",
+            container_count=1,
+            commodity_description="Tiles",
+            gross_weight_kg=1000,
+            status=BLStatus.CONTAINERS_CREATED,
+        )
+        db.add(bl)
+        await db.flush()
+        vessel = Vessel(
+            bl_id=bl.id,
+            vessel_name="Case Test",
+            imo_number="IMO9321999",  # stored with uppercase prefix
+            shipping_line="TestLine",
+            port_of_loading="Casablanca",
+            port_of_discharge="GBSOU",
+            etd=date(2026, 4, 1),
+            eta=date(2026, 5, 10),
+            status=VesselStatus.DEPARTED,
+        )
+        db.add(vessel)
+        await db.commit()
+        vessel_id = vessel.id
+
+    # Upstream returns the same IMO in lowercase — must still match.
+    client = _StubClient([_pos(imo="imo9321999", lat=_MID_OCEAN[0], lon=_MID_OCEAN[1], navstat=0)])
+    service = VesselPollService(client=client)  # type: ignore[arg-type]
+
+    async with TestSession() as db:
+        summary = await service.poll_vessels_once(db)
+
+    assert summary.polled == 1
+    assert summary.skipped_no_match == 0
+
+    async with TestSession() as db:
+        updates = (
+            (await db.execute(select(VesselUpdate).where(VesselUpdate.vessel_id == vessel_id)))
+            .scalars()
+            .all()
+        )
+    assert len(updates) == 1
+
+
 async def test_poll_skips_vessel_with_no_imo():
     """Seed a vessel without IMO — it should be filtered by the SQL query
     (skipped_no_imo counter is for defensive in-loop checks, normally 0)."""

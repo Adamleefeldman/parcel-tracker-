@@ -85,7 +85,7 @@ def _setup_celery_task_logger(**kwargs):
 def check_clearing_doc_deadlines():
     """
     Scheduled: finds all in-transit shipments where:
-    - Vessel ETA is within 48 hours
+    - Vessel ETA is within 2 days
     - Clearing docs status is not COMPLETE
     Fires an urgent notification to admin + UK agent.
     """
@@ -103,7 +103,7 @@ def check_clearing_doc_deadlines():
 
     async def _run():
         async with AsyncSessionLocal() as db:
-            cutoff = date.today() + timedelta(hours=48)
+            cutoff = date.today() + timedelta(days=2)
             result = await db.execute(
                 select(Vessel)
                 .join(BillOfLading, Vessel.bl_id == BillOfLading.id)
