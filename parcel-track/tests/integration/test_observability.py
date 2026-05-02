@@ -8,6 +8,7 @@ Validates externally observable middleware behaviour:
   - Security headers wired by SecurityHeadersMiddleware
 """
 
+import asyncio
 import re
 
 from httpx import AsyncClient
@@ -57,6 +58,34 @@ class TestReadinessProbe:
         r = await client.get("/ready")
         body = r.json()
         assert body["checks"]["redis"] == "ok"
+
+    async def test_ready_returns_503_on_database_timeout(
+        self, client: AsyncClient, monkeypatch
+    ):
+        """A stuck DB connection must trip the wait_for guard, not hang the probe."""
+        from app import main as main_module
+        from app.db.database import get_db
+
+        monkeypatch.setattr(main_module, "READY_PROBE_TIMEOUT_SECONDS", 0.05)
+
+        class _StuckSession:
+            async def execute(self, *args, **kwargs):
+                await asyncio.sleep(1)
+
+        original_override = main_module.app.dependency_overrides[get_db]
+
+        async def stuck_override():
+            yield _StuckSession()
+
+        main_module.app.dependency_overrides[get_db] = stuck_override
+        try:
+            r = await client.get("/ready")
+        finally:
+            main_module.app.dependency_overrides[get_db] = original_override
+
+        assert r.status_code == 503
+        body = r.json()
+        assert "timeout" in body["checks"]["database"]
 
 
 class TestSecurityHeaders:
