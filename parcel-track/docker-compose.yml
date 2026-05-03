@@ -10,9 +10,21 @@
 # host take effect immediately. The production runtime image (built from the
 # same Dockerfile) does NOT have this bind mount; it ships its own copy.
 #
-# Postgres credentials below are HARDCODED for local-only use. They are never
-# read by anything outside this file. Production reads DATABASE_URL from the
-# deploy environment.
+# Configuration precedence for api/worker/beat (highest first):
+#   1. The inline `environment:` block on each service (this file).
+#   2. Variables loaded from `.env` via `env_file:` (gitignored, optional).
+#   3. Pydantic Settings defaults in `app/core/config.py`.
+#
+# That means: anything hardcoded in `environment:` here SHADOWS .env. The
+# inline values are deliberately the dev-stack-only ones (SECRET_KEY
+# placeholder, DATABASE_URL/REDIS_URL pointing at the compose services,
+# CORS allowlist for local frontends). Real overrides — R2 credentials,
+# integration tunables, Sentry DSN, BCRYPT_ROUNDS, TRUSTED_PROXIES, etc. —
+# go in `.env` and are picked up automatically.
+
+x-env-file: &app_env_file
+  - path: .env
+    required: false
 
 services:
   postgres:
@@ -56,6 +68,7 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
+    env_file: *app_env_file
     environment: &app_env
       APP_ENV: development
       APP_NAME: ParcelTrack
@@ -70,14 +83,9 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: 15
       REFRESH_TOKEN_EXPIRE_DAYS: 30
       INVITE_TOKEN_EXPIRE_HOURS: 72
-      # Storage placeholders — real R2 credentials live in .env (gitignored).
-      # Override at runtime: docker compose --env-file .env up
-      STORAGE_BUCKET: parceltrack-local
-      STORAGE_ENDPOINT_URL: http://localhost:9000
-      STORAGE_ACCESS_KEY_ID: local_dev_key
-      STORAGE_SECRET_ACCESS_KEY: local_dev_secret
-      STORAGE_REGION: auto
-      STORAGE_PUBLIC_URL: http://localhost:9000/parceltrack-local
+      # STORAGE_* deliberately NOT set here so .env can supply real R2
+      # credentials. Without .env, Settings raises at boot with a clear
+      # error — that's the intended signal to copy `.env.example` → `.env`.
       REDIS_URL: redis://redis:6379/0
       LOG_LEVEL: DEBUG
       EXPO_PUSH_URL: https://exp.host/--/api/v2/push/send
@@ -107,6 +115,7 @@ services:
       --concurrency=2
       --without-gossip
       --without-mingle
+    env_file: *app_env_file
     environment: *app_env
     volumes:
       - ./app:/app/app
@@ -133,6 +142,7 @@ services:
       celery -A app.background.tasks beat
       --loglevel=info
       --schedule=/var/lib/celery/celerybeat-schedule
+    env_file: *app_env_file
     environment: *app_env
     volumes:
       - ./app:/app/app
