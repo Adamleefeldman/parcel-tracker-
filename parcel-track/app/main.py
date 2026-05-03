@@ -154,9 +154,7 @@ async def ready(db: AsyncSession = Depends(get_db)):
 
     # ── Database ──────────────────────────────────────────────────────────
     try:
-        await asyncio.wait_for(
-            db.execute(text("SELECT 1")), timeout=READY_PROBE_TIMEOUT_SECONDS
-        )
+        await asyncio.wait_for(db.execute(text("SELECT 1")), timeout=READY_PROBE_TIMEOUT_SECONDS)
         checks["database"] = "ok"
     except TimeoutError:
         checks["database"] = f"timeout after {READY_PROBE_TIMEOUT_SECONDS}s"
@@ -167,9 +165,7 @@ async def ready(db: AsyncSession = Depends(get_db)):
 
     # ── Redis ─────────────────────────────────────────────────────────────
     try:
-        await asyncio.wait_for(
-            get_redis_client().ping(), timeout=READY_PROBE_TIMEOUT_SECONDS
-        )
+        await asyncio.wait_for(get_redis_client().ping(), timeout=READY_PROBE_TIMEOUT_SECONDS)
         checks["redis"] = "ok"
     except TimeoutError:
         checks["redis"] = f"timeout after {READY_PROBE_TIMEOUT_SECONDS}s"

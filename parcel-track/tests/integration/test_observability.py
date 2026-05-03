@@ -59,9 +59,7 @@ class TestReadinessProbe:
         body = r.json()
         assert body["checks"]["redis"] == "ok"
 
-    async def test_ready_returns_503_on_database_timeout(
-        self, client: AsyncClient, monkeypatch
-    ):
+    async def test_ready_returns_503_on_database_timeout(self, client: AsyncClient, monkeypatch):
         """A stuck DB connection must trip the wait_for guard, not hang the probe."""
         from app import main as main_module
         from app.db.database import get_db
