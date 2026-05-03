@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     INVITE_TOKEN_EXPIRE_HOURS: int = 72
+    # Bcrypt cost factor. 12 is the passlib 1.7+ default; raise as hardware speeds up.
+    BCRYPT_ROUNDS: int = 12
 
     # Storage
     STORAGE_BUCKET: str
@@ -151,8 +153,7 @@ class Settings(BaseSettings):
             if not self.STORAGE_ENDPOINT_URL.startswith("https://"):
                 raise ValueError("STORAGE_ENDPOINT_URL must use HTTPS in production.")
 
-            cors = [o.strip() for o in self.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
-            if not cors:
+            if not self.cors_origins:
                 raise ValueError(
                     "CORS_ALLOWED_ORIGINS must be set in production. "
                     "Provide a comma-separated list of allowed origins, e.g. "

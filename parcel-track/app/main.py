@@ -3,6 +3,7 @@ Application entry point.
 All routers registered here. Exception handlers provide consistent error shape.
 """
 
+import asyncio
 import logging
 
 import sentry_sdk
@@ -42,6 +43,10 @@ setup_logging()
 
 settings = get_settings()
 logger = logging.getLogger("parceltrack.api")
+
+# Cap each /ready dependency probe so a stuck Postgres or Redis connection
+# can't hang the readiness endpoint until the load balancer's own timeout.
+READY_PROBE_TIMEOUT_SECONDS = 5.0
 
 if settings.SENTRY_DSN:
     sentry_sdk.init(
@@ -149,16 +154,22 @@ async def ready(db: AsyncSession = Depends(get_db)):
 
     # ── Database ──────────────────────────────────────────────────────────
     try:
-        await db.execute(text("SELECT 1"))
+        await asyncio.wait_for(db.execute(text("SELECT 1")), timeout=READY_PROBE_TIMEOUT_SECONDS)
         checks["database"] = "ok"
+    except TimeoutError:
+        checks["database"] = f"timeout after {READY_PROBE_TIMEOUT_SECONDS}s"
+        healthy = False
     except Exception as exc:
         checks["database"] = f"unavailable: {exc}"
         healthy = False
 
     # ── Redis ─────────────────────────────────────────────────────────────
     try:
-        await get_redis_client().ping()
+        await asyncio.wait_for(get_redis_client().ping(), timeout=READY_PROBE_TIMEOUT_SECONDS)
         checks["redis"] = "ok"
+    except TimeoutError:
+        checks["redis"] = f"timeout after {READY_PROBE_TIMEOUT_SECONDS}s"
+        healthy = False
     except Exception as exc:
         checks["redis"] = f"unavailable: {exc}"
         healthy = False

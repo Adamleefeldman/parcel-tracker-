@@ -10,7 +10,11 @@ from app.core.config import get_settings
 from app.core.enums import UserRole
 
 settings = get_settings()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__rounds=settings.BCRYPT_ROUNDS,
+)
 
 
 # ── Passwords ─────────────────────────────────────────────────────────────────
