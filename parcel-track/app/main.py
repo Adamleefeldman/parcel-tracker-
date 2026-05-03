@@ -7,9 +7,11 @@ import asyncio
 import logging
 
 import sentry_sdk
-from fastapi import Depends, FastAPI, Request, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials
 from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
@@ -33,8 +35,10 @@ from app.api.routes import (
     vessel_router,
 )
 from app.core.config import get_settings
+from app.core.enums import UserRole
 from app.core.logging import setup_logging
 from app.db.database import get_db
+from app.middleware.auth import bearer_scheme, get_current_user
 from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -59,8 +63,9 @@ if settings.SENTRY_DSN:
 app = FastAPI(
     title="ParcelTrack API",
     version="1.0.0",
-    docs_url="/docs" if not settings.is_production else None,
-    redoc_url="/redoc" if not settings.is_production else None,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
@@ -200,6 +205,47 @@ app.include_router(clearing_router, prefix=PREFIX)
 app.include_router(delivery_router, prefix=PREFIX)
 app.include_router(doc_router, prefix=PREFIX)
 app.include_router(notif_router, prefix=PREFIX)
+
+# ── Docs gating ───────────────────────────────────────────────────────────────
+#
+# Built-in /docs, /redoc, /openapi.json are disabled on the FastAPI() above.
+# We re-mount them here behind docs_guard, which only enforces admin auth in
+# production. Non-prod environments stay open so the dev experience is
+# unchanged. /openapi.json is gated alongside the HTML pages — without that,
+# the schema would still be reachable from the browser even when /docs is locked.
+
+
+async def docs_guard(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    if not get_settings().is_production:
+        return
+    user = await get_current_user(credentials=credentials, db=db)
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
+
+
+docs_router = APIRouter(dependencies=[Depends(docs_guard)])
+
+
+@docs_router.get("/openapi.json", include_in_schema=False)
+async def openapi_schema():
+    return app.openapi()
+
+
+@docs_router.get("/docs", include_in_schema=False)
+async def swagger_ui():
+    return get_swagger_ui_html(openapi_url="/openapi.json", title=f"{app.title} — Swagger UI")
+
+
+@docs_router.get("/redoc", include_in_schema=False)
+async def redoc_ui():
+    return get_redoc_html(openapi_url="/openapi.json", title=f"{app.title} — ReDoc")
+
+
+app.include_router(docs_router)
+
 
 # ── Prometheus metrics ────────────────────────────────────────────────────────
 #
