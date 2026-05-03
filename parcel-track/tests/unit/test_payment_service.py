@@ -16,7 +16,9 @@ def _make_db(*, invoice_value: Decimal, paid_total: Decimal, shipment_status: Sh
     invoice = MagicMock()
     invoice.value = invoice_value
 
-    db = AsyncMock()
+    db = MagicMock()
+    db.execute = AsyncMock()
+    db.flush = AsyncMock()
     # First execute: Payment insert (flush only, no return needed)
     # Second execute: Invoice fetch → returns invoice
     # Third execute: SUM of payments → returns paid_total
@@ -42,7 +44,9 @@ async def test_payment_does_not_transition_when_underpaid():
     body = MagicMock()
     body.model_dump.return_value = {}
 
-    db = AsyncMock()
+    db = MagicMock()
+    db.execute = AsyncMock()
+    db.flush = AsyncMock()
     invoice_mock = MagicMock()
     invoice_mock.value = invoice_value
 
@@ -83,7 +87,9 @@ async def test_payment_transitions_when_fully_paid():
         "payment_method": "WIRE",
     }
 
-    db = AsyncMock()
+    db = MagicMock()
+    db.execute = AsyncMock()
+    db.flush = AsyncMock()
     invoice_mock = MagicMock()
     invoice_mock.value = invoice_value
 
@@ -123,7 +129,9 @@ async def test_payment_does_not_double_transition_when_already_confirmed():
     body = MagicMock()
     body.model_dump.return_value = {}
 
-    db = AsyncMock()
+    db = MagicMock()
+    db.execute = AsyncMock()
+    db.flush = AsyncMock()
     invoice_mock = MagicMock()
     invoice_mock.value = invoice_value
 
