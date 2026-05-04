@@ -17,6 +17,12 @@ venv/
 # Environment variables
 .env
 
+# File-backed Docker secrets — never commit values. Only the dir scaffolding
+# (.gitkeep + README) is tracked; everything else is ignored.
+/secrets/*
+!/secrets/.gitkeep
+!/secrets/README.md
+
 # Test / coverage artefacts
 .coverage
 .coverage.*

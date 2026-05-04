@@ -13,18 +13,27 @@
 # Configuration precedence for api/worker/beat (highest first):
 #   1. The inline `environment:` block on each service (this file).
 #   2. Variables loaded from `.env` via `env_file:` (gitignored, optional).
-#   3. Pydantic Settings defaults in `app/core/config.py`.
+#   3. Files mounted at /run/secrets/<NAME> via `secrets:` below.
+#   4. Pydantic Settings defaults in `app/core/config.py`.
 #
 # That means: anything hardcoded in `environment:` here SHADOWS .env. The
 # inline values are deliberately the dev-stack-only ones (SECRET_KEY
 # placeholder, DATABASE_URL/REDIS_URL pointing at the compose services,
-# CORS allowlist for local frontends). Real overrides — R2 credentials,
-# integration tunables, Sentry DSN, BCRYPT_ROUNDS, TRUSTED_PROXIES, etc. —
-# go in `.env` and are picked up automatically.
+# CORS allowlist for local frontends). Non-secret overrides — integration
+# tunables, BCRYPT_ROUNDS, TRUSTED_PROXIES, etc. — go in `.env`. Real
+# credentials (STORAGE_*_KEY, etc.) live in ./secrets/<NAME> files,
+# never in `.env` or this compose file: that keeps `docker compose
+# config` from rendering them as plaintext.
 
 x-env-file: &app_env_file
   - path: .env
     required: false
+
+x-app-secrets: &app_secrets
+  - source: storage_access_key_id
+    target: STORAGE_ACCESS_KEY_ID
+  - source: storage_secret_access_key
+    target: STORAGE_SECRET_ACCESS_KEY
 
 services:
   postgres:
@@ -69,6 +78,7 @@ services:
     ports:
       - "8000:8000"
     env_file: *app_env_file
+    secrets: *app_secrets
     environment: &app_env
       APP_ENV: development
       APP_NAME: ParcelTrack
@@ -116,6 +126,7 @@ services:
       --without-gossip
       --without-mingle
     env_file: *app_env_file
+    secrets: *app_secrets
     environment: *app_env
     volumes:
       - ./app:/app/app
@@ -143,6 +154,7 @@ services:
       --loglevel=info
       --schedule=/var/lib/celery/celerybeat-schedule
     env_file: *app_env_file
+    secrets: *app_secrets
     environment: *app_env
     volumes:
       - ./app:/app/app
@@ -163,3 +175,15 @@ volumes:
     name: parceltrack_postgres_data
   beat_schedule:
     name: parceltrack_beat_schedule
+
+secrets:
+  # File-backed secrets. The files live in ./secrets/<NAME> on the host
+  # (gitignored, dockerignored) and are mounted read-only at
+  # /run/secrets/<target> inside the container. Pydantic-Settings reads
+  # them automatically because Settings.Config.secrets_dir = "/run/secrets"
+  # and the target filename matches the field name. Rotation = edit the
+  # file on disk and `docker compose up -d --force-recreate`.
+  storage_access_key_id:
+    file: ./secrets/STORAGE_ACCESS_KEY_ID
+  storage_secret_access_key:
+    file: ./secrets/STORAGE_SECRET_ACCESS_KEY
