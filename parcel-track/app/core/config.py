@@ -37,11 +37,14 @@ class Settings(BaseSettings):
     # Bcrypt cost factor. 12 is the passlib 1.7+ default; raise as hardware speeds up.
     BCRYPT_ROUNDS: int = 12
 
-    # Storage
+    # Storage. ACCESS_KEY_ID and SECRET_ACCESS_KEY are credentials and live
+    # in Docker secrets (loaded via Settings.Config.secrets_dir below); empty
+    # defaults keep host-side tests booting without a /run/secrets mount.
+    # The production validator below requires non-empty values.
     STORAGE_BUCKET: str
     STORAGE_ENDPOINT_URL: str
-    STORAGE_ACCESS_KEY_ID: str
-    STORAGE_SECRET_ACCESS_KEY: str
+    STORAGE_ACCESS_KEY_ID: str = ""
+    STORAGE_SECRET_ACCESS_KEY: str = ""
     STORAGE_REGION: str = "auto"
     STORAGE_PUBLIC_URL: str
 
@@ -153,6 +156,18 @@ class Settings(BaseSettings):
             if not self.STORAGE_ENDPOINT_URL.startswith("https://"):
                 raise ValueError("STORAGE_ENDPOINT_URL must use HTTPS in production.")
 
+            if not self.STORAGE_ACCESS_KEY_ID:
+                raise ValueError(
+                    "STORAGE_ACCESS_KEY_ID must be set in production. "
+                    "Mount via Docker secret at /run/secrets/STORAGE_ACCESS_KEY_ID."
+                )
+
+            if not self.STORAGE_SECRET_ACCESS_KEY:
+                raise ValueError(
+                    "STORAGE_SECRET_ACCESS_KEY must be set in production. "
+                    "Mount via Docker secret at /run/secrets/STORAGE_SECRET_ACCESS_KEY."
+                )
+
             if not self.cors_origins:
                 raise ValueError(
                     "CORS_ALLOWED_ORIGINS must be set in production. "
@@ -165,6 +180,12 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        # Pydantic-Settings reads files at this path named after each field
+        # (e.g. /run/secrets/STORAGE_SECRET_ACCESS_KEY) when no env var is
+        # set. Lookup order: env var → secrets file → field default. Compose
+        # mounts Docker secrets here; production deploys can mount a
+        # platform-managed secret store at the same path.
+        secrets_dir = "/run/secrets"
 
 
 @lru_cache

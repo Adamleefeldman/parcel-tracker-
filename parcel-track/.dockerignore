@@ -28,6 +28,9 @@ tests/
 .env
 .env.*
 !.env.example
+# File-backed Docker secrets are mounted by compose at runtime —
+# never bake them into the image.
+secrets/
 
 # ── Editor / OS noise ─────────────────────────────────────────────────────
 .idea/
@@ -52,5 +55,3 @@ Dockerfile
 docker-compose.yml
 docker-compose.*.yml
 
-# ── Stray / unintended files ──────────────────────────────────────────────
-{app

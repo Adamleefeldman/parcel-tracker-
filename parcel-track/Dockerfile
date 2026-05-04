@@ -67,6 +67,13 @@ RUN apt-get update \
 RUN groupadd --system --gid 1000 app \
  && useradd  --system --uid 1000 --gid app --create-home --home-dir /home/app app
 
+# Pre-create the celery beat schedule directory with app ownership so the
+# named volume mounted at /var/lib/celery in compose inherits the right
+# permissions on first attach. Without this, beat crashes with
+# "Permission denied: /var/lib/celery/celerybeat-schedule" under the
+# non-root user.
+RUN mkdir -p /var/lib/celery && chown -R app:app /var/lib/celery
+
 WORKDIR /app
 
 # Copy the prebuilt venv from the builder stage.

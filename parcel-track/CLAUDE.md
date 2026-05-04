@@ -102,6 +102,12 @@ All commands run from here unless otherwise noted.
   and sensitive mutations write an `AuditLog` row with actor_id, action, entity,
   old/new values, and client IP. Treat this table as the source of truth for "what
   happened" — never delete or mutate rows in it.
+- **All API routes mount under `/api/v1`.** Single `PREFIX` constant in
+  `app/main.py`. `/health`, `/ready`, `/metrics`, `/docs`, `/redoc`, `/openapi.json`
+  are intentionally unversioned — they are infrastructure, not API contract. Do
+  not register new application endpoints directly on `app` — always go through a
+  router mounted at `PREFIX`. Bumping to `/api/v2` is reserved for a real
+  incompatible shape change; prefer additive evolution within `/v1`.
 
 ---
 
@@ -199,6 +205,7 @@ Both must be set. Never swap them. Production `config.py` validates that
 | Supabase RLS warnings | RLS is enabled with no policies (deny-all). FastAPI runs as a BYPASSRLS role, so app queries still work. Do **not** add allow-all policies — they re-open PostgREST to the public anon key |
 | Trusting `X-Forwarded-For` blindly | Goes through `app/core/network.py` — only honoured in prod behind a trusted proxy |
 | Forgetting `Idempotency-Key` on `POST /payments` or `POST /invoices` | Returns 400. All clients must generate and send a UUID per logical request |
+| Putting credentials in `.env` | `.env` is for non-secret config only. Real credentials (R2 access key + secret) live in `./secrets/<NAME>` files mounted as Docker secrets at `/run/secrets/<NAME>`. Pydantic-Settings reads them via `secrets_dir`. This keeps `docker compose config` from rendering values as plaintext |
 
 ---
 
@@ -208,6 +215,7 @@ Both must be set. Never swap them. Production `config.py` validates that
 **P1** — Tasks 1, 2, 3, 5 merged (HTTP resilience, Celery push, R2 end-to-end, VesselFinder polling). Task 4 (Destin8) still blocked on tier/credentials.
 **P2** — COMPLETE. All 7 hardening items done as of `p2-service-layer`.
 **P2.5** — RLS enabled on all 22 public tables (migration `5ab45b2e1574`, branch `p2-supabase-rls`).
+**Phase B** — COMPLETE. Post-RLS correctness fixes: IMO case normalization, clearing deadline window (days=2), MIME verification on upload confirm, RLS downgrade guard (PR #20, `main` at `50d46a7`).
 **P3** — TODO.
 
 Full task specs (acceptance criteria, file lists, poller algorithms) live in
