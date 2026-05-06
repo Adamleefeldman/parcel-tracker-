@@ -73,6 +73,7 @@ All commands run from here unless otherwise noted.
 | Rate limiting | slowapi (Redis-backed) |
 | Package manager | `uv` + `uv.lock` (committed) |
 | Mobile frontend | Expo (React Native) — not yet started |
+| Hosting | Railway — https://parcel-tracker-production-477c.up.railway.app (api + worker + beat from single Dockerfile) |
 
 ---
 
@@ -215,8 +216,12 @@ Both must be set. Never swap them. Production `config.py` validates that
 **P1** — Tasks 1, 2, 3, 5 merged (HTTP resilience, Celery push, R2 end-to-end, VesselFinder polling). Task 4 (Destin8) still blocked on tier/credentials.
 **P2** — COMPLETE. All 7 hardening items done as of `p2-service-layer`.
 **P2.5** — RLS enabled on all 22 public tables (migration `5ab45b2e1574`, branch `p2-supabase-rls`).
-**Phase B** — COMPLETE. Post-RLS correctness fixes: IMO case normalization, clearing deadline window (days=2), MIME verification on upload confirm, RLS downgrade guard (PR #20, `main` at `50d46a7`).
-**P3** — TODO.
+**Phase B** — COMPLETE. Post-RLS correctness fixes (PR #20, `main` at `50d46a7`).
+**Phase C** — COMPLETE. Hygiene sweep — bcrypt rounds setting, /ready probe timeout, CORS dedup, ShipmentMembership Protocol (PR #21).
+**Phase D** — COMPLETE. `/docs` admin lockdown in production + payment-service AsyncMock fix (PRs #22 + #23, `main` at `7f3b0cd`).
+**Phase H** — COMPLETE. Docker dev-stack hygiene + Docker-secrets adoption for R2 credentials (PR #24, `main` at `047ebed`).
+**P3** — TODO (read cache, soft delete, TZ audit, load test; `/docs` lockdown landed early in Phase D).
+**Phase G** — TODO. Replace `passlib` before any Python ≥3.13 upgrade; optional `python-jose` → `pyjwt` swap.
 
 Full task specs (acceptance criteria, file lists, poller algorithms) live in
 [`docs/ROADMAP.md`](docs/ROADMAP.md). Summary of remaining open work below.
@@ -224,13 +229,13 @@ Full task specs (acceptance criteria, file lists, poller algorithms) live in
 | # | Item | Status | Blocker |
 |---|---|---|---|
 | P1.4 | Destin8 polling worker | BLOCKED | API credentials + tier choice |
-| P3 | Read caching, soft delete, API versioning, `/docs` lockdown, TZ audit, locust load test | TODO | product decisions |
+| P3 | Read caching, soft delete, TZ audit, locust load test | TODO | product decisions |
+| G1 | Replace `passlib` (blocks Python ≥3.13) | TODO | none |
 
 ### Open decisions (gate the blocked items)
 
 1. Destin8 tier + endpoint URL (gates P1.4)
-2. Hosting target — Fly.io vs Railway (both run the Dockerfile as api + worker + beat)
-3. Data retention / GDPR policy (drives P3 soft-delete work)
+2. Data retention / GDPR policy (drives P3 soft-delete work)
 
 ---
 

@@ -3,12 +3,18 @@
 Detailed task specs for work beyond P0. CLAUDE.md carries only the high-level status
 table; the file-by-file breakdowns and acceptance criteria live here.
 
-## Status summary (as of 2026-04-30)
+## Status summary (as of 2026-05-04)
 
 - **P0** — COMPLETE (PR #6, `main` at `09da227`)
 - **P1** — PARTIALLY COMPLETE (Tasks 1, 2, 3, 5 merged; Task 4 Destin8 still blocked on tier/credentials)
 - **P2** — COMPLETE (all 7 items done; P2.18 service-layer extraction merged on `p2-service-layer`)
+- **P2.5** — COMPLETE (RLS enabled on all 22 public tables, migration `5ab45b2e1574`)
+- **Phase B** — COMPLETE (post-RLS correctness fixes, PR #20, `main` at `50d46a7`)
+- **Phase C** — COMPLETE (hygiene sweep, PR #21)
+- **Phase D** — COMPLETE (D1 docs lockdown PR #23; D2 payment-service mock fix PR #22; `main` at `7f3b0cd`)
+- **Phase H** — COMPLETE (docker dev-stack hygiene + R2 secrets adoption, PR #24, `main` at `047ebed`)
 - **P3** — TODO
+- **Phase G** — TODO (runtime upgrade prep: passlib must go before Python ≥3.13)
 
 ---
 
@@ -182,6 +188,21 @@ Same shape as Task 4. Key differences:
 
 ---
 
+## Phase B — Post-RLS correctness fixes (COMPLETE — PR #20)
+
+Four medium-severity issues surfaced by the post-RLS code review, merged as one batch.
+
+| Item | Fix | Files |
+|---|---|---|
+| B1 — IMO case normalization | `.lower()` on both sides of VesselFinder IMO lookup | `app/services/vessel_poll_service.py` |
+| B2 — Clearing deadline window | `timedelta(hours=48)` → `timedelta(days=2)` to match `Vessel.eta` `Date` granularity; updated docstring + notification copy | `app/background/tasks.py`, `app/services/notification_service.py` |
+| B3 — MIME verification | `verify_upload` now accepts `expected_content_type` and raises `StorageMimeMismatch` on mismatch; confirm handler drops client-claim fallback | `app/services/storage_service.py`, `app/api/routes/documents.py` |
+| B4 — RLS downgrade guard | `downgrade()` raises `RuntimeError` unless `ALLOW_RLS_DOWNGRADE=1` is set | `app/db/migrations/versions/5ab45b2e1574_enable_rls_on_public_tables.py` |
+
+Test count after Phase B: **272 passed** (+6 new tests).
+
+---
+
 ## P2 — Production hardening (COMPLETE)
 
 | # | Item | Status | Notes |
@@ -198,29 +219,98 @@ Same shape as Task 4. Key differences:
 
 ---
 
+## Phase D — Operational / security quick wins (COMPLETE — PRs #22, #23)
+
+| Item | Fix | Files |
+|---|---|---|
+| D1 — Lock `/docs` behind admin in prod | Mount `/docs`, `/redoc`, `/openapi.json` under a `docs_guard` dep that enforces admin role only when `settings.is_production`. Built-in URLs disabled. | `app/main.py`, `tests/integration/test_docs_lockdown.py` |
+| D2 — Fix `test_payment_service.py` AsyncMock misuse | `db = AsyncMock()` made `db.add()` return an unawaited coroutine — real SQLAlchemy `AsyncSession.add` is sync. Replaced with `db = MagicMock()` + targeted `AsyncMock` on `execute`/`flush`. Eliminated the 3 `RuntimeWarning`s that the post-D1 audit surfaced. | `tests/unit/test_payment_service.py` |
+
+---
+
+## Phase H — Docker / dev-stack hygiene (COMPLETE — PR #24)
+
+Surfaced by the post-D1 docker setup audit. The image `parceltrack:dev`
+hadn't been rebuilt since `2026-04-10`, the running stack was missing
+`api`/`worker`/`beat`, and `docker compose config` rendered `.env`
+contents in cleartext, making credential exposure during routine
+debugging an easy mistake. The fix layered two coherent commits; R2
+credentials migrated to file-backed Docker secrets and existing keys
+were rotated as a precaution.
+
+| Item | Fix | Files |
+|---|---|---|
+| H1 — `.dockerignore` typo | Removed stray `{app` copy-paste artefact (line 56). | `.dockerignore` |
+| H2 — Compose env-shadowing footgun | `environment:` shadowed `env_file:`, so `STORAGE_*` from `.env` was silently ignored. Dropped the inline `STORAGE_*` keys; added an anchored `env_file: .env` (required:false) to api/worker/beat. Header comment rewritten to describe real precedence. Side benefit: 11 settings no longer enumerated in compose now flow from `.env` (INTEGRATION_*, VESSELFINDER_*, BCRYPT_ROUNDS, TRUSTED_PROXIES, SENTRY_*). | `docker-compose.yml` |
+| H3 — Beat volume permission | Beat crash-looped under the non-root `app` user with "Permission denied: /var/lib/celery/celerybeat-schedule". Pre-create the directory with `app:app` ownership in the runtime stage so the named volume inherits write perms on first attach. | `Dockerfile` |
+| H4 — Docker secrets for R2 credentials | `Settings.Config.secrets_dir = "/run/secrets"` so Pydantic-Settings reads file-backed secrets (env var → secrets file → default). Compose declares top-level `secrets:` with `file: ./secrets/<NAME>` refs; service-level refs use `target: <NAME>` so files land at `/run/secrets/<NAME>` matching field names. New `secrets/` dir is gitignored + dockerignored; only `.gitkeep` and `README.md` are tracked. `STORAGE_*_KEY` removed from `.env`. Production validator refuses to boot with empty values and points at the secret path in the error. After the fix, `docker compose config` no longer renders the secret values — only `source:` / `target:` references. | `app/core/config.py`, `docker-compose.yml`, `secrets/.gitkeep`, `secrets/README.md`, `.gitignore`, `.dockerignore`, `CLAUDE.md` |
+
+End-to-end verified: stack rebuilt clean, alembic at head, `/health` and
+`/ready` 200, `scripts/smoke_r2.py` round-trips 34 bytes against R2. Production
+deploys (Fly.io / Railway / k8s) get the same `/run/secrets/<NAME>`
+contract from their native secret managers, so no app code changes
+between dev and prod.
+
+---
+
 ## P3 — Scale prep (TODO)
 
 | # | Item |
 |---|---|
 | 20 | Read caching for shipment-detail (Redis, 30s TTL, invalidate on transition) |
 | 21 | Soft delete + archival (UK customs records = 6yr retention) |
-| 22 | API versioning story for `/api/v2` |
-| 23 | OpenAPI polish — lock `/docs` behind ADMIN in production |
+| 22 | API versioning prefix `/api/v1` (DONE — all routers mount under `PREFIX` in `app/main.py`; `/v2` deferred until a real breaking change) |
+| 23 | OpenAPI polish — lock `/docs` behind ADMIN in production (DONE in Phase D1) |
 | 24 | Multi-region readiness: timezone-aware datetimes everywhere |
 | 25 | Load test with locust (target: p95 < 300ms at 100 concurrent users) |
+
+---
+
+## Phase G — Runtime upgrade prep (TODO)
+
+Surfaced by the post-D1 warnings review. Not urgent today (we ship Python 3.12),
+but each item below blocks a future runtime bump and should land before then.
+
+### G1. Replace `passlib` before Python ≥3.13
+
+`passlib` imports the stdlib `crypt` module
+(`/passlib/utils/__init__.py:854`); `crypt` is removed in Python 3.13. Passlib
+itself is effectively unmaintained (last release 2020). Today's tests show one
+`DeprecationWarning` per process; on Python 3.13+ the import fails outright,
+which would make the api fail to boot.
+
+**Migration plan:**
+- `app/core/security.py` — replace `passlib.context.CryptContext` with direct
+  `bcrypt` library calls (`bcrypt.hashpw` / `bcrypt.checkpw`). `bcrypt` is
+  already a transitive dependency.
+- Keep cost factor wired to `settings.BCRYPT_ROUNDS` (no behaviour change).
+- Existing bcrypt hashes in the DB are byte-for-byte compatible — no data
+  migration needed.
+- `pyproject.toml` — drop `passlib`; promote `bcrypt` to a direct dependency.
+- Re-run `tests/unit/test_security.py` and `tests/unit/test_auth_lockout.py`
+  to prove old-format hashes still verify.
+
+**Acceptance:**
+- No passlib import remains under `app/`.
+- Full suite green; passlib `DeprecationWarning` no longer appears in the
+  warnings summary.
+- Smoke: log in a user whose hash was generated by the old passlib code path.
+
+**Note on `python-jose`:** the `datetime.utcnow()` warnings under F2 mostly
+come from `python-jose`, which is also lightly maintained. Consider folding a
+`python-jose` → `pyjwt` swap into F2 or into G2; the two libraries cover the
+same surface for HS256 + RS256.
 
 ---
 
 ## Open decisions (required before remaining work)
 
 1. **Destin8 tier + exact endpoint URL** — drives poll cadence and rate-limit budget (gates Task 4)
-2. **Hosting** — Fly.io or Railway recommended (both run the Dockerfile directly,
-   support api + worker + beat as three processes from one image; Postgres stays on
-   Supabase, Redis on Upstash or managed)
-3. **Data retention / GDPR** — drives P3 #21 soft-delete + archival policy
+2. **Data retention / GDPR** — drives P3 #21 soft-delete + archival policy
 
 Resolved: CF R2 account (Task 3 done); VesselFinder plan + customer notification scope
-(Task 5 done — only `APPROACHING / DELAYED / ARRIVED` transitions notify).
+(Task 5 done — only `APPROACHING / DELAYED / ARRIVED` transitions notify); Hosting
+(Railway — api + worker + beat from single Dockerfile, Postgres on Supabase, Redis on Upstash).
 
 ---
 
@@ -248,4 +338,4 @@ Resolved: CF R2 account (Task 3 done); VesselFinder plan + customer notification
 
 **P3 done when:**
 - Load test: 100 concurrent users on shipment-list + shipment-detail, p95 < 300ms
-- OpenAPI page curated and locked behind admin auth in production
+- OpenAPI page curated and locked behind admin auth in production ✅ (Phase D1, PR #23)

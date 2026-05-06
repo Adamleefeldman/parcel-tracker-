@@ -18,10 +18,13 @@ FastAPI backend for the ParcelTrack shipment tracking platform. Manages the full
 # 1. Clone and enter the backend directory
 cd parcel-track
 
-# 2. Copy the environment template and fill in storage/push credentials
+# 2. Copy the environment template and configure non-secret values
 cp .env.example .env
 # Edit .env — at minimum, generate a SECRET_KEY:
 #   python -c "import secrets; print(secrets.token_hex(32))"
+# Note: STORAGE_ACCESS_KEY_ID and STORAGE_SECRET_ACCESS_KEY do NOT go in
+# .env — they are file-backed Docker secrets. See "Cloudflare R2 setup"
+# below for how to populate secrets/STORAGE_*.
 
 # 3. Boot the full stack (Postgres, Redis, API, Celery worker, Celery beat)
 docker compose up -d
@@ -64,27 +67,51 @@ pre-commit install --hook-type pre-push
 ## Cloudflare R2 setup
 
 File uploads use the presigned-URL pattern: clients PUT directly to R2 and
-the API only stores the object key. Bucket + token are managed by the account
-admin; the values below go in `.env`:
+the API only stores the object key. Bucket + token are managed by the
+account admin.
+
+**Non-secret config goes in `.env`** (gitignored):
 
 ```
 STORAGE_BUCKET=parceltrack-documents
 STORAGE_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
-STORAGE_ACCESS_KEY_ID=<R2 access key id>
-STORAGE_SECRET_ACCESS_KEY=<R2 secret access key>
 STORAGE_REGION=auto
 STORAGE_PUBLIC_URL=https://<account-id>.r2.cloudflarestorage.com/parceltrack-documents
 ```
+
+**Credentials go in file-backed Docker secrets**, not `.env`. Compose
+mounts them at `/run/secrets/<NAME>`; Pydantic-Settings reads them via
+`secrets_dir`. Drop the raw values (no quotes, no trailing newline) into:
+
+```bash
+printf '%s' '<R2 access key id>'      > secrets/STORAGE_ACCESS_KEY_ID
+printf '%s' '<R2 secret access key>'  > secrets/STORAGE_SECRET_ACCESS_KEY
+chmod 600 secrets/STORAGE_ACCESS_KEY_ID secrets/STORAGE_SECRET_ACCESS_KEY
+```
+
+Both files are gitignored (`/secrets/*` with `!.gitkeep` + `!README.md`
+exceptions) and dockerignored — they never enter git or the runtime image.
+See `secrets/README.md` for the full convention.
 
 CORS on the bucket must allow `PUT` and `GET` from the mobile app origin.
 Use `*` for `AllowedOrigins` during development, then lock it down to the
 real app origin before production.
 
-Verify the round-trip end-to-end (uploads bytes, HEAD-checks them, downloads
-and compares, then cleans up):
+Verify the round-trip end-to-end (uploads bytes, HEAD-checks them,
+downloads and compares, then cleans up). Two equivalent ways to run it:
 
 ```bash
-uv run python scripts/smoke_r2.py
+# Inside a one-shot container — inherits the same secrets the running api
+# does. Recommended; never exposes the keys to your host shell.
+docker compose run --rm \
+  -v "$(pwd)/scripts:/app/scripts:ro" \
+  api python scripts/smoke_r2.py
+
+# Or from the host, sourcing the secret files into a single-process env.
+env \
+  STORAGE_ACCESS_KEY_ID="$(cat secrets/STORAGE_ACCESS_KEY_ID)" \
+  STORAGE_SECRET_ACCESS_KEY="$(cat secrets/STORAGE_SECRET_ACCESS_KEY)" \
+  uv run python scripts/smoke_r2.py
 ```
 
 Exits 0 on success, 1 with the failing step on stderr.
@@ -156,7 +183,7 @@ parcel-track/
 | `GET` | `/api/v1/shipments` | Paginated list (offset, limit, total) |
 | `GET` | `/api/v1/shipments/{id}` | Full shipment detail with nested relations |
 
-See `/docs` (dev only) for the full OpenAPI spec.
+See `/docs` for the full OpenAPI spec — open in dev/staging, gated behind an admin JWT in production (Phase D1).
 
 ## Shipment workflow
 
