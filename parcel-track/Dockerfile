@@ -89,8 +89,12 @@ EXPOSE 8000
 # Liveness probe in standalone runs (compose / PaaS override as needed).
 # /health is the cheap liveness endpoint; /ready (added in Task 5) is for readiness.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -fsS http://localhost:8000/health || exit 1
+    CMD curl -fsS "http://localhost:${PORT:-8000}/health" || exit 1
 
 # No CMD on purpose — the orchestrator picks api / worker / beat.
 # Default to api so a bare `docker run` does something useful.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form + ${PORT:-8000} so PaaS providers (Railway, Fly) that inject a
+# dynamic PORT env can route to the right port; falls back to 8000 for local
+# docker run / compose. `exec` ensures SIGTERM reaches uvicorn for graceful
+# shutdown instead of being trapped by sh.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
