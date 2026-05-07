@@ -1,6 +1,7 @@
 """Container service — list containers and update port status."""
 
 import uuid
+from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -8,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import PortStatus, UserRole
 from app.db.models import BillOfLading, Container, User
-from app.schemas.pagination import PaginatedResponse, PaginationParams, paginate
+from app.schemas.pagination import PaginationParams, paginate
 from app.schemas.schemas import ContainerStatusUpdate
 
 
@@ -18,7 +19,7 @@ class ContainerService:
         db: AsyncSession,
         shipment_id: uuid.UUID,
         pagination: PaginationParams,
-    ) -> PaginatedResponse:
+    ) -> dict[str, Any]:
         q = (
             select(Container)
             .join(BillOfLading, Container.bl_id == BillOfLading.id)
