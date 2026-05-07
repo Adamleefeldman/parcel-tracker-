@@ -152,8 +152,10 @@ class AuthService:
         # has no password (incomplete signup, future passwordless flow, bad
         # data) treat them as unable to log in via this code path. Without
         # this narrowing, verify_password gets None and crashes the request.
-        if not user or not user.hashed_password or not verify_password(
-            request.password, user.hashed_password
+        if (
+            not user
+            or not user.hashed_password
+            or not verify_password(request.password, user.hashed_password)
         ):
             count = await increment_login_failure(
                 request.email, settings.LOGIN_LOCKOUT_WINDOW_SECONDS
