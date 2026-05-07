@@ -124,11 +124,11 @@ class AuthService:
             )
         )
 
-        return {
-            "access_token": access_token,
-            "refresh_token": raw_refresh,
-            "token_type": "bearer",
-        }
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=raw_refresh,
+            token_type="bearer",
+        )
 
     @staticmethod
     async def login(
@@ -148,7 +148,13 @@ class AuthService:
         result = await db.execute(select(User).where(User.email == request.email, User.is_active))
         user = result.scalar_one_or_none()
 
-        if not user or not verify_password(request.password, user.hashed_password):
+        # `hashed_password` is nullable on the model — if a user record somehow
+        # has no password (incomplete signup, future passwordless flow, bad
+        # data) treat them as unable to log in via this code path. Without
+        # this narrowing, verify_password gets None and crashes the request.
+        if not user or not user.hashed_password or not verify_password(
+            request.password, user.hashed_password
+        ):
             count = await increment_login_failure(
                 request.email, settings.LOGIN_LOCKOUT_WINDOW_SECONDS
             )

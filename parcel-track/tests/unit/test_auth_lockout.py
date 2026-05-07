@@ -213,6 +213,35 @@ async def test_login_raises_401_before_threshold():
 
 
 @pytest.mark.asyncio
+async def test_login_user_with_null_hashed_password_returns_401():
+    """A user record with no hashed_password (nullable column) must not crash
+    verify_password — they get a clean 401 like any other failed credential."""
+    user_no_pwd = MagicMock()
+    user_no_pwd.hashed_password = None
+    no_pwd_result = MagicMock(scalar_one_or_none=MagicMock(return_value=user_no_pwd))
+
+    with (
+        patch("app.services.auth_service.is_login_locked", AsyncMock(return_value=False)),
+        patch("app.services.auth_service.increment_login_failure", AsyncMock(return_value=1)),
+        patch("app.services.auth_service.get_lockout_ttl", AsyncMock(return_value=900)),
+        # If verify_password ever runs with None, it explodes; the narrowing
+        # in AuthService.login should short-circuit before reaching it.
+        patch(
+            "app.services.auth_service.verify_password",
+            side_effect=AssertionError("verify_password should not be called with None"),
+        ),
+    ):
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=no_pwd_result)
+        request = LoginRequest(email="nopwd@example.com", password="anything")
+
+        with pytest.raises(HTTPException) as exc_info:
+            await AuthService.login(db, request)
+
+        assert exc_info.value.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_successful_login_clears_failure_counter():
     """A successful login must reset the failure counter."""
     mock_user = MagicMock()
