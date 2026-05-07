@@ -64,6 +64,12 @@ class CustomsService:
 
         container_result = await db.execute(select(Container).where(Container.id == container_id))
         container = container_result.scalar_one_or_none()
+        if container is None:
+            # Customs records reference container_id but the container row
+            # itself can be missing if it was deleted, or hidden by RLS for
+            # this actor's view. Either way, the cascade below assumes the
+            # container exists — without this guard we crash on container.status.
+            raise HTTPException(404, "Container not found")
 
         if new_status == CustomsStatus.CLEARED:
             container.status = ContainerStatus.CLEARED
