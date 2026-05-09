@@ -190,4 +190,9 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    # Pydantic-Settings populates fields from env vars + secrets_dir at
+    # instantiation; mypy can't see those external sources and flags every
+    # field without a Python default as a missing call-arg. Suppress at
+    # the construction site rather than annotating each field with
+    # placeholder defaults that would change runtime validation behaviour.
+    return Settings()  # type: ignore[call-arg]
