@@ -697,6 +697,28 @@ class TestPreconditions:
         assert r.status_code == 400
         assert "Vessel not assigned yet" in r.json()["detail"]
 
+    async def test_in_transit_without_bl_blocked(self, client: AsyncClient, admin_token: str):
+        """
+        Confirming departure when there is no BL at all (vs. just no vessel)
+        returns a distinct, actionable error rather than crashing.
+
+        Before the BL None-narrow fix, the route's bl-then-vessel chain
+        evaluated bl.id later in the function with bl still possibly None,
+        which would raise AttributeError on a 500 response. This test pins
+        the new explicit 400 with a BL-specific message.
+        """
+        h = {"Authorization": f"Bearer {admin_token}"}
+        # payment_confirmed leaves the shipment with no BL row
+        sid, _ = await _advance_to(client, h, "payment_confirmed", ref="NOBL-001")
+
+        r = await client.patch(
+            f"/api/v1/shipments/{sid}/vessel/depart",
+            json={"atd": "2026-02-01", "eta": "2026-02-14"},
+            headers=h,
+        )
+        assert r.status_code == 400
+        assert "BL must be uploaded" in r.json()["detail"]
+
     async def test_cleared_requires_all_containers(self, client: AsyncClient, admin_token: str):
         """
         The CLEARED transition only fires when every container is customs-cleared.

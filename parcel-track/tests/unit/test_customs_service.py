@@ -6,6 +6,7 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from app.core.enums import ContainerStatus, CustomsStatus, PortStatus, ShipmentStatus, UserRole
 from app.services.customs_service import CustomsService
@@ -136,3 +137,27 @@ async def test_not_all_cleared_does_not_trigger_transition():
         )
 
     mock_trans.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_missing_container_raises_404():
+    """If the container row is missing (deleted or RLS-hidden), upsert raises 404
+    instead of crashing on AttributeError when the cascade tries to mutate it."""
+    actor = MagicMock()
+    actor.role = UserRole.ADMIN
+
+    record = MagicMock()
+    record.id = uuid.uuid4()
+
+    # Second db.execute (container lookup) returns None — simulating a deleted
+    # or RLS-hidden container. The first lookup (customs record) returns the
+    # existing record so we get past the upsert short-circuit.
+    db = _make_db(record, None, [], record)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await CustomsService.upsert(
+            db, uuid.uuid4(), uuid.uuid4(), _make_body(CustomsStatus.CLEARED), actor, None
+        )
+
+    assert exc_info.value.status_code == 404
+    assert "Container not found" in exc_info.value.detail

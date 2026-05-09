@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -11,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.core.enums import DeliveryStatus, NotificationType, ShipmentStatus, UserRole
 from app.core.exceptions import handle_integrity_error
 from app.db.models import DeliveryContainer, DeliveryPoint, DeliverySchedule, User
-from app.schemas.pagination import PaginatedResponse, PaginationParams, paginate
+from app.schemas.pagination import PaginationParams, paginate
 from app.schemas.schemas import (
     DeliveryPointCreate,
     DeliveryScheduleCreate,
@@ -65,7 +66,7 @@ class DeliveryService:
         shipment_id: uuid.UUID,
         actor: User,
         pagination: PaginationParams,
-    ) -> PaginatedResponse:
+    ) -> dict[str, Any]:
         q = select(DeliveryPoint).where(DeliveryPoint.shipment_id == shipment_id)
 
         if actor.role == UserRole.CUSTOMER:

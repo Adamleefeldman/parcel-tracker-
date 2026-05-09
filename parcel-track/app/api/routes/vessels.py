@@ -70,8 +70,10 @@ async def confirm_departure(
         .options(selectinload(BillOfLading.vessel))
     )
     bl = bl_result.scalar_one_or_none()
-    vessel = bl.vessel if bl else None
-    if not vessel:
+    if bl is None:
+        raise HTTPException(400, "BL must be uploaded before confirming departure")
+    vessel = bl.vessel
+    if vessel is None:
         raise HTTPException(400, "Vessel not assigned yet")
 
     vessel.atd = body.atd
@@ -114,8 +116,10 @@ async def add_vessel_update(
         .options(selectinload(BillOfLading.vessel).selectinload(Vessel.updates))
     )
     bl = bl_result.scalar_one_or_none()
-    vessel = bl.vessel if bl else None
-    if not vessel:
+    if bl is None:
+        raise HTTPException(400, "BL must be uploaded before recording vessel updates")
+    vessel = bl.vessel
+    if vessel is None:
         raise HTTPException(400, "No vessel found for this shipment")
 
     update = VesselUpdate(

@@ -1,6 +1,7 @@
 """Payment service — add payments and trigger PAYMENT_CONFIRMED transition."""
 
 import uuid
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.enums import NotificationType, PaymentStatus, ShipmentStatus, UserRole
 from app.db.models import Invoice, Payment, User
 from app.middleware.auth import financial_fields_allowed
-from app.schemas.pagination import PaginatedResponse, PaginationParams, paginate
+from app.schemas.pagination import PaginationParams, paginate
 from app.schemas.schemas import PaymentCreate, PaymentOut
 from app.services.notification_service import NotificationService
 from app.services.shipment_service import ShipmentService
@@ -60,7 +61,7 @@ class PaymentService:
         shipment_id: uuid.UUID,
         actor: User,
         pagination: PaginationParams,
-    ) -> PaginatedResponse:
+    ) -> dict[str, Any]:
         q = select(Payment).where(Payment.shipment_id == shipment_id)
         page = await paginate(db, q, pagination)
         show = financial_fields_allowed(actor)
