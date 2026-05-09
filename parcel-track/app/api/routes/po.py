@@ -28,9 +28,9 @@ async def create_po(
 async def submit_po(
     shipment_id: uuid.UUID,
     po_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_admin),
-    request: Request = None,
 ):
     await PoService.submit(db, shipment_id, po_id, actor, get_client_ip(request))
     return {"message": "PO submitted"}

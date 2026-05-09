@@ -57,9 +57,9 @@ async def create_vessel(
 async def confirm_departure(
     shipment_id: uuid.UUID,
     body: VesselDeparture,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_shipment_member),
-    request: Request = None,
 ):
     if actor.role not in (UserRole.ADMIN, UserRole.MOROCCO_AGENT):
         raise HTTPException(403, "Only admin or Morocco agent can confirm departure")
@@ -102,10 +102,10 @@ async def confirm_departure(
 async def add_vessel_update(
     shipment_id: uuid.UUID,
     body: VesselUpdateCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_admin),
     idempotency: IdempotencyResult = Depends(require_idempotency),
-    request: Request = None,
 ):
     if idempotency.cached_response:
         return idempotency.cached_response
