@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from typing import cast
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -28,7 +29,9 @@ _SKIP_PATHS = frozenset({"/health", "/ready"})
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         if request.url.path in _SKIP_PATHS:
-            return await call_next(request)
+            # call_next is typed as Callable[..., Any] in starlette base — cast
+            # so the early-return path resolves to a real Response.
+            return cast(Response, await call_next(request))
 
         rid = uuid.uuid4().hex
         request_id_ctx.set(rid)

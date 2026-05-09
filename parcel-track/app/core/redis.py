@@ -55,7 +55,9 @@ async def revoke_access_token(jti: str, ttl_seconds: int) -> None:
 async def is_token_revoked(jti: str) -> bool:
     """Return True if the given jti has been revoked."""
     redis = get_redis_client()
-    return await redis.exists(f"{_JTI_PREFIX}{jti}") == 1
+    # redis-py async returns Any from exists(); the count is an int by contract.
+    count: int = await redis.exists(f"{_JTI_PREFIX}{jti}")
+    return count == 1
 
 
 # ── Login lockout ──────────────────────────────────────────────────────────────
@@ -71,7 +73,8 @@ async def increment_login_failure(email: str, window_seconds: int) -> int:
     """Increment the failure counter for an email. Returns the new count."""
     redis = get_redis_client()
     key = f"{_LOCKOUT_PREFIX}{email}"
-    count = await redis.incr(key)
+    # redis-py async returns Any from incr(); the post-increment value is int.
+    count: int = await redis.incr(key)
     if count == 1:
         await redis.expire(key, window_seconds)
     return count
@@ -87,7 +90,8 @@ async def is_login_locked(email: str, threshold: int) -> bool:
 async def get_lockout_ttl(email: str) -> int:
     """Return remaining TTL in seconds for the lockout key (0 if not locked)."""
     redis = get_redis_client()
-    ttl = await redis.ttl(f"{_LOCKOUT_PREFIX}{email}")
+    # redis-py async returns Any from ttl(); seconds is an int (or -1 / -2).
+    ttl: int = await redis.ttl(f"{_LOCKOUT_PREFIX}{email}")
     return max(ttl, 0)
 
 

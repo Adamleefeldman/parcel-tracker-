@@ -2,6 +2,7 @@ import hashlib
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -21,11 +22,12 @@ pwd_context = CryptContext(
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    # passlib is untyped — cast at the boundary so callers see a real str.
+    return cast(str, pwd_context.hash(password))
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return cast(bool, pwd_context.verify(plain, hashed))
 
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
@@ -40,7 +42,8 @@ def create_access_token(user_id: str, role: UserRole) -> str:
         "type": "access",
         "jti": uuid.uuid4().hex,  # unique token ID — used for server-side revocation
     }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    # python-jose is untyped — cast at the boundary.
+    return cast(str, jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM))
 
 
 def create_refresh_token() -> tuple[str, str]:
@@ -52,7 +55,8 @@ def create_refresh_token() -> tuple[str, str]:
 
 def decode_access_token(token: str) -> dict | None:
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        # python-jose returns Any from decode; coerce to dict for the caller.
+        payload: dict = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         if payload.get("type") != "access":
             return None
         return payload
