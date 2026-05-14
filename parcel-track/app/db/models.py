@@ -5,6 +5,7 @@ Relationships are explicit; cascade rules are intentional.
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
@@ -211,9 +212,9 @@ class PurchaseOrder(Base):
     po_date: Mapped[date] = mapped_column(Date, nullable=False)
     supplier_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)
     product_description: Mapped[str] = mapped_column(Text, nullable=False)
-    quantity: Mapped[Numeric] = mapped_column(Numeric(12, 2), nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     quantity_unit: Mapped[str] = mapped_column(String(50), nullable=False)
-    total_value: Mapped[Numeric] = mapped_column(Numeric(14, 2), nullable=False)
+    total_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[Currency] = mapped_column(SAEnum(Currency), nullable=False)
     status: Mapped[POStatus] = mapped_column(
         SAEnum(POStatus), default=POStatus.DRAFT, nullable=False
@@ -247,7 +248,7 @@ class Invoice(Base):
     )
     invoice_number: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     invoice_date: Mapped[date] = mapped_column(Date, nullable=False)
-    value: Mapped[Numeric] = mapped_column(Numeric(14, 2), nullable=False)
+    value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[Currency] = mapped_column(SAEnum(Currency), nullable=False)
     payment_terms: Mapped[str | None] = mapped_column(String(100), nullable=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -274,7 +275,7 @@ class Payment(Base):
     )
     swift_ref: Mapped[str] = mapped_column(String(100), nullable=False)
     payment_date: Mapped[date] = mapped_column(Date, nullable=False)
-    amount: Mapped[Numeric] = mapped_column(Numeric(14, 2), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[Currency] = mapped_column(SAEnum(Currency), nullable=False)
     bank_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     payment_type: Mapped[PaymentType] = mapped_column(SAEnum(PaymentType), nullable=False)
@@ -313,7 +314,7 @@ class BillOfLading(Base):
     port_of_discharge: Mapped[str] = mapped_column(String(100), nullable=False)
     container_count: Mapped[int] = mapped_column(Integer, nullable=False)
     commodity_description: Mapped[str] = mapped_column(Text, nullable=False)
-    gross_weight_kg: Mapped[Numeric] = mapped_column(Numeric(12, 2), nullable=False)
+    gross_weight_kg: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     status: Mapped[BLStatus] = mapped_column(
         SAEnum(BLStatus), default=BLStatus.UPLOADED, nullable=False
     )
@@ -452,8 +453,8 @@ class ClearingDocs(Base):
     )
     customs_entry_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)
     hs_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    duty_rate: Mapped[Numeric | None] = mapped_column(Numeric(5, 2), nullable=True)
-    estimated_duty_vat: Mapped[Numeric | None] = mapped_column(Numeric(14, 2), nullable=True)
+    duty_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    estimated_duty_vat: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     # Checklist booleans — each ticked when the doc is uploaded
     has_customs_entry: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     has_packing_list: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -491,7 +492,7 @@ class CustomsRecord(Base):
     clearance_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     hold_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     hmrc_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    duty_paid: Mapped[Numeric | None] = mapped_column(Numeric(14, 2), nullable=True)
+    duty_paid: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     # Append-only notes stored as a JSONB-style text log; use CustomsNote for structured append
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
