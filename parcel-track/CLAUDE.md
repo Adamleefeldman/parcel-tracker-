@@ -243,4 +243,5 @@ Full task specs (acceptance criteria, file lists, poller algorithms) live in
 
 - Repo: `Adamleefeldman/parcel-track`. `main` is source of truth — always sync before branching.
 - One branch + PR per roadmap task. CI runs ruff (blocking), pytest against a real
-  Postgres service container (blocking), and mypy (non-blocking until P2).
+  Postgres service container (blocking), and mypy (blocking — at zero errors as of
+  the Phase 1 / 2 / 3 cleanup; per-module strict overrides still TODO).

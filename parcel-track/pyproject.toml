@@ -87,7 +87,9 @@ known-first-party = ["app"]
 python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
-# Non-strict for P0 — we're adding types incrementally, not doing a full
-# retrofit in one shot. Tighten in P2.
+# Non-strict baseline. Future work: layer per-module strict overrides for
+# core / db / schemas once their helper-function annotations are filled in
+# (currently surfaces ~150 no-untyped-def / no-untyped-call errors from
+# the factory funcs in models.py and pydantic validators in schemas.py).
 ignore_missing_imports = true
 check_untyped_defs = true
