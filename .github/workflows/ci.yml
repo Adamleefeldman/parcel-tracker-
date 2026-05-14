@@ -119,10 +119,8 @@ jobs:
 
   # ── Type checking ─────────────────────────────────────────────────────────
   typecheck:
-    name: Mypy (non-blocking)
+    name: Mypy
     runs-on: ubuntu-latest
-    # Non-blocking in P0 — change to required in P2 once type coverage improves.
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
