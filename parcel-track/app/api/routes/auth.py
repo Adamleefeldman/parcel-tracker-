@@ -50,23 +50,6 @@ async def login(
     return await AuthService.login(db, body)
 
 
-# --- TEMPORARY: Sentry smoke endpoint. REMOVE after verifying error capture. ---
-@auth_router.post("/_sentry_smoke", include_in_schema=False)
-async def _sentry_smoke(
-    request: Request,
-    actor: User = Depends(require_admin),
-):
-    """Deliberately raise to prove Sentry captures unhandled api exceptions.
-
-    Admin-gated. Excluded from the OpenAPI schema. Delete this route and
-    its commit once the corresponding Sentry issue has been verified.
-    """
-    raise RuntimeError("sentry smoke test — please ignore")
-
-
-# --- end temporary ---
-
-
 @auth_router.post("/refresh")
 @limiter.limit(RATE_LIMIT_REFRESH)
 async def refresh_token(
