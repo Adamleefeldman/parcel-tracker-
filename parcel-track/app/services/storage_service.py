@@ -70,7 +70,8 @@ class StorageService:
                 f"Allowed: {', '.join(sorted(StorageService.ALLOWED_MIME_TYPES))}"
             )
         s3 = get_s3()
-        url = s3.generate_presigned_url(
+        # boto3 is untyped — annotate the local so callers see a real str.
+        url: str = s3.generate_presigned_url(
             "put_object",
             Params={
                 "Bucket": settings.STORAGE_BUCKET,
@@ -85,7 +86,7 @@ class StorageService:
     def get_download_url(file_key: str) -> str:
         """Pre-signed GET URL. Time-limited — regenerated on each request."""
         s3 = get_s3()
-        url = s3.generate_presigned_url(
+        url: str = s3.generate_presigned_url(
             "get_object",
             Params={
                 "Bucket": settings.STORAGE_BUCKET,

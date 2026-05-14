@@ -74,7 +74,11 @@ app = FastAPI(
 # via @limiter.limit("N/period") decorators on auth and mutation endpoints.
 
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+# slowapi's handler signature is (Request, RateLimitExceeded) -> JSONResponse;
+# Starlette's add_exception_handler expects the broader (Request, Exception) ->
+# Response. The narrower types are semantically compatible (RateLimitExceeded
+# IS-A Exception, JSONResponse IS-A Response) but mypy doesn't infer that.
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 #

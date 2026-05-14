@@ -46,7 +46,9 @@ class IdempotencyResult:
 
     key: str
     cached_response: Any | None = None
-    _request: Request = field(repr=False, default=None)
+    # Stored from the FastAPI dependency for use in `store()`. Optional so the
+    # default=None is type-honest; require_idempotency always assigns it.
+    _request: Request | None = field(repr=False, default=None)
 
     async def store(self, response_body: Any) -> None:
         """Persist the response so subsequent duplicate requests return it."""

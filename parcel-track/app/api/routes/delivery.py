@@ -63,10 +63,10 @@ async def update_delivery_status(
     shipment_id: uuid.UUID,
     point_id: uuid.UUID,
     body: DeliveryStatusUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_shipment_member),
     idempotency: IdempotencyResult = Depends(require_idempotency),
-    request: Request = None,
 ):
     if idempotency.cached_response:
         return idempotency.cached_response

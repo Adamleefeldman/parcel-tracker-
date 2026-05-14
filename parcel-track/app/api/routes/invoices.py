@@ -19,9 +19,9 @@ invoice_router = APIRouter(prefix="/shipments/{shipment_id}/invoice", tags=["inv
 async def create_invoice(
     shipment_id: uuid.UUID,
     body: InvoiceCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_admin),
-    request: Request = None,
     idempotency: IdempotencyResult = Depends(require_idempotency),
 ):
     if idempotency.cached_response:

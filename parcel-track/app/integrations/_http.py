@@ -78,7 +78,9 @@ def build_client(
 
 async def _is_circuit_open(provider: str) -> bool:
     redis = get_redis_client()
-    return await redis.exists(_cb_open_key(provider)) == 1
+    # redis-py async returns Any from exists(); the count is an int.
+    count: int = await redis.exists(_cb_open_key(provider))
+    return count == 1
 
 
 async def _record_failure(provider: str) -> bool:
@@ -140,7 +142,10 @@ def _parse_retry_after(value: str | None) -> float | None:
 
 def _backoff_seconds(attempt: int, *, base: float = 0.25, cap: float = 5.0) -> float:
     """Jittered exponential backoff: base * 2**attempt + uniform(0, base)."""
-    return min(base * (2**attempt) + random.uniform(0, base), cap)  # noqa: S311 — jitter, not crypto
+    # min() over float operands returns float, but mypy widens the int**int sub-
+    # expression to Any. Annotate the locals so the return is a real float.
+    backoff: float = base * (2**attempt) + random.uniform(0, base)  # noqa: S311 — jitter, not crypto
+    return min(backoff, cap)
 
 
 async def request(

@@ -22,9 +22,9 @@ async def upsert_customs(
     shipment_id: uuid.UUID,
     container_id: uuid.UUID,
     body: CustomsUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_shipment_member),
-    request: Request = None,
 ):
     return await CustomsService.upsert(
         db, shipment_id, container_id, body, actor, get_client_ip(request)

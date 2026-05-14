@@ -23,9 +23,9 @@ bl_router = APIRouter(prefix="/shipments/{shipment_id}/bl", tags=["bill-of-ladin
 async def upload_bl(
     shipment_id: uuid.UUID,
     body: BLCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_shipment_member),
-    request: Request = None,
 ):
     if actor.role not in (UserRole.ADMIN, UserRole.MOROCCO_AGENT):
         raise HTTPException(403, "Only admin or Morocco agent can upload BL")

@@ -20,9 +20,9 @@ payment_router = APIRouter(prefix="/shipments/{shipment_id}/payments", tags=["pa
 async def add_payment(
     shipment_id: uuid.UUID,
     body: PaymentCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_admin),
-    request: Request = None,
     idempotency: IdempotencyResult = Depends(require_idempotency),
 ):
     if idempotency.cached_response:
