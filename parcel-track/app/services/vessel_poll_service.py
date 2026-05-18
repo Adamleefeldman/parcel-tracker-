@@ -17,7 +17,7 @@ Algorithm (one pass):
             VESSELFINDER_ETA_CHANGE_THRESHOLD_HOURS, update Vessel.eta.
          c. If the derived status flipped INTO {APPROACHING, ARRIVED,
             DELAYED} (i.e. the previous VesselUpdate.status was different),
-            notify ADMIN + CUSTOMER for the vessel's shipment.
+            notify ADMIN + CUSTOMER for the vessel's booking.
     4. Commit per-vessel so a mid-cycle crash doesn't lose all work.
 
 Why we don't write AuditLog rows here:
@@ -250,7 +250,7 @@ class VesselPollService:
 
         # ── Find candidate vessels ────────────────────────────────────────────
         # We want vessels that are mid-voyage (DEPARTED or ETD_SET) and have an
-        # IMO we can match. Eager-load the BL → shipment chain and the most
+        # IMO we can match. Eager-load the BL → booking chain and the most
         # recent prior VesselUpdate so the loop body never lazy-loads.
         result = await db.execute(
             select(Vessel)
@@ -259,7 +259,7 @@ class VesselPollService:
                 Vessel.imo_number.is_not(None),
             )
             .options(
-                selectinload(Vessel.bill_of_lading).selectinload(BillOfLading.shipment),
+                selectinload(Vessel.bill_of_lading).selectinload(BillOfLading.booking),
                 selectinload(Vessel.updates),
             )
         )
@@ -383,11 +383,11 @@ class VesselPollService:
         # Only on a transition INTO a milestone status. If we've been sitting
         # at APPROACHING for the last three ticks we don't keep nagging.
         if new_status in _NOTIFY_STATUSES and new_status != prior_status:
-            shipment_id = vessel.bill_of_lading.shipment_id
+            booking_id = vessel.bill_of_lading.booking_id
             notif_type = _NOTIFICATION_BY_STATUS[new_status]
-            await NotificationService.notify_shipment_roles(
+            await NotificationService.notify_booking_roles(
                 db=db,
-                shipment_id=shipment_id,
+                booking_id=booking_id,
                 notification_type=notif_type,
                 roles=[UserRole.ADMIN, UserRole.CUSTOMER],
             )

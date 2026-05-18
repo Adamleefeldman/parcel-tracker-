@@ -158,13 +158,13 @@ def test_bcrypt_uses_configured_rounds():
     assert h.startswith(f"$2b${rounds:02d}$")
 
 
-# ── ShipmentMembership protocol ──────────────────────────────────────────────
+# ── BookingMembership protocol ───────────────────────────────────────────────
 
 
-def test_admin_membership_satisfies_shipment_membership_protocol():
+def test_admin_membership_satisfies_booking_membership_protocol():
     from app.core.enums import UserRole
-    from app.middleware.auth import ShipmentMembership, _AdminMembership
+    from app.middleware.auth import BookingMembership, _AdminMembership
 
     m = _AdminMembership()
-    assert isinstance(m, ShipmentMembership)
+    assert isinstance(m, BookingMembership)
     assert m.effective_role is UserRole.ADMIN

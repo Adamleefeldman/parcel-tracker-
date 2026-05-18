@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.enums import NotificationType, UserRole
-from app.db.models import Notification, ShipmentUser, User
+from app.db.models import BookingUser, Notification, User
 
 logger = logging.getLogger("parceltrack.notifications")
 
@@ -28,7 +28,7 @@ NOTIFICATION_TEMPLATES: dict[NotificationType, tuple[str, str]] = {
     ),
     NotificationType.INVOICE_RECEIVED: (
         "Invoice received",
-        "A new invoice has been uploaded for your shipment.",
+        "A new invoice has been uploaded for your booking.",
     ),
     NotificationType.PAYMENT_CONFIRMED: (
         "Payment confirmed",
@@ -40,11 +40,11 @@ NOTIFICATION_TEMPLATES: dict[NotificationType, tuple[str, str]] = {
     ),
     NotificationType.VESSEL_DEPARTED: (
         "Vessel departed",
-        "Your shipment has departed from the port of loading.",
+        "Your booking has departed from the port of loading.",
     ),
     NotificationType.VESSEL_APPROACHING: (
         "Vessel approaching",
-        "Your shipment is approaching the destination port.",
+        "Your booking is approaching the destination port.",
     ),
     NotificationType.VESSEL_DELAYED: (
         "Vessel delayed",
@@ -73,18 +73,18 @@ NOTIFICATION_TEMPLATES: dict[NotificationType, tuple[str, str]] = {
 
 class NotificationService:
     @staticmethod
-    async def notify_shipment_roles(
+    async def notify_booking_roles(
         db: AsyncSession,
-        shipment_id: uuid.UUID,
+        booking_id: uuid.UUID,
         notification_type: NotificationType,
         roles: list[UserRole],
         override_message: str | None = None,
     ) -> None:
-        """Notify all members of a shipment who hold one of the given roles."""
+        """Notify all members of a booking who hold one of the given roles."""
         result = await db.execute(
-            select(ShipmentUser)
-            .where(ShipmentUser.shipment_id == shipment_id)
-            .options(selectinload(ShipmentUser.user))
+            select(BookingUser)
+            .where(BookingUser.booking_id == booking_id)
+            .options(selectinload(BookingUser.user))
         )
         memberships = result.scalars().all()
 
@@ -93,7 +93,7 @@ class NotificationService:
                 await NotificationService.send(
                     db=db,
                     user_id=membership.user_id,
-                    shipment_id=shipment_id,
+                    booking_id=booking_id,
                     notification_type=notification_type,
                     override_message=override_message,
                 )
@@ -102,7 +102,7 @@ class NotificationService:
     async def send(
         db: AsyncSession,
         user_id: uuid.UUID,
-        shipment_id: uuid.UUID | None,
+        booking_id: uuid.UUID | None,
         notification_type: NotificationType,
         override_message: str | None = None,
     ) -> None:
@@ -113,7 +113,7 @@ class NotificationService:
 
         notif = Notification(
             user_id=user_id,
-            shipment_id=shipment_id,
+            booking_id=booking_id,
             type=notification_type,
             title=title,
             message=message,

@@ -14,8 +14,9 @@ build/
 .venv/
 venv/
 
-# Environment variables
+# Environment variables (.env and any per-environment overrides like .env.test)
 .env
+.env.*
 
 # File-backed Docker secrets — never commit values. Only the dir scaffolding
 # (.gitkeep + README) is tracked; everything else is ignored.

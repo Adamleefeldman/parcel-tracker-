@@ -19,7 +19,7 @@ class TestRequestId:
 
     async def test_response_includes_x_request_id(self, client: AsyncClient, admin_token: str):
         h = {"Authorization": f"Bearer {admin_token}"}
-        r = await client.get("/api/v1/shipments", headers=h)
+        r = await client.get("/api/v1/bookings", headers=h)
         assert r.status_code == 200
 
         rid = r.headers.get("X-Request-ID")
@@ -28,8 +28,8 @@ class TestRequestId:
 
     async def test_request_id_unique_per_request(self, client: AsyncClient, admin_token: str):
         h = {"Authorization": f"Bearer {admin_token}"}
-        r1 = await client.get("/api/v1/shipments", headers=h)
-        r2 = await client.get("/api/v1/shipments", headers=h)
+        r1 = await client.get("/api/v1/bookings", headers=h)
+        r2 = await client.get("/api/v1/bookings", headers=h)
 
         rid1 = r1.headers.get("X-Request-ID")
         rid2 = r2.headers.get("X-Request-ID")
@@ -91,7 +91,7 @@ class TestSecurityHeaders:
 
     async def test_security_headers_present(self, client: AsyncClient, admin_token: str):
         h = {"Authorization": f"Bearer {admin_token}"}
-        r = await client.get("/api/v1/shipments", headers=h)
+        r = await client.get("/api/v1/bookings", headers=h)
 
         assert r.headers.get("X-Content-Type-Options") == "nosniff"
         assert r.headers.get("X-Frame-Options") == "DENY"

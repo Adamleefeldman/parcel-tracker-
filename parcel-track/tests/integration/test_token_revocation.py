@@ -32,7 +32,7 @@ class TestTokenRevocation:
         h = {"Authorization": f"Bearer {access}"}
 
         # Verify token works before logout
-        r = await client.get("/api/v1/shipments", headers=h)
+        r = await client.get("/api/v1/bookings", headers=h)
         assert r.status_code == 200
 
         # Logout
@@ -44,7 +44,7 @@ class TestTokenRevocation:
         assert r.status_code == 200
 
         # Same access token should now be rejected
-        r = await client.get("/api/v1/shipments", headers=h)
+        r = await client.get("/api/v1/bookings", headers=h)
         assert r.status_code == 401
         assert "revoked" in r.json()["detail"].lower()
 
@@ -77,7 +77,7 @@ class TestTokenRevocation:
 
         # Create a shipment while token is valid
         r = await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "REVOKE-TEST"},
             headers=h,
         )
@@ -92,5 +92,5 @@ class TestTokenRevocation:
         )
 
         # Try accessing the shipment — should be rejected
-        r = await client.get(f"/api/v1/shipments/{sid}", headers=h)
+        r = await client.get(f"/api/v1/bookings/{sid}", headers=h)
         assert r.status_code == 401

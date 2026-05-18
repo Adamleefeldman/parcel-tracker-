@@ -4,7 +4,7 @@ from httpx import AsyncClient
 class TestRolePermissions:
     async def test_admin_can_create_shipment(self, client: AsyncClient, admin_token: str):
         resp = await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "RBAC-SHIP-ADMIN"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -14,7 +14,7 @@ class TestRolePermissions:
         self, client: AsyncClient, morocco_agent_token: str
     ):
         resp = await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "RBAC-SHIP-MA"},
             headers={"Authorization": f"Bearer {morocco_agent_token}"},
         )
@@ -22,7 +22,7 @@ class TestRolePermissions:
 
     async def test_uk_agent_cannot_create_shipment(self, client: AsyncClient, uk_agent_token: str):
         resp = await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "RBAC-SHIP-UK"},
             headers={"Authorization": f"Bearer {uk_agent_token}"},
         )
@@ -30,7 +30,7 @@ class TestRolePermissions:
 
     async def test_customer_cannot_create_shipment(self, client: AsyncClient, customer_token: str):
         resp = await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "RBAC-SHIP-CUST"},
             headers={"Authorization": f"Bearer {customer_token}"},
         )
@@ -62,7 +62,7 @@ class TestRolePermissions:
 
     async def test_admin_can_list_shipments(self, client: AsyncClient, admin_token: str):
         resp = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200
@@ -74,7 +74,7 @@ class TestRolePermissions:
         self, client: AsyncClient, morocco_agent_token: str
     ):
         resp = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {morocco_agent_token}"},
         )
         assert resp.status_code == 200
@@ -82,7 +82,7 @@ class TestRolePermissions:
 
     async def test_uk_agent_can_list_shipments(self, client: AsyncClient, uk_agent_token: str):
         resp = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {uk_agent_token}"},
         )
         assert resp.status_code == 200
@@ -90,7 +90,7 @@ class TestRolePermissions:
 
     async def test_customer_can_list_shipments(self, client: AsyncClient, customer_token: str):
         resp = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {customer_token}"},
         )
         assert resp.status_code == 200
@@ -100,7 +100,7 @@ class TestRolePermissions:
         self, client: AsyncClient, morocco_agent_token: str, shipment: str
     ):
         resp = await client.post(
-            f"/api/v1/shipments/{shipment}/members",
+            f"/api/v1/bookings/{shipment}/members",
             json={"user_id": "00000000-0000-0000-0000-000000000001"},
             headers={"Authorization": f"Bearer {morocco_agent_token}"},
         )
@@ -110,7 +110,7 @@ class TestRolePermissions:
         self, client: AsyncClient, uk_agent_token: str, shipment: str
     ):
         resp = await client.post(
-            f"/api/v1/shipments/{shipment}/members",
+            f"/api/v1/bookings/{shipment}/members",
             json={"user_id": "00000000-0000-0000-0000-000000000001"},
             headers={"Authorization": f"Bearer {uk_agent_token}"},
         )
@@ -120,20 +120,20 @@ class TestRolePermissions:
         self, client: AsyncClient, customer_token: str, shipment: str
     ):
         resp = await client.post(
-            f"/api/v1/shipments/{shipment}/members",
+            f"/api/v1/bookings/{shipment}/members",
             json={"user_id": "00000000-0000-0000-0000-000000000001"},
             headers={"Authorization": f"Bearer {customer_token}"},
         )
         assert resp.status_code == 403
 
 
-class TestShipmentScopedAccess:
+class TestBookingScopedAccess:
     async def test_non_member_sees_empty_list(
         self, client: AsyncClient, uk_agent_token: str, shipment: str
     ):
         """UK Agent exists but has no memberships — list must be empty."""
         resp = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {uk_agent_token}"},
         )
         assert resp.status_code == 200
@@ -145,14 +145,14 @@ class TestShipmentScopedAccess:
         """UK Agent assigned to A sees A but not B in their list."""
         # Admin creates two shipments
         resp_a = await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "SCOPE-SHIP-A"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         ship_a_id = resp_a.json()["id"]
 
         await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "SCOPE-SHIP-B"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -168,16 +168,16 @@ class TestShipmentScopedAccess:
             algorithms=[get_settings().JWT_ALGORITHM],
         )["sub"]
 
-        # Admin assigns UK Agent to Shipment A only
+        # Admin assigns UK Agent to Booking A only
         await client.post(
-            f"/api/v1/shipments/{ship_a_id}/members",
+            f"/api/v1/bookings/{ship_a_id}/members",
             json={"user_id": uk_user_id},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
         # UK Agent's list should contain A but not B
         resp = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {uk_agent_token}"},
         )
         assert resp.status_code == 200
@@ -188,18 +188,18 @@ class TestShipmentScopedAccess:
     async def test_admin_sees_all_shipments(self, client: AsyncClient, admin_token: str):
         """Admin sees both shipments regardless of explicit membership."""
         await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "SCOPE-ADMIN-A"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "SCOPE-ADMIN-B"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
         resp = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200
@@ -210,17 +210,17 @@ class TestShipmentScopedAccess:
     ):
         """Morocco Agent with no memberships always gets an empty list."""
         resp = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {morocco_agent_token}"},
         )
         assert resp.status_code == 200
         assert resp.json()["items"] == []
 
 
-# ── Shipment membership flow ──────────────────────────────────────────────────
+# ── Booking membership flow ──────────────────────────────────────────────────
 
 
-class TestShipmentMembership:
+class TestBookingMembership:
     def _decode_user_id(self, token: str) -> str:
         """Extract user UUID from a JWT access token without making an API call."""
         from jose import jwt
@@ -236,7 +236,7 @@ class TestShipmentMembership:
         """Before assignment: empty list. After assignment: shipment appears."""
         # Phase 1 — UK Agent has no memberships
         before = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {uk_agent_token}"},
         )
         assert before.json()["items"] == []
@@ -244,15 +244,15 @@ class TestShipmentMembership:
         # Admin assigns UK Agent to the shipment
         uk_user_id = self._decode_user_id(uk_agent_token)
         assign = await client.post(
-            f"/api/v1/shipments/{shipment}/members",
+            f"/api/v1/bookings/{shipment}/members",
             json={"user_id": uk_user_id},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert assign.status_code == 200
 
-        # Phase 2 — Shipment now appears in UK Agent's list
+        # Phase 2 — Booking now appears in UK Agent's list
         after = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {uk_agent_token}"},
         )
         ids = [s["id"] for s in after.json()["items"]]
@@ -266,7 +266,7 @@ class TestShipmentMembership:
 
         fake_user_id = str(uuid.uuid4())
         resp = await client.post(
-            f"/api/v1/shipments/{shipment}/members",
+            f"/api/v1/bookings/{shipment}/members",
             json={"user_id": fake_user_id},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -276,18 +276,18 @@ class TestShipmentMembership:
     async def test_assigning_to_non_existent_shipment_rejected(
         self, client: AsyncClient, admin_token: str, uk_agent_token: str
     ):
-        """Route now validates shipment existence — unknown shipment_id returns 404."""
+        """Route now validates shipment existence — unknown booking_id returns 404."""
         import uuid
 
-        fake_shipment_id = str(uuid.uuid4())
+        fake_booking_id = str(uuid.uuid4())
         uk_user_id = self._decode_user_id(uk_agent_token)
         resp = await client.post(
-            f"/api/v1/shipments/{fake_shipment_id}/members",
+            f"/api/v1/bookings/{fake_booking_id}/members",
             json={"user_id": uk_user_id},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 404
-        assert resp.json()["detail"] == "Shipment not found"
+        assert resp.json()["detail"] == "Booking not found"
 
     async def test_duplicate_membership_rejected(
         self, client: AsyncClient, admin_token: str, uk_agent_token: str, shipment: str
@@ -298,19 +298,19 @@ class TestShipmentMembership:
         headers = {"Authorization": f"Bearer {admin_token}"}
 
         first = await client.post(
-            f"/api/v1/shipments/{shipment}/members",
+            f"/api/v1/bookings/{shipment}/members",
             json=payload,
             headers=headers,
         )
         assert first.status_code == 200
 
         second = await client.post(
-            f"/api/v1/shipments/{shipment}/members",
+            f"/api/v1/bookings/{shipment}/members",
             json=payload,
             headers=headers,
         )
         assert second.status_code == 409
-        assert second.json()["detail"] == "User is already a member of this shipment"
+        assert second.json()["detail"] == "User is already a member of this booking"
 
 
 # ── Admin bypass ──────────────────────────────────────────────────────────────
@@ -326,7 +326,7 @@ class TestAdminBypass:
         Admin 2 must still get 200 via the _AdminMembership bypass.
         """
         resp = await client.get(
-            f"/api/v1/shipments/{shipment}",
+            f"/api/v1/bookings/{shipment}",
             headers={"Authorization": f"Bearer {second_admin_token}"},
         )
         assert resp.status_code == 200
@@ -340,7 +340,7 @@ class TestAdminBypass:
         Must receive 403 — proving the bypass is admin-only.
         """
         resp = await client.get(
-            f"/api/v1/shipments/{shipment}",
+            f"/api/v1/bookings/{shipment}",
             headers={"Authorization": f"Bearer {morocco_agent_token}"},
         )
         assert resp.status_code == 403
@@ -350,18 +350,18 @@ class TestAdminBypass:
     ):
         """
         Admin 1 creates a shipment. Admin 2 never touched it.
-        Admin 2's GET /shipments list must include it — the admin
+        Admin 2's GET /bookings list must include it — the admin
         list query branch (role == ADMIN → no membership join) is exercised.
         """
         create_resp = await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "BYPASS-SHIP-001"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         ship_id = create_resp.json()["id"]
 
         list_resp = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {second_admin_token}"},
         )
         assert list_resp.status_code == 200

@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Date,
@@ -30,19 +31,22 @@ from sqlalchemy.sql import func
 
 from app.core.enums import (
     BLStatus,
+    BookingStatus,
     ClearingDocsStatus,
+    ContainerLifecycleStatus,
     ContainerStatus,
     Currency,
+    CustomerPaymentMethod,
     CustomsStatus,
     DeliveryStatus,
+    DeliveryType,
     DocumentEntityType,
     InvoiceStatus,
     NotificationType,
     PaymentStatus,
-    PaymentType,
     PortStatus,
     POStatus,
-    ShipmentStatus,
+    SupplierPaymentType,
     UserRole,
     VesselStatus,
     VesselUpdateStatus,
@@ -83,7 +87,7 @@ class User(Base):
     updated_at: Mapped[datetime] = updated_at()
 
     # Relationships
-    shipment_memberships: Mapped[list["ShipmentUser"]] = relationship(back_populates="user")
+    booking_memberships: Mapped[list["BookingUser"]] = relationship(back_populates="user")
     notifications: Mapped[list["Notification"]] = relationship(back_populates="user")
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
@@ -113,8 +117,8 @@ class InviteToken(Base):
     token_hash: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), nullable=False)
-    shipment_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("shipments.id"), nullable=True
+    booking_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("bookings.id"), nullable=True
     )
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
@@ -126,16 +130,28 @@ class InviteToken(Base):
     created_by_user: Mapped["User"] = relationship(back_populates="invite_tokens")
 
 
-# ── Shipment + membership ─────────────────────────────────────────────────────
+# ── Booking + membership ──────────────────────────────────────────────────────
 
 
-class Shipment(Base):
-    __tablename__ = "shipments"
+class Booking(Base):
+    """
+    A Booking is the shipping-line commitment to move N containers from origin
+    to destination. It aggregates one or more PurchaseOrders via the
+    booking_purchase_orders junction table. One Booking maps to one BL once
+    issued. The `booking_number` is the carrier reference (e.g. Maersk
+    265232434, MSC MEDUCA381150) — assigned by the shipping line; nullable
+    until the Booking Confirmation is received.
+    """
+
+    __tablename__ = "bookings"
 
     id: Mapped[uuid.UUID] = uuid_pk()
     reference: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
-    status: Mapped[ShipmentStatus] = mapped_column(
-        SAEnum(ShipmentStatus), default=ShipmentStatus.DRAFT, nullable=False
+    booking_number: Mapped[str | None] = mapped_column(
+        String(100), unique=True, nullable=True, index=True
+    )
+    status: Mapped[BookingStatus] = mapped_column(
+        SAEnum(BookingStatus), default=BookingStatus.DRAFT, nullable=False
     )
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
@@ -144,57 +160,138 @@ class Shipment(Base):
     updated_at: Mapped[datetime] = updated_at()
 
     # Relationships
-    members: Mapped[list["ShipmentUser"]] = relationship(
-        back_populates="shipment", cascade="all, delete-orphan"
+    members: Mapped[list["BookingUser"]] = relationship(
+        back_populates="booking", cascade="all, delete-orphan"
     )
-    purchase_order: Mapped[Optional["PurchaseOrder"]] = relationship(
-        back_populates="shipment", uselist=False
+    purchase_order_links: Mapped[list["BookingPurchaseOrder"]] = relationship(
+        back_populates="booking", cascade="all, delete-orphan"
     )
-    invoice: Mapped[Optional["Invoice"]] = relationship(back_populates="shipment", uselist=False)
-    payments: Mapped[list["Payment"]] = relationship(back_populates="shipment")
     bill_of_lading: Mapped[Optional["BillOfLading"]] = relationship(
-        back_populates="shipment", uselist=False
+        back_populates="booking", uselist=False
     )
     clearing_docs: Mapped[Optional["ClearingDocs"]] = relationship(
-        back_populates="shipment", uselist=False
+        back_populates="booking", uselist=False
     )
-    delivery_points: Mapped[list["DeliveryPoint"]] = relationship(back_populates="shipment")
-    audit_logs: Mapped[list["AuditLog"]] = relationship(back_populates="shipment")
-    notifications: Mapped[list["Notification"]] = relationship(back_populates="shipment")
+    delivery_points: Mapped[list["DeliveryPoint"]] = relationship(back_populates="booking")
+    audit_logs: Mapped[list["AuditLog"]] = relationship(back_populates="booking")
+    notifications: Mapped[list["Notification"]] = relationship(back_populates="booking")
+
+    @property
+    def purchase_orders(self) -> list["PurchaseOrder"]:
+        """Convenience accessor: flatten the junction table into the PO list."""
+        return [link.purchase_order for link in self.purchase_order_links]
 
 
-class ShipmentUser(Base):
-    """Junction: which users have access to which shipments, and at what role."""
+class BookingUser(Base):
+    """Junction: which users have access to which bookings, and at what role."""
 
-    __tablename__ = "shipment_users"
-    __table_args__ = (UniqueConstraint("shipment_id", "user_id"),)
+    __tablename__ = "booking_users"
+    __table_args__ = (UniqueConstraint("booking_id", "user_id"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    shipment_id: Mapped[uuid.UUID] = mapped_column(
+    booking_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("shipments.id", ondelete="CASCADE"),
+        ForeignKey("bookings.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    # Allows role override per shipment (e.g. someone acting as UK agent only for this job)
+    # Allows role override per booking (e.g. someone acting as UK agent only for this job)
     role_override: Mapped[UserRole | None] = mapped_column(SAEnum(UserRole), nullable=True)
     added_at: Mapped[datetime] = now_utc()
 
-    shipment: Mapped["Shipment"] = relationship(back_populates="members")
-    user: Mapped["User"] = relationship(back_populates="shipment_memberships")
+    booking: Mapped["Booking"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship(back_populates="booking_memberships")
 
     @property
     def effective_role(self) -> UserRole:
         return self.role_override if self.role_override else self.user.role
 
 
+class BookingPurchaseOrder(Base):
+    """
+    Junction: which POs are aggregated under which Booking.
+    Many-to-many because one Booking can carry multiple POs (real example:
+    DP World booking 2601008 covers PO-2026-04 + PO-2026-05) and a single PO
+    can in principle be split across bookings if the supplier ships partial
+    consignments.
+    """
+
+    __tablename__ = "booking_purchase_orders"
+    __table_args__ = (UniqueConstraint("booking_id", "purchase_order_id"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    booking_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("bookings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    purchase_order_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("purchase_orders.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    added_at: Mapped[datetime] = now_utc()
+
+    booking: Mapped["Booking"] = relationship(back_populates="purchase_order_links")
+    purchase_order: Mapped["PurchaseOrder"] = relationship(back_populates="booking_links")
+
+
+# ── Customer-side parties: Broker + Company ──────────────────────────────────
+#
+# These are intentionally minimal in P0.2 — full customer CRM is deferred.
+# A Broker is the POC who arranges and collects payment (e.g. "ZAF" for
+# Zayyan Foods Distribution, "IFFY" for Iffy at Surplus Stock Deals).
+# A Company is the end-buyer firm receiving the container (Chesertons,
+# Surplus, Aryana, BFC, etc.). One Container has at most one Broker and
+# one Company; both FKs are nullable while the deal is being arranged.
+
+
+class Broker(Base):
+    __tablename__ = "brokers"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = now_utc()
+    updated_at: Mapped[datetime] = updated_at()
+
+
+class Company(Base):
+    """End-buyer / receiving company. `aliases` carries free-form alternate
+    spellings ("CHESERTON" / "CHESERTONS" / "CHESERTONS LTD") so import paths
+    can deduplicate without a full CRM. Stored as JSON list-of-strings — works
+    on both Postgres (jsonb behaviour) and SQLite (TEXT)."""
+
+    __tablename__ = "companies"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    legal_name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    aliases: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    registration_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    vat_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    default_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = now_utc()
+    updated_at: Mapped[datetime] = updated_at()
+
+
 # ── Financial: PO, Invoice, Payment ──────────────────────────────────────────
 
 
 class PurchaseOrder(Base):
+    """
+    Purchase Order — created by admin and sent to the supplier (SCDB).
+    A PO exists independently of any Booking until it gets aggregated into one.
+    One PO has at most one supplier Commercial Invoice (Invoice). One PO can
+    be linked to one Booking via BookingPurchaseOrder (the junction enforces
+    uniqueness within a booking but permits split-across-bookings shipments).
+    """
+
     __tablename__ = "purchase_orders"
     __table_args__ = (
         CheckConstraint("quantity >= 0", name="ck_purchase_orders_quantity_non_negative"),
@@ -202,12 +299,6 @@ class PurchaseOrder(Base):
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    shipment_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("shipments.id", ondelete="CASCADE"),
-        unique=True,
-        nullable=False,
-    )
     po_number: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     po_date: Mapped[date] = mapped_column(Date, nullable=False)
     supplier_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -223,7 +314,12 @@ class PurchaseOrder(Base):
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
 
-    shipment: Mapped["Shipment"] = relationship(back_populates="purchase_order")
+    invoice: Mapped[Optional["Invoice"]] = relationship(
+        back_populates="purchase_order", uselist=False
+    )
+    booking_links: Mapped[list["BookingPurchaseOrder"]] = relationship(
+        back_populates="purchase_order", cascade="all, delete-orphan"
+    )
     document: Mapped[Optional["Document"]] = relationship(
         primaryjoin=(
             "and_(Document.entity_type=='purchase_order',"
@@ -234,15 +330,25 @@ class PurchaseOrder(Base):
         viewonly=True,
     )
 
+    @property
+    def bookings(self) -> list["Booking"]:
+        """Convenience accessor: flatten the junction table into the booking list."""
+        return [link.booking for link in self.booking_links]
+
 
 class Invoice(Base):
+    """
+    Supplier Commercial Invoice — one per PurchaseOrder. Issued by SCDB on
+    shipment. Distinct from outbound customer invoices (deferred).
+    """
+
     __tablename__ = "invoices"
     __table_args__ = (CheckConstraint("value >= 0", name="ck_invoices_value_non_negative"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    shipment_id: Mapped[uuid.UUID] = mapped_column(
+    purchase_order_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("shipments.id", ondelete="CASCADE"),
+        ForeignKey("purchase_orders.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
     )
@@ -259,17 +365,25 @@ class Invoice(Base):
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
 
-    shipment: Mapped["Shipment"] = relationship(back_populates="invoice")
+    purchase_order: Mapped["PurchaseOrder"] = relationship(back_populates="invoice")
+    supplier_payments: Mapped[list["SupplierPayment"]] = relationship(
+        back_populates="invoice", cascade="all, delete-orphan"
+    )
 
 
-class Payment(Base):
-    __tablename__ = "payments"
-    __table_args__ = (CheckConstraint("amount > 0", name="ck_payments_amount_positive"),)
+class SupplierPayment(Base):
+    """Outbound payment to the supplier (USD wire to SCDB) against a specific
+    supplier Invoice. Multi-PO bookings have multiple Invoices (one per PO);
+    each Invoice has its own SupplierPayment(s) summing to its value.
+    """
+
+    __tablename__ = "supplier_payments"
+    __table_args__ = (CheckConstraint("amount > 0", name="ck_supplier_payments_amount_positive"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    shipment_id: Mapped[uuid.UUID] = mapped_column(
+    invoice_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("shipments.id", ondelete="CASCADE"),
+        ForeignKey("invoices.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -278,14 +392,72 @@ class Payment(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[Currency] = mapped_column(SAEnum(Currency), nullable=False)
     bank_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    payment_type: Mapped[PaymentType] = mapped_column(SAEnum(PaymentType), nullable=False)
+    payment_type: Mapped[SupplierPaymentType] = mapped_column(
+        SAEnum(SupplierPaymentType, name="paymenttype"), nullable=False
+    )
     status: Mapped[PaymentStatus] = mapped_column(
         SAEnum(PaymentStatus), default=PaymentStatus.UPLOADED, nullable=False
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = now_utc()
 
-    shipment: Mapped["Shipment"] = relationship(back_populates="payments")
+    invoice: Mapped["Invoice"] = relationship(back_populates="supplier_payments")
+
+
+class CustomerPayment(Base):
+    """Inbound payment from a UK customer for a specific Container.
+
+    Captures the structure from the trading-tracker spreadsheet: cash or
+    transfer, optional variance (over/short of the agreed amount), courier
+    and bank-charge expenses, multi-tranche support (the same container can
+    accept N tranches across days), and the outbound customer invoice
+    reference (`customer_invoice_ref`) that batched this payment with
+    others. The full outbound CustomerInvoice entity stays deferred per the
+    scope decision; we record the ref string here so reconciliation works
+    today even without a dedicated invoice table.
+    """
+
+    __tablename__ = "customer_payments"
+    __table_args__ = (
+        CheckConstraint(
+            "amount_received > 0", name="ck_customer_payments_amount_received_positive"
+        ),
+        CheckConstraint(
+            "expense_courier IS NULL OR expense_courier >= 0",
+            name="ck_customer_payments_expense_courier_non_negative",
+        ),
+        CheckConstraint(
+            "expense_bank_charge IS NULL OR expense_bank_charge >= 0",
+            name="ck_customer_payments_expense_bank_charge_non_negative",
+        ),
+        CheckConstraint("tranche_index >= 1", name="ck_customer_payments_tranche_index_positive"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    container_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("containers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    payment_date: Mapped[date] = mapped_column(Date, nullable=False)
+    method: Mapped[CustomerPaymentMethod] = mapped_column(
+        SAEnum(CustomerPaymentMethod), nullable=False
+    )
+    amount_received: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    # variance can be negative (short) or positive (over) — Decimal not constrained.
+    variance: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    expense_courier: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    expense_bank_charge: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    banked_total: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    sender_bank: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    receiver_bank: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    tranche_index: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    customer_invoice_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = now_utc()
+
+    container: Mapped["Container"] = relationship()
 
 
 # ── Bill of Lading + Vessel ───────────────────────────────────────────────────
@@ -299,9 +471,9 @@ class BillOfLading(Base):
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    shipment_id: Mapped[uuid.UUID] = mapped_column(
+    booking_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("shipments.id", ondelete="CASCADE"),
+        ForeignKey("bookings.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
     )
@@ -321,7 +493,7 @@ class BillOfLading(Base):
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
 
-    shipment: Mapped["Shipment"] = relationship(back_populates="bill_of_lading")
+    booking: Mapped["Booking"] = relationship(back_populates="bill_of_lading")
     containers: Mapped[list["Container"]] = relationship(
         back_populates="bill_of_lading", cascade="all, delete-orphan"
     )
@@ -351,6 +523,9 @@ class Vessel(Base):
         Date, nullable=True
     )  # actual departure — triggers in_transit
     eta: Mapped[date | None] = mapped_column(Date, nullable=True)
+    ata: Mapped[date | None] = mapped_column(
+        Date, nullable=True
+    )  # actual arrival — triggers ContainerLifecycleStatus.ARRIVED
     status: Mapped[VesselStatus] = mapped_column(
         SAEnum(VesselStatus), default=VesselStatus.ASSIGNED, nullable=False
     )
@@ -393,7 +568,32 @@ class VesselUpdate(Base):
 
 
 class Container(Base):
+    """A shipping container — the operational unit of the business.
+
+    Carries both the transit-side fields (port/customs status, BL link) and
+    the sale-side fields (delivery type, broker, end company, agreed sale
+    prices in GBP). Per-container sale prices vary because each container
+    can go to a different buyer at a different negotiated rate (e.g. £5.95
+    list for Chesertons vs £6.30 premium for Surplus). Currency defaults to
+    GBP since UK is the sole destination today; deferred FX work will
+    generalise this.
+    """
+
     __tablename__ = "containers"
+    __table_args__ = (
+        CheckConstraint(
+            "sale_price_per_tray IS NULL OR sale_price_per_tray >= 0",
+            name="ck_containers_sale_price_per_tray_non_negative",
+        ),
+        CheckConstraint(
+            "sale_price_per_pallet IS NULL OR sale_price_per_pallet >= 0",
+            name="ck_containers_sale_price_per_pallet_non_negative",
+        ),
+        CheckConstraint(
+            "sale_price_total IS NULL OR sale_price_total >= 0",
+            name="ck_containers_sale_price_total_non_negative",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     bl_id: Mapped[uuid.UUID] = mapped_column(
@@ -414,6 +614,34 @@ class Container(Base):
     )
     destin8_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # ── Lifecycle (P0.4) ─────────────────────────────────────────────────
+    # Derived from concrete events by ContainerLifecycleService.
+    # `dispute_reason` / `disputed_at` are populated when lifecycle_status
+    # is set to DISPUTED; otherwise both are NULL.
+    lifecycle_status: Mapped[ContainerLifecycleStatus] = mapped_column(
+        SAEnum(ContainerLifecycleStatus),
+        default=ContainerLifecycleStatus.ORDERED,
+        nullable=False,
+    )
+    dispute_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    disputed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # ── Sale-side ────────────────────────────────────────────────────────
+    delivery_type: Mapped[DeliveryType | None] = mapped_column(SAEnum(DeliveryType), nullable=True)
+    broker_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("brokers.id"), nullable=True, index=True
+    )
+    end_company_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True, index=True
+    )
+    sale_price_per_tray: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    sale_price_per_pallet: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    sale_price_total: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    sale_currency: Mapped[Currency] = mapped_column(
+        SAEnum(Currency), default=Currency.GBP, nullable=False
+    )
+
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
 
@@ -424,6 +652,11 @@ class Container(Base):
     delivery_assignments: Mapped[list["DeliveryContainer"]] = relationship(
         back_populates="container"
     )
+    # NB: Per CLAUDE.md these relationships use the default lazy strategy.
+    # Callers that need broker / end_company must add explicit selectinload()
+    # at query time (lazy access in async context would crash).
+    broker: Mapped[Optional["Broker"]] = relationship()
+    end_company: Mapped[Optional["Company"]] = relationship()
 
 
 # ── Clearing Docs + Customs ───────────────────────────────────────────────────
@@ -442,9 +675,9 @@ class ClearingDocs(Base):
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    shipment_id: Mapped[uuid.UUID] = mapped_column(
+    booking_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("shipments.id", ondelete="CASCADE"),
+        ForeignKey("bookings.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
     )
@@ -468,7 +701,7 @@ class ClearingDocs(Base):
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
 
-    shipment: Mapped["Shipment"] = relationship(back_populates="clearing_docs")
+    booking: Mapped["Booking"] = relationship(back_populates="clearing_docs")
 
 
 class CustomsRecord(Base):
@@ -531,12 +764,29 @@ class DeliveryPoint(Base):
     __tablename__ = "delivery_points"
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    shipment_id: Mapped[uuid.UUID] = mapped_column(
+    booking_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("shipments.id", ondelete="CASCADE"),
+        ForeignKey("bookings.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
+    # Customer-side parties for last-mile delivery (P0.5). Both nullable
+    # while the deal is being arranged; the broker is the POC arranging
+    # the drop (e.g. ZAF / IFFY) and the end_company is the buying firm.
+    broker_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("brokers.id"), nullable=True, index=True
+    )
+    end_company_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True, index=True
+    )
+    # Direct (port → customer) or Via Warehouse (port → W/H → customer(s)).
+    # Mirrors the spreadsheet's Delivery Type column; nullable until set.
+    delivery_type: Mapped[DeliveryType | None] = mapped_column(SAEnum(DeliveryType), nullable=True)
+    warehouse_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rebundled_at_warehouse: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Legacy: customer_user_id used to point at a User record. With the
+    # Company/Broker split it's redundant — kept nullable for back-compat
+    # with old data, will be retired in a follow-up.
     customer_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
@@ -551,7 +801,10 @@ class DeliveryPoint(Base):
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
 
-    shipment: Mapped["Shipment"] = relationship(back_populates="delivery_points")
+    broker: Mapped[Optional["Broker"]] = relationship()
+    end_company: Mapped[Optional["Company"]] = relationship()
+
+    booking: Mapped["Booking"] = relationship(back_populates="delivery_points")
     container_assignments: Mapped[list["DeliveryContainer"]] = relationship(
         back_populates="delivery_point", cascade="all, delete-orphan"
     )
@@ -652,22 +905,22 @@ class AuditLog(Base):
 
     __tablename__ = "audit_logs"
     __table_args__ = (
-        # Supports "show audit history for shipment X ordered by time" (most common query).
-        Index("ix_audit_logs_shipment_time", "shipment_id", "created_at"),
+        # Supports "show audit history for booking X ordered by time" (most common query).
+        Index("ix_audit_logs_booking_time", "booking_id", "created_at"),
         # Supports "show all actions by user X ordered by time".
         Index("ix_audit_logs_actor_time", "actor_id", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    shipment_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("shipments.id"), nullable=True, index=True
+    booking_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("bookings.id"), nullable=True, index=True
     )
     actor_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
     action: Mapped[str] = mapped_column(
         String(100), nullable=False
-    )  # e.g. "shipment.status_changed"
+    )  # e.g. "booking.status_changed"
     entity_type: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     old_value: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
@@ -677,7 +930,7 @@ class AuditLog(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
 
-    shipment: Mapped[Optional["Shipment"]] = relationship(back_populates="audit_logs")
+    booking: Mapped[Optional["Booking"]] = relationship(back_populates="audit_logs")
 
 
 # ── Notifications ─────────────────────────────────────────────────────────────
@@ -690,8 +943,8 @@ class Notification(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    shipment_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("shipments.id"), nullable=True, index=True
+    booking_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("bookings.id"), nullable=True, index=True
     )
     type: Mapped[NotificationType] = mapped_column(SAEnum(NotificationType), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -701,4 +954,4 @@ class Notification(Base):
     created_at: Mapped[datetime] = now_utc()
 
     user: Mapped["User"] = relationship(back_populates="notifications")
-    shipment: Mapped[Optional["Shipment"]] = relationship(back_populates="notifications")
+    booking: Mapped[Optional["Booking"]] = relationship(back_populates="notifications")

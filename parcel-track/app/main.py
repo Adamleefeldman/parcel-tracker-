@@ -22,8 +22,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.routes import (
     auth_router,
     bl_router,
+    booking_router,
+    broker_router,
     clearing_router,
+    company_router,
     container_router,
+    customer_payment_router,
     customs_router,
     delivery_router,
     doc_router,
@@ -31,7 +35,6 @@ from app.api.routes import (
     notif_router,
     payment_router,
     po_router,
-    shipment_router,
     vessel_router,
 )
 from app.core.config import get_settings
@@ -197,10 +200,13 @@ async def ready(db: AsyncSession = Depends(get_db)):
 PREFIX = "/api/v1"
 
 app.include_router(auth_router, prefix=PREFIX)
-app.include_router(shipment_router, prefix=PREFIX)
+app.include_router(booking_router, prefix=PREFIX)
+app.include_router(broker_router, prefix=PREFIX)
+app.include_router(company_router, prefix=PREFIX)
 app.include_router(po_router, prefix=PREFIX)
 app.include_router(invoice_router, prefix=PREFIX)
 app.include_router(payment_router, prefix=PREFIX)
+app.include_router(customer_payment_router, prefix=PREFIX)
 app.include_router(bl_router, prefix=PREFIX)
 app.include_router(vessel_router, prefix=PREFIX)
 app.include_router(container_router, prefix=PREFIX)

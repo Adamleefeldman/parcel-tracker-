@@ -18,9 +18,9 @@ from tests.integration.conftest import advance_to
 class TestPOValidation:
     async def test_po_quantity_zero_rejected(self, client: AsyncClient, admin_token: str):
         h = {"Authorization": f"Bearer {admin_token}"}
-        sid, _ = await advance_to(client, h, "draft", ref="VAL-PO-QTY")
+        _sid, _ = await advance_to(client, h, "draft", ref="VAL-PO-QTY")
         r = await client.post(
-            f"/api/v1/shipments/{sid}/po",
+            "/api/v1/purchase-orders",
             json={
                 "po_number": "PO-VAL-QTY",
                 "po_date": "2026-01-10",
@@ -36,9 +36,9 @@ class TestPOValidation:
 
     async def test_po_total_value_negative_rejected(self, client: AsyncClient, admin_token: str):
         h = {"Authorization": f"Bearer {admin_token}"}
-        sid, _ = await advance_to(client, h, "draft", ref="VAL-PO-VAL")
+        _sid, _ = await advance_to(client, h, "draft", ref="VAL-PO-VAL")
         r = await client.post(
-            f"/api/v1/shipments/{sid}/po",
+            "/api/v1/purchase-orders",
             json={
                 "po_number": "PO-VAL-VAL",
                 "po_date": "2026-01-10",
@@ -59,9 +59,9 @@ class TestPOValidation:
 class TestInvoiceValidation:
     async def test_invoice_value_zero_rejected(self, client: AsyncClient, admin_token: str):
         h = {"Authorization": f"Bearer {admin_token}"}
-        sid, _ = await advance_to(client, h, "po_submitted", ref="VAL-INV-ZERO")
+        _sid, ctx = await advance_to(client, h, "po_submitted", ref="VAL-INV-ZERO")
         r = await client.post(
-            f"/api/v1/shipments/{sid}/invoice",
+            f"/api/v1/purchase-orders/{ctx['po_id']}/invoice",
             json={
                 "invoice_number": "INV-VAL-ZERO",
                 "invoice_date": "2026-01-15",
@@ -76,9 +76,9 @@ class TestInvoiceValidation:
         self, client: AsyncClient, admin_token: str
     ):
         h = {"Authorization": f"Bearer {admin_token}"}
-        sid, _ = await advance_to(client, h, "po_submitted", ref="VAL-INV-DATE")
+        _sid, ctx = await advance_to(client, h, "po_submitted", ref="VAL-INV-DATE")
         r = await client.post(
-            f"/api/v1/shipments/{sid}/invoice",
+            f"/api/v1/purchase-orders/{ctx['po_id']}/invoice",
             json={
                 "invoice_number": "INV-VAL-DATE",
                 "invoice_date": "2026-03-01",
@@ -97,9 +97,9 @@ class TestInvoiceValidation:
 class TestPaymentValidation:
     async def test_payment_amount_zero_rejected(self, client: AsyncClient, admin_token: str):
         h = {"Authorization": f"Bearer {admin_token}"}
-        sid, _ = await advance_to(client, h, "invoice_received", ref="VAL-PAY-ZERO")
+        _sid, ctx = await advance_to(client, h, "invoice_received", ref="VAL-PAY-ZERO")
         r = await client.post(
-            f"/api/v1/shipments/{sid}/payments",
+            f"/api/v1/invoices/{ctx['invoice_id']}/supplier-payments",
             json={
                 "swift_ref": "SW-VAL-ZERO",
                 "payment_date": "2026-01-20",
@@ -120,7 +120,7 @@ class TestBLValidation:
         h = {"Authorization": f"Bearer {admin_token}"}
         sid, _ = await advance_to(client, h, "payment_confirmed", ref="VAL-BL-WT")
         r = await client.post(
-            f"/api/v1/shipments/{sid}/bl",
+            f"/api/v1/bookings/{sid}/bl",
             json={
                 "bl_number": "BL-VAL-WT",
                 "bl_date": "2026-01-25",
@@ -140,7 +140,7 @@ class TestBLValidation:
         h = {"Authorization": f"Bearer {admin_token}"}
         sid, _ = await advance_to(client, h, "payment_confirmed", ref="VAL-BL-EMPTY")
         r = await client.post(
-            f"/api/v1/shipments/{sid}/bl",
+            f"/api/v1/bookings/{sid}/bl",
             json={
                 "bl_number": "BL-VAL-EMPTY",
                 "bl_date": "2026-01-25",
@@ -160,7 +160,7 @@ class TestBLValidation:
         h = {"Authorization": f"Bearer {admin_token}"}
         sid, _ = await advance_to(client, h, "payment_confirmed", ref="VAL-BL-DUP")
         r = await client.post(
-            f"/api/v1/shipments/{sid}/bl",
+            f"/api/v1/bookings/{sid}/bl",
             json={
                 "bl_number": "BL-VAL-DUP",
                 "bl_date": "2026-01-25",
@@ -190,7 +190,7 @@ class TestClearingDocsValidation:
         h = {"Authorization": f"Bearer {admin_token}"}
         sid, _ = await advance_to(client, h, "draft", ref="VAL-CLR-RATE")
         r = await client.put(
-            f"/api/v1/shipments/{sid}/clearing-docs",
+            f"/api/v1/bookings/{sid}/clearing-docs",
             json={"duty_rate": "-0.5"},
             headers=h,
         )
@@ -202,7 +202,7 @@ class TestClearingDocsValidation:
         h = {"Authorization": f"Bearer {admin_token}"}
         sid, _ = await advance_to(client, h, "draft", ref="VAL-CLR-VAT")
         r = await client.put(
-            f"/api/v1/shipments/{sid}/clearing-docs",
+            f"/api/v1/bookings/{sid}/clearing-docs",
             json={"estimated_duty_vat": "-1"},
             headers=h,
         )
@@ -218,7 +218,7 @@ class TestCustomsValidation:
         sid, ctx = await advance_to(client, h, "in_transit", ref="VAL-CUST-DP")
         cid = ctx["container_ids"][0]
         r = await client.put(
-            f"/api/v1/shipments/{sid}/containers/{cid}/customs",
+            f"/api/v1/bookings/{sid}/containers/{cid}/customs",
             json={"status": "cleared", "clearance_date": "2026-03-01", "duty_paid": "-1"},
             headers=h,
         )
@@ -238,7 +238,7 @@ class TestDeliveryScheduleValidation:
 
         # Create a delivery point first
         r = await client.post(
-            f"/api/v1/shipments/{sid}/delivery/points",
+            f"/api/v1/bookings/{sid}/delivery/points",
             json={
                 "recipient_name": "Recipient",
                 "address": "123 Street",
@@ -252,7 +252,7 @@ class TestDeliveryScheduleValidation:
         dp_id = r.json()["id"]
 
         r = await client.post(
-            f"/api/v1/shipments/{sid}/delivery/points/{dp_id}/schedule",
+            f"/api/v1/bookings/{sid}/delivery/points/{dp_id}/schedule",
             json={
                 "delivery_date": "2026-03-15",
                 "time_window_start": "7am",
@@ -271,7 +271,7 @@ class TestDeliveryScheduleValidation:
         cid = ctx["container_ids"][0]
 
         r = await client.post(
-            f"/api/v1/shipments/{sid}/delivery/points",
+            f"/api/v1/bookings/{sid}/delivery/points",
             json={
                 "recipient_name": "Recipient",
                 "address": "123 Street",
@@ -285,7 +285,7 @@ class TestDeliveryScheduleValidation:
         dp_id = r.json()["id"]
 
         r = await client.post(
-            f"/api/v1/shipments/{sid}/delivery/points/{dp_id}/schedule",
+            f"/api/v1/bookings/{sid}/delivery/points/{dp_id}/schedule",
             json={
                 "delivery_date": "2026-03-15",
                 "time_window_start": "14:00",

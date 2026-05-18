@@ -247,7 +247,7 @@ class TestTokenExpiry:
             algorithm=settings.JWT_ALGORITHM,
         )
         resp = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {expired_token}"},
         )
         assert resp.status_code == 401
@@ -255,7 +255,7 @@ class TestTokenExpiry:
     async def test_tampered_jwt_rejected(self, client: AsyncClient, admin_token: str):
         tampered = admin_token[:-3] + "xxx"
         resp = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {tampered}"},
         )
         assert resp.status_code == 401
@@ -280,7 +280,7 @@ class TestTokenExpiry:
             algorithm=settings.JWT_ALGORITHM,
         )
         resp = await client.get(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             headers={"Authorization": f"Bearer {bad_sub_token}"},
         )
         assert resp.status_code == 401

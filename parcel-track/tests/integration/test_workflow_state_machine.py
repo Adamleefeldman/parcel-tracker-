@@ -37,15 +37,15 @@ class TestSequentialWalkthrough:
     TestRoleEnforcement.  The focus is purely on the state machine logic.
     """
 
-    async def _get_status(self, client: AsyncClient, shipment_id: str, headers: dict) -> str:
+    async def _get_status(self, client: AsyncClient, booking_id: str, headers: dict) -> str:
         """
         Fetch the current shipment status via the detail endpoint.
 
-        Using the full GET /shipments/{id} rather than trusting the response
+        Using the full GET /bookings/{id} rather than trusting the response
         of the mutating endpoint means we are reading the persisted value that
         other users would see — not just what the last write returned.
         """
-        r = await client.get(f"/api/v1/shipments/{shipment_id}", headers=headers)
+        r = await client.get(f"/api/v1/bookings/{booking_id}", headers=headers)
         assert r.status_code == 200, f"Could not fetch shipment: {r.json()}"
         return r.json()["status"]
 
@@ -60,10 +60,10 @@ class TestSequentialWalkthrough:
 
         # ── STEP 1: Create shipment ───────────────────────────────────────────
         # POST /shipments creates the record with status=DRAFT and
-        # automatically adds the acting admin as the first ShipmentUser.
+        # automatically adds the acting admin as the first BookingUser.
         # No preconditions — this is the entry point to the state machine.
         r = await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "WALK-001"},
             headers=h,
         )
@@ -76,7 +76,7 @@ class TestSequentialWalkthrough:
         # At this point it is still in DRAFT status — it has not been formally
         # submitted yet.  The route only creates the DB record.
         r = await client.post(
-            f"/api/v1/shipments/{sid}/po",
+            "/api/v1/purchase-orders",
             json={
                 "po_number": "PO-2026-001",
                 "po_date": "2026-01-10",
@@ -90,6 +90,12 @@ class TestSequentialWalkthrough:
         )
         assert r.status_code == 200, r.json()
         po_id = r.json()["id"]
+        r = await client.post(
+            f"/api/v1/bookings/{sid}/purchase-orders",
+            json={"purchase_order_id": po_id},
+            headers=h,
+        )
+        assert r.status_code == 200, r.json()
 
         # ── STEP 3: Upload the PO document ────────────────────────────────────
         # The precondition for PO_SUBMITTED requires a Document record linked
@@ -114,11 +120,11 @@ class TestSequentialWalkthrough:
         # PATCH /po/{id}/submit:
         #   1. Route checks a Document exists for this PO  (route-level guard)
         #   2. Route sets po.status = SUBMITTED
-        #   3. Route calls ShipmentService.transition_status(PO_SUBMITTED)
+        #   3. Route calls BookingService.transition_status(PO_SUBMITTED)
         #   4. _check_preconditions confirms PO.status == SUBMITTED
         #   5. shipment.status is written and an AuditLog row is inserted
         r = await client.patch(
-            f"/api/v1/shipments/{sid}/po/{po_id}/submit",
+            f"/api/v1/purchase-orders/{po_id}/submit",
             headers=h,
         )
         assert r.status_code == 200, r.json()
@@ -135,7 +141,7 @@ class TestSequentialWalkthrough:
         # We match the invoice value exactly to the PO total so the discrepancy
         # flag is NOT set.  That path is covered in TestPreconditions.
         r = await client.post(
-            f"/api/v1/shipments/{sid}/invoice",
+            f"/api/v1/purchase-orders/{po_id}/invoice",
             json={
                 "invoice_number": "INV-2026-001",
                 "invoice_date": "2026-01-15",  # must be >= po_date
@@ -145,6 +151,7 @@ class TestSequentialWalkthrough:
             headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 200, r.json()
+        invoice_id = r.json()["id"]
         assert await self._get_status(client, sid, h) == "invoice_received"
 
         # ── STEP 6: Record payment → PAYMENT_CONFIRMED ───────────────────────
@@ -155,7 +162,7 @@ class TestSequentialWalkthrough:
         # We pay the full £10 000 in one shot so the threshold is met
         # immediately.  A partial payment scenario is in TestPreconditions.
         r = await client.post(
-            f"/api/v1/shipments/{sid}/payments",
+            f"/api/v1/invoices/{invoice_id}/supplier-payments",
             json={
                 "swift_ref": "SWIFT20260120",
                 "payment_date": "2026-01-20",
@@ -178,7 +185,7 @@ class TestSequentialWalkthrough:
         #
         # Container numbers must match ^[A-Z]{4}\d{7}$ (validated by schema).
         r = await client.post(
-            f"/api/v1/shipments/{sid}/bl",
+            f"/api/v1/bookings/{sid}/bl",
             json={
                 "bl_number": "BL-2026-001",
                 "bl_date": "2026-01-25",
@@ -200,7 +207,7 @@ class TestSequentialWalkthrough:
         # Retrieve container IDs via GET — the POST response calls db.refresh()
         # which expires the relationship, so we fetch via the GET endpoint which
         # uses selectinload(BillOfLading.containers) to guarantee the data loads.
-        r = await client.get(f"/api/v1/shipments/{sid}/bl", headers=h)
+        r = await client.get(f"/api/v1/bookings/{sid}/bl", headers=h)
         assert r.status_code == 200, r.json()
         container_ids = [c["id"] for c in r.json()["containers"]]
         assert len(container_ids) == 2, "Expected 2 containers from BL upload"
@@ -212,7 +219,7 @@ class TestSequentialWalkthrough:
         # transition — it is setup data needed for the departure confirmation.
         # A BL must already exist before a vessel can be assigned.
         r = await client.post(
-            f"/api/v1/shipments/{sid}/vessel",
+            f"/api/v1/bookings/{sid}/vessel",
             json={
                 "vessel_name": "MSC Splendida",
                 "shipping_line": "MSC Mediterranean",
@@ -234,7 +241,7 @@ class TestSequentialWalkthrough:
         #
         # Schema validates eta > atd.
         r = await client.patch(
-            f"/api/v1/shipments/{sid}/vessel/depart",
+            f"/api/v1/bookings/{sid}/vessel/depart",
             json={"atd": "2026-02-01", "eta": "2026-02-14"},
             headers=h,
         )
@@ -256,7 +263,7 @@ class TestSequentialWalkthrough:
         clearance_date = date.today().isoformat()
 
         r = await client.put(
-            f"/api/v1/shipments/{sid}/containers/{container_ids[0]}/customs",
+            f"/api/v1/bookings/{sid}/containers/{container_ids[0]}/customs",
             json={"status": "cleared", "clearance_date": clearance_date},
             headers=h,
         )
@@ -265,7 +272,7 @@ class TestSequentialWalkthrough:
         assert await self._get_status(client, sid, h) == "in_transit"
 
         r = await client.put(
-            f"/api/v1/shipments/{sid}/containers/{container_ids[1]}/customs",
+            f"/api/v1/bookings/{sid}/containers/{container_ids[1]}/customs",
             json={"status": "cleared", "clearance_date": clearance_date},
             headers=h,
         )
@@ -278,7 +285,7 @@ class TestSequentialWalkthrough:
         # It links one or more containers to a recipient address.
         # Creating it does NOT trigger a transition.
         r = await client.post(
-            f"/api/v1/shipments/{sid}/delivery/points",
+            f"/api/v1/bookings/{sid}/delivery/points",
             json={
                 "recipient_name": "Customer A Warehouse",
                 "address": "123 Industrial Park, Tilbury, Essex, TS1 1AA",
@@ -291,17 +298,56 @@ class TestSequentialWalkthrough:
         assert r.status_code == 200, r.json()
         point_id = r.json()["id"]
 
-        # ── STEP 12: Mark delivery as delivered → COMPLETE ───────────────────
+        # ── STEP 12: Mark delivery as delivered ──────────────────────────────
         # PATCH /delivery/points/{id}/status with status=delivered.
-        # The route:
-        #   1. Sets delivery_point.status = DELIVERED
-        #   2. Checks if ALL delivery points for this shipment are now DELIVERED
-        #   3. If so → calls transition_status(COMPLETE)
-        #   4. _check_preconditions confirms all DeliveryPoints are DELIVERED
-        #
-        # We only have one delivery point, so this immediately triggers COMPLETE.
+        # Under P0.4 this no longer triggers COMPLETE on its own — the
+        # COMPLETE precondition now requires every container to reach BANKED
+        # (sale_price_total covered by customer payments). The booking stays
+        # in CLEARED until the customer-side leg lands.
         r = await client.patch(
-            f"/api/v1/shipments/{sid}/delivery/points/{point_id}/status",
+            f"/api/v1/bookings/{sid}/delivery/points/{point_id}/status",
+            json={"status": "delivered"},
+            headers={**h, "Idempotency-Key": str(uuid.uuid4())},
+        )
+        assert r.status_code == 200, r.json()
+        assert await self._get_status(client, sid, h) == "cleared"
+
+        # ── STEP 13: Set per-container sale prices ───────────────────────────
+        # The booking has two containers; price each at £8,000 GBP so the
+        # threshold for the BANKED lifecycle status is concrete.
+        for cid in container_ids:
+            r = await client.patch(
+                f"/api/v1/bookings/{sid}/containers/{cid}/sale",
+                json={"sale_price_total": "8000.00", "sale_currency": "GBP"},
+                headers=h,
+            )
+            assert r.status_code == 200, r.json()
+
+        # ── STEP 14: Receive + bank customer payments for every container ───
+        # Once each container has a banked_total ≥ its sale_price_total, the
+        # ContainerLifecycleService advances it to BANKED. With all containers
+        # BANKED, the COMPLETE precondition is satisfied.
+        for cid in container_ids:
+            r = await client.post(
+                f"/api/v1/bookings/{sid}/containers/{cid}/customer-payments",
+                json={
+                    "payment_date": "2026-04-15",
+                    "method": "transfer",
+                    "amount_received": "8000.00",
+                    "banked_total": "8000.00",
+                },
+                headers={**h, "Idempotency-Key": str(uuid.uuid4())},
+            )
+            assert r.status_code == 200, r.json()
+
+        # ── STEP 15: Trigger COMPLETE via another delivery write ─────────────
+        # The delivery_service tries the COMPLETE transition after every
+        # DELIVERED write. The earlier attempt at step 12 was rejected (no
+        # customer payments yet). PATCH-ing the delivery status again with
+        # the same value re-runs the try-complete path — now all containers
+        # are BANKED so the transition succeeds.
+        r = await client.patch(
+            f"/api/v1/bookings/{sid}/delivery/points/{point_id}/status",
             json={"status": "delivered"},
             headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
@@ -333,14 +379,14 @@ async def _advance_to(
       "draft", "po_submitted", "invoice_received", "payment_confirmed",
       "bl_issued", "in_transit", "cleared"
     """
-    r = await client.post("/api/v1/shipments", json={"reference": ref}, headers=h)
+    r = await client.post("/api/v1/bookings", json={"reference": ref}, headers=h)
     assert r.status_code == 200, f"_advance_to({target!r}): create shipment failed: {r.json()}"
     sid = r.json()["id"]
     if target == "draft":
         return sid, {}
 
     r = await client.post(
-        f"/api/v1/shipments/{sid}/po",
+        "/api/v1/purchase-orders",
         json={
             "po_number": "PO-001",
             "po_date": "2026-01-10",
@@ -354,6 +400,12 @@ async def _advance_to(
     )
     assert r.status_code == 200, f"_advance_to({target!r}): create PO failed: {r.json()}"
     po_id = r.json()["id"]
+    r = await client.post(
+        f"/api/v1/bookings/{sid}/purchase-orders",
+        json={"purchase_order_id": po_id},
+        headers=h,
+    )
+    assert r.status_code == 200, r.json()
 
     r = await client.post(
         "/api/v1/documents/confirm",
@@ -363,13 +415,13 @@ async def _advance_to(
     )
     assert r.status_code == 200, f"_advance_to({target!r}): confirm doc failed: {r.json()}"
 
-    r = await client.patch(f"/api/v1/shipments/{sid}/po/{po_id}/submit", headers=h)
+    r = await client.patch(f"/api/v1/purchase-orders/{po_id}/submit", headers=h)
     assert r.status_code == 200, f"_advance_to({target!r}): submit PO failed: {r.json()}"
     if target == "po_submitted":
         return sid, {"po_id": po_id}
 
     r = await client.post(
-        f"/api/v1/shipments/{sid}/invoice",
+        f"/api/v1/purchase-orders/{po_id}/invoice",
         json={
             "invoice_number": "INV-001",
             "invoice_date": "2026-01-15",
@@ -379,11 +431,12 @@ async def _advance_to(
         headers={**h, "Idempotency-Key": str(uuid.uuid4())},
     )
     assert r.status_code == 200, f"_advance_to({target!r}): create invoice failed: {r.json()}"
+    invoice_id = r.json()["id"]
     if target == "invoice_received":
-        return sid, {"po_id": po_id}
+        return sid, {"po_id": po_id, "invoice_id": invoice_id}
 
     r = await client.post(
-        f"/api/v1/shipments/{sid}/payments",
+        f"/api/v1/invoices/{invoice_id}/supplier-payments",
         json={
             "swift_ref": "SW001",
             "payment_date": "2026-01-20",
@@ -395,10 +448,10 @@ async def _advance_to(
     )
     assert r.status_code == 200, f"_advance_to({target!r}): add payment failed: {r.json()}"
     if target == "payment_confirmed":
-        return sid, {"po_id": po_id}
+        return sid, {"po_id": po_id, "invoice_id": invoice_id}
 
     r = await client.post(
-        f"/api/v1/shipments/{sid}/bl",
+        f"/api/v1/bookings/{sid}/bl",
         json={
             "bl_number": "BL-001",
             "bl_date": "2026-01-25",
@@ -416,14 +469,14 @@ async def _advance_to(
         headers=h,
     )
     assert r.status_code == 200, f"_advance_to({target!r}): upload BL failed: {r.json()}"
-    r2 = await client.get(f"/api/v1/shipments/{sid}/bl", headers=h)
+    r2 = await client.get(f"/api/v1/bookings/{sid}/bl", headers=h)
     assert r2.status_code == 200, f"_advance_to({target!r}): get BL failed: {r2.json()}"
     container_ids = [c["id"] for c in r2.json()["containers"]]
     if target == "bl_issued":
         return sid, {"po_id": po_id, "container_ids": container_ids}
 
     r = await client.post(
-        f"/api/v1/shipments/{sid}/vessel",
+        f"/api/v1/bookings/{sid}/vessel",
         json={
             "vessel_name": "Test Vessel",
             "shipping_line": "TestLine",
@@ -434,7 +487,7 @@ async def _advance_to(
     )
     assert r.status_code == 200, f"_advance_to({target!r}): create vessel failed: {r.json()}"
     r = await client.patch(
-        f"/api/v1/shipments/{sid}/vessel/depart",
+        f"/api/v1/bookings/{sid}/vessel/depart",
         json={"atd": "2026-02-01", "eta": "2026-02-14"},
         headers=h,
     )
@@ -445,7 +498,7 @@ async def _advance_to(
     clearance_date = date.today().isoformat()
     for cid in container_ids:
         r = await client.put(
-            f"/api/v1/shipments/{sid}/containers/{cid}/customs",
+            f"/api/v1/bookings/{sid}/containers/{cid}/customs",
             json={"status": "cleared", "clearance_date": clearance_date},
             headers=h,
         )
@@ -469,8 +522,8 @@ class TestPreconditions:
       B. Precondition failures       — transition allowed by graph but data missing
     """
 
-    async def _get_status(self, client: AsyncClient, shipment_id: str, headers: dict) -> str:
-        r = await client.get(f"/api/v1/shipments/{shipment_id}", headers=headers)
+    async def _get_status(self, client: AsyncClient, booking_id: str, headers: dict) -> str:
+        r = await client.get(f"/api/v1/bookings/{booking_id}", headers=headers)
         assert r.status_code == 200
         return r.json()["status"]
 
@@ -490,8 +543,34 @@ class TestPreconditions:
         h = {"Authorization": f"Bearer {admin_token}"}
         sid, _ = await _advance_to(client, h, "draft", ref="SKIP-001")
 
+        # Create a standalone PO and link it to the booking, but leave the PO
+        # unsubmitted (so the booking is still in DRAFT). Creating an invoice
+        # against an un-submitted PO will trigger the PO_SUBMITTED→INVOICE_RECEIVED
+        # transition attempt, which the state machine must reject from DRAFT.
         r = await client.post(
-            f"/api/v1/shipments/{sid}/invoice",
+            "/api/v1/purchase-orders",
+            json={
+                "po_number": "PO-SKIP",
+                "po_date": "2026-01-10",
+                "product_description": "Tiles",
+                "quantity": "100",
+                "quantity_unit": "boxes",
+                "total_value": "10000.00",
+                "currency": "USD",
+            },
+            headers=h,
+        )
+        assert r.status_code == 200
+        po_id = r.json()["id"]
+        r = await client.post(
+            f"/api/v1/bookings/{sid}/purchase-orders",
+            json={"purchase_order_id": po_id},
+            headers=h,
+        )
+        assert r.status_code == 200
+
+        r = await client.post(
+            f"/api/v1/purchase-orders/{po_id}/invoice",
             json={
                 "invoice_number": "INV-SKIP",
                 "invoice_date": "2026-01-15",
@@ -501,7 +580,7 @@ class TestPreconditions:
             headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 400
-        assert "Cannot transition from 'ShipmentStatus.DRAFT'" in r.json()["detail"]
+        assert "Cannot transition from 'BookingStatus.DRAFT'" in r.json()["detail"]
 
     async def test_backward_transition_blocked(self, client: AsyncClient, admin_token: str):
         """
@@ -512,27 +591,28 @@ class TestPreconditions:
         that PO_SUBMITTED is not in VALID_TRANSITIONS[PO_SUBMITTED] and rejects it.
         """
         h = {"Authorization": f"Bearer {admin_token}"}
-        sid, ctx = await _advance_to(client, h, "po_submitted", ref="BACK-001")
+        _sid, ctx = await _advance_to(client, h, "po_submitted", ref="BACK-001")
         po_id = ctx["po_id"]
 
-        r = await client.patch(f"/api/v1/shipments/{sid}/po/{po_id}/submit", headers=h)
+        r = await client.patch(f"/api/v1/purchase-orders/{po_id}/submit", headers=h)
         assert r.status_code == 400
-        assert "Cannot transition from 'ShipmentStatus.PO_SUBMITTED'" in r.json()["detail"]
+        assert "Cannot transition from 'BookingStatus.PO_SUBMITTED'" in r.json()["detail"]
 
     async def test_terminal_state_blocked(self, client: AsyncClient, admin_token: str):
         """
         No transition is accepted from the COMPLETE terminal state.
 
         VALID_TRANSITIONS[COMPLETE] = [], so any call that internally invokes
-        transition_status() raises 400 immediately.  We verify this by driving
-        the shipment all the way to COMPLETE and then attempting a new invoice.
+        transition_status() raises 400 immediately.  P0.4 makes COMPLETE
+        require all containers BANKED, so we have to set sale prices and
+        record customer payments before COMPLETE will fire.
         """
         h = {"Authorization": f"Bearer {admin_token}"}
         sid, ctx = await _advance_to(client, h, "cleared", ref="TERM-001")
 
-        # Complete the lifecycle: one delivery point → mark delivered
+        # One delivery point covering both containers, then mark delivered.
         r = await client.post(
-            f"/api/v1/shipments/{sid}/delivery/points",
+            f"/api/v1/bookings/{sid}/delivery/points",
             json={
                 "recipient_name": "Final Customer",
                 "address": "1 End Street, London, EC1A 1BB",
@@ -546,7 +626,37 @@ class TestPreconditions:
         point_id = r.json()["id"]
 
         r = await client.patch(
-            f"/api/v1/shipments/{sid}/delivery/points/{point_id}/status",
+            f"/api/v1/bookings/{sid}/delivery/points/{point_id}/status",
+            json={"status": "delivered"},
+            headers={**h, "Idempotency-Key": str(uuid.uuid4())},
+        )
+        assert r.status_code == 200
+
+        # P0.4: drive every container to BANKED so the COMPLETE precondition
+        # holds. Set sale_price_total then receive a matching customer payment.
+        for cid in ctx["container_ids"]:
+            r = await client.patch(
+                f"/api/v1/bookings/{sid}/containers/{cid}/sale",
+                json={"sale_price_total": "8000.00", "sale_currency": "GBP"},
+                headers=h,
+            )
+            assert r.status_code == 200, r.json()
+            r = await client.post(
+                f"/api/v1/bookings/{sid}/containers/{cid}/customer-payments",
+                json={
+                    "payment_date": "2026-04-15",
+                    "method": "transfer",
+                    "amount_received": "8000.00",
+                    "banked_total": "8000.00",
+                },
+                headers={**h, "Idempotency-Key": str(uuid.uuid4())},
+            )
+            assert r.status_code == 200, r.json()
+
+        # Re-firing the delivery DELIVERED with both containers now BANKED
+        # finally lets the COMPLETE transition through.
+        r = await client.patch(
+            f"/api/v1/bookings/{sid}/delivery/points/{point_id}/status",
             json={"status": "delivered"},
             headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
@@ -557,12 +667,10 @@ class TestPreconditions:
         # We re-submit the existing PO: the PO and its document both exist,
         # so all pre-state-machine guards pass, and the rejection comes purely
         # from the state machine's empty VALID_TRANSITIONS[COMPLETE] list.
-        # (Creating a second invoice would fail earlier at the DB UNIQUE constraint
-        # on invoices.shipment_id, which would mask the state machine guard.)
         po_id = ctx["po_id"]
-        r = await client.patch(f"/api/v1/shipments/{sid}/po/{po_id}/submit", headers=h)
+        r = await client.patch(f"/api/v1/purchase-orders/{po_id}/submit", headers=h)
         assert r.status_code == 400
-        assert "Cannot transition from 'ShipmentStatus.COMPLETE'" in r.json()["detail"]
+        assert "Cannot transition from 'BookingStatus.COMPLETE'" in r.json()["detail"]
 
     # ── B. Precondition data failures ────────────────────────────────────────
 
@@ -580,7 +688,7 @@ class TestPreconditions:
 
         # Create PO but deliberately skip the /documents/confirm step
         r = await client.post(
-            f"/api/v1/shipments/{sid}/po",
+            "/api/v1/purchase-orders",
             json={
                 "po_number": "PO-NODOC",
                 "po_date": "2026-01-10",
@@ -594,8 +702,14 @@ class TestPreconditions:
         )
         assert r.status_code == 200
         po_id = r.json()["id"]
+        r = await client.post(
+            f"/api/v1/bookings/{sid}/purchase-orders",
+            json={"purchase_order_id": po_id},
+            headers=h,
+        )
+        assert r.status_code == 200, r.json()
 
-        r = await client.patch(f"/api/v1/shipments/{sid}/po/{po_id}/submit", headers=h)
+        r = await client.patch(f"/api/v1/purchase-orders/{po_id}/submit", headers=h)
         assert r.status_code == 400
         assert "Document must be uploaded before submitting PO" in r.json()["detail"]
 
@@ -608,10 +722,10 @@ class TestPreconditions:
         or the state machine.
         """
         h = {"Authorization": f"Bearer {admin_token}"}
-        sid, _ = await _advance_to(client, h, "draft", ref="NOPO-001")
+        _sid, _ = await _advance_to(client, h, "draft", ref="NOPO-001")
 
         fake_po_id = "00000000-0000-0000-0000-000000000000"
-        r = await client.patch(f"/api/v1/shipments/{sid}/po/{fake_po_id}/submit", headers=h)
+        r = await client.patch(f"/api/v1/purchase-orders/{fake_po_id}/submit", headers=h)
         assert r.status_code == 404
         assert "PO not found" in r.json()["detail"]
 
@@ -632,10 +746,11 @@ class TestPreconditions:
         The shipment must stay in PO_SUBMITTED after the failed attempt.
         """
         h = {"Authorization": f"Bearer {admin_token}"}
-        sid, _ = await _advance_to(client, h, "po_submitted", ref="DISC-001")
+        sid, ctx = await _advance_to(client, h, "po_submitted", ref="DISC-001")
+        po_id = ctx["po_id"]
 
         r = await client.post(
-            f"/api/v1/shipments/{sid}/invoice",
+            f"/api/v1/purchase-orders/{po_id}/invoice",
             json={
                 "invoice_number": "INV-DISC",
                 "invoice_date": "2026-01-15",
@@ -645,7 +760,7 @@ class TestPreconditions:
             headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 400
-        assert "Invoice must be uploaded before proceeding" in r.json()["detail"]
+        assert "discrepancy" in r.json()["detail"].lower()
         assert await self._get_status(client, sid, h) == "po_submitted"
 
     async def test_partial_payment_does_not_trigger_transition(
@@ -661,10 +776,10 @@ class TestPreconditions:
         (payment was accepted) but the status stays INVOICE_RECEIVED.
         """
         h = {"Authorization": f"Bearer {admin_token}"}
-        sid, _ = await _advance_to(client, h, "invoice_received", ref="PART-001")
+        sid, ctx = await _advance_to(client, h, "invoice_received", ref="PART-001")
 
         r = await client.post(
-            f"/api/v1/shipments/{sid}/payments",
+            f"/api/v1/invoices/{ctx['invoice_id']}/supplier-payments",
             json={
                 "swift_ref": "PART-SW001",
                 "payment_date": "2026-01-20",
@@ -690,7 +805,7 @@ class TestPreconditions:
 
         # Intentionally skip POST /vessel — attempt departure immediately
         r = await client.patch(
-            f"/api/v1/shipments/{sid}/vessel/depart",
+            f"/api/v1/bookings/{sid}/vessel/depart",
             json={"atd": "2026-02-01", "eta": "2026-02-14"},
             headers=h,
         )
@@ -712,7 +827,7 @@ class TestPreconditions:
         sid, _ = await _advance_to(client, h, "payment_confirmed", ref="NOBL-001")
 
         r = await client.patch(
-            f"/api/v1/shipments/{sid}/vessel/depart",
+            f"/api/v1/bookings/{sid}/vessel/depart",
             json={"atd": "2026-02-01", "eta": "2026-02-14"},
             headers=h,
         )
@@ -734,7 +849,7 @@ class TestPreconditions:
 
         # Clear only the first container
         r = await client.put(
-            f"/api/v1/shipments/{sid}/containers/{container_ids[0]}/customs",
+            f"/api/v1/bookings/{sid}/containers/{container_ids[0]}/customs",
             json={"status": "cleared", "clearance_date": clearance_date},
             headers=h,
         )
@@ -758,7 +873,7 @@ class TestPreconditions:
 
         # Create two delivery points — one container each
         r1 = await client.post(
-            f"/api/v1/shipments/{sid}/delivery/points",
+            f"/api/v1/bookings/{sid}/delivery/points",
             json={
                 "recipient_name": "Customer A",
                 "address": "1 Alpha Road, London, EC1A 1AA",
@@ -772,7 +887,7 @@ class TestPreconditions:
         point_id_0 = r1.json()["id"]
 
         r2 = await client.post(
-            f"/api/v1/shipments/{sid}/delivery/points",
+            f"/api/v1/bookings/{sid}/delivery/points",
             json={
                 "recipient_name": "Customer B",
                 "address": "2 Beta Lane, Birmingham, B1 1BB",
@@ -786,7 +901,7 @@ class TestPreconditions:
 
         # Mark only the first point as delivered
         r = await client.patch(
-            f"/api/v1/shipments/{sid}/delivery/points/{point_id_0}/status",
+            f"/api/v1/bookings/{sid}/delivery/points/{point_id_0}/status",
             json={"status": "delivered"},
             headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
@@ -800,7 +915,7 @@ class TestRoleEnforcement:
     Every transition gate enforces the correct role requirements.
 
     Two-layer RBAC model:
-      Layer 1 — require_shipment_member: user must have a ShipmentUser row
+      Layer 1 — require_booking_member: user must have a BookingUser row
       Layer 2 — inline role check: user must hold the required role
 
     Test strategy:
@@ -814,8 +929,8 @@ class TestRoleEnforcement:
     roles are blocked.
     """
 
-    async def _get_status(self, client: AsyncClient, shipment_id: str, headers: dict) -> str:
-        r = await client.get(f"/api/v1/shipments/{shipment_id}", headers=headers)
+    async def _get_status(self, client: AsyncClient, booking_id: str, headers: dict) -> str:
+        r = await client.get(f"/api/v1/bookings/{booking_id}", headers=headers)
         assert r.status_code == 200
         return r.json()["status"]
 
@@ -836,7 +951,7 @@ class TestRoleEnforcement:
         sid, _ = await _advance_to(client, h, "draft", ref="ROLE-PO-001")
 
         r = await client.post(
-            f"/api/v1/shipments/{sid}/po",
+            "/api/v1/purchase-orders",
             json={
                 "po_number": "PO-ROLE",
                 "po_date": "2026-01-10",
@@ -849,6 +964,12 @@ class TestRoleEnforcement:
             headers=h,
         )
         po_id = r.json()["id"]
+        r = await client.post(
+            f"/api/v1/bookings/{sid}/purchase-orders",
+            json={"purchase_order_id": po_id},
+            headers=h,
+        )
+        assert r.status_code == 200, r.json()
 
         await client.post(
             "/api/v1/documents/confirm",
@@ -857,7 +978,7 @@ class TestRoleEnforcement:
             headers=h,
         )
 
-        r = await client.patch(f"/api/v1/shipments/{sid}/po/{po_id}/submit", headers=ma_h)
+        r = await client.patch(f"/api/v1/purchase-orders/{po_id}/submit", headers=ma_h)
         assert r.status_code == 403
 
     async def test_only_admin_can_create_invoice(
@@ -869,10 +990,11 @@ class TestRoleEnforcement:
         h = {"Authorization": f"Bearer {admin_token}"}
         uk_h = {"Authorization": f"Bearer {uk_agent_token}"}
 
-        sid, _ = await _advance_to(client, h, "po_submitted", ref="ROLE-INV-001")
+        _sid, ctx = await _advance_to(client, h, "po_submitted", ref="ROLE-INV-001")
+        po_id = ctx["po_id"]
 
         r = await client.post(
-            f"/api/v1/shipments/{sid}/invoice",
+            f"/api/v1/purchase-orders/{po_id}/invoice",
             json={
                 "invoice_number": "INV-ROLE",
                 "invoice_date": "2026-01-15",
@@ -892,10 +1014,10 @@ class TestRoleEnforcement:
         h = {"Authorization": f"Bearer {admin_token}"}
         uk_h = {"Authorization": f"Bearer {uk_agent_token}"}
 
-        sid, _ = await _advance_to(client, h, "invoice_received", ref="ROLE-PAY-001")
+        _sid, ctx = await _advance_to(client, h, "invoice_received", ref="ROLE-PAY-001")
 
         r = await client.post(
-            f"/api/v1/shipments/{sid}/payments",
+            f"/api/v1/invoices/{ctx['invoice_id']}/supplier-payments",
             json={
                 "swift_ref": "ROLE-SW001",
                 "payment_date": "2026-01-20",
@@ -925,7 +1047,7 @@ class TestRoleEnforcement:
         await _add_member(client, admin_token, sid, morocco_agent_token)
 
         r = await client.post(
-            f"/api/v1/shipments/{sid}/bl",
+            f"/api/v1/bookings/{sid}/bl",
             json={
                 "bl_number": "BL-ROLE-001",
                 "bl_date": "2026-01-25",
@@ -954,7 +1076,7 @@ class TestRoleEnforcement:
         await _add_member(client, admin_token, sid, uk_agent_token)
 
         r = await client.post(
-            f"/api/v1/shipments/{sid}/bl",
+            f"/api/v1/bookings/{sid}/bl",
             json={
                 "bl_number": "BL-ROLE-002",
                 "bl_date": "2026-01-25",
@@ -983,7 +1105,7 @@ class TestRoleEnforcement:
         await _add_member(client, admin_token, sid, customer_token)
 
         r = await client.post(
-            f"/api/v1/shipments/{sid}/bl",
+            f"/api/v1/bookings/{sid}/bl",
             json={
                 "bl_number": "BL-ROLE-003",
                 "bl_date": "2026-01-25",
@@ -1019,7 +1141,7 @@ class TestRoleEnforcement:
 
         # Vessel is created by admin (Morocco agent cannot create vessel on its own here)
         await client.post(
-            f"/api/v1/shipments/{sid}/vessel",
+            f"/api/v1/bookings/{sid}/vessel",
             json={
                 "vessel_name": "Role Test Vessel",
                 "shipping_line": "TestLine",
@@ -1030,7 +1152,7 @@ class TestRoleEnforcement:
         )
 
         r = await client.patch(
-            f"/api/v1/shipments/{sid}/vessel/depart",
+            f"/api/v1/bookings/{sid}/vessel/depart",
             json={"atd": "2026-02-01", "eta": "2026-02-14"},
             headers=ma_h,
         )
@@ -1049,7 +1171,7 @@ class TestRoleEnforcement:
         await _add_member(client, admin_token, sid, uk_agent_token)
 
         await client.post(
-            f"/api/v1/shipments/{sid}/vessel",
+            f"/api/v1/bookings/{sid}/vessel",
             json={
                 "vessel_name": "Role Test Vessel",
                 "shipping_line": "TestLine",
@@ -1060,7 +1182,7 @@ class TestRoleEnforcement:
         )
 
         r = await client.patch(
-            f"/api/v1/shipments/{sid}/vessel/depart",
+            f"/api/v1/bookings/{sid}/vessel/depart",
             json={"atd": "2026-02-01", "eta": "2026-02-14"},
             headers=uk_h,
         )
@@ -1085,7 +1207,7 @@ class TestRoleEnforcement:
         await _add_member(client, admin_token, sid, morocco_agent_token)
 
         r = await client.put(
-            f"/api/v1/shipments/{sid}/containers/{container_ids[0]}/customs",
+            f"/api/v1/bookings/{sid}/containers/{container_ids[0]}/customs",
             json={"status": "cleared", "clearance_date": date.today().isoformat()},
             headers=ma_h,
         )
@@ -1105,13 +1227,13 @@ class TestRoleEnforcement:
         await _add_member(client, admin_token, sid, customer_token)
 
         r = await client.put(
-            f"/api/v1/shipments/{sid}/containers/{container_ids[0]}/customs",
+            f"/api/v1/bookings/{sid}/containers/{container_ids[0]}/customs",
             json={"status": "cleared", "clearance_date": date.today().isoformat()},
             headers=cust_h,
         )
         assert r.status_code == 403
 
-    # ── Shipment membership bypass ────────────────────────────────────────────
+    # ── Booking membership bypass ────────────────────────────────────────────
 
     async def test_non_member_blocked_from_shipment(
         self, client: AsyncClient, admin_token: str, morocco_agent_token: str
@@ -1119,7 +1241,7 @@ class TestRoleEnforcement:
         """
         A user who is not a shipment member receives 403 on any member-gated route.
 
-        require_shipment_member looks up ShipmentUser for (shipment_id, user_id).
+        require_booking_member looks up BookingUser for (booking_id, user_id).
         When no row exists, it returns 403 immediately — the route body is never
         reached.
         """
@@ -1129,16 +1251,16 @@ class TestRoleEnforcement:
         sid, _ = await _advance_to(client, h, "draft", ref="ROLE-NONMEM-001")
         # Deliberately do NOT add morocco agent as member
 
-        r = await client.get(f"/api/v1/shipments/{sid}", headers=ma_h)
+        r = await client.get(f"/api/v1/bookings/{sid}", headers=ma_h)
         assert r.status_code == 403
 
     async def test_admin_bypasses_membership_check(
         self, client: AsyncClient, admin_token: str, second_admin_token: str
     ):
         """
-        Admin users can access any shipment without a ShipmentUser row.
+        Admin users can access any shipment without a BookingUser row.
 
-        require_shipment_member returns a synthetic admin ShipmentMembership when
+        require_booking_member returns a synthetic admin BookingMembership when
         the actor is ADMIN, bypassing the database lookup entirely.  This ensures
         admins always have full visibility without needing to be manually added
         to every shipment in the system.
@@ -1149,5 +1271,5 @@ class TestRoleEnforcement:
         sid, _ = await _advance_to(client, h, "draft", ref="ROLE-ADMIN-001")
         # second_admin is NOT added as a member — admin bypass must grant access
 
-        r = await client.get(f"/api/v1/shipments/{sid}", headers=sa_h)
+        r = await client.get(f"/api/v1/bookings/{sid}", headers=sa_h)
         assert r.status_code == 200

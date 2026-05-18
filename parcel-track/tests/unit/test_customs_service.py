@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.core.enums import ContainerStatus, CustomsStatus, PortStatus, ShipmentStatus, UserRole
+from app.core.enums import BookingStatus, ContainerStatus, CustomsStatus, PortStatus, UserRole
 from app.services.customs_service import CustomsService
 
 
@@ -71,9 +71,13 @@ async def test_cleared_cascades_to_container_fields():
     db = _make_db(record, container, [_make_container(ContainerStatus.CLEARED)], record)
 
     with (
-        patch("app.services.customs_service.NotificationService.notify_shipment_roles"),
-        patch("app.services.customs_service.ShipmentService.get", return_value=MagicMock()),
-        patch("app.services.customs_service.ShipmentService.transition_status"),
+        patch("app.services.customs_service.NotificationService.notify_booking_roles"),
+        patch("app.services.customs_service.BookingService.get", return_value=MagicMock()),
+        patch("app.services.customs_service.BookingService.transition_status"),
+        patch(
+            "app.services.customs_service.ContainerLifecycleService.recompute",
+            new_callable=AsyncMock,
+        ),
     ):
         await CustomsService.upsert(
             db, uuid.uuid4(), uuid.uuid4(), _make_body(CustomsStatus.CLEARED), actor, None
@@ -84,8 +88,8 @@ async def test_cleared_cascades_to_container_fields():
 
 
 @pytest.mark.asyncio
-async def test_all_containers_cleared_triggers_shipment_transition():
-    """When the last container clears, shipment transitions to CLEARED."""
+async def test_all_containers_cleared_triggers_booking_transition():
+    """When the last container clears, booking transitions to CLEARED."""
     actor = MagicMock()
     actor.role = UserRole.ADMIN
 
@@ -96,23 +100,27 @@ async def test_all_containers_cleared_triggers_shipment_transition():
 
     db = _make_db(record, container, [_make_container(ContainerStatus.CLEARED)], record)
 
-    shipment_mock = MagicMock()
+    booking_mock = MagicMock()
     with (
-        patch("app.services.customs_service.NotificationService.notify_shipment_roles"),
-        patch("app.services.customs_service.ShipmentService.get", return_value=shipment_mock),
-        patch("app.services.customs_service.ShipmentService.transition_status") as mock_trans,
+        patch("app.services.customs_service.NotificationService.notify_booking_roles"),
+        patch("app.services.customs_service.BookingService.get", return_value=booking_mock),
+        patch("app.services.customs_service.BookingService.transition_status") as mock_trans,
+        patch(
+            "app.services.customs_service.ContainerLifecycleService.recompute",
+            new_callable=AsyncMock,
+        ),
     ):
         await CustomsService.upsert(
             db, uuid.uuid4(), uuid.uuid4(), _make_body(CustomsStatus.CLEARED), actor, None
         )
 
     mock_trans.assert_awaited_once()
-    assert mock_trans.call_args[0][2] == ShipmentStatus.CLEARED
+    assert mock_trans.call_args[0][2] == BookingStatus.CLEARED
 
 
 @pytest.mark.asyncio
 async def test_not_all_cleared_does_not_trigger_transition():
-    """If one container is still pending, shipment should not transition."""
+    """If one container is still pending, booking should not transition."""
     actor = MagicMock()
     actor.role = UserRole.ADMIN
 
@@ -129,8 +137,12 @@ async def test_not_all_cleared_does_not_trigger_transition():
     )
 
     with (
-        patch("app.services.customs_service.NotificationService.notify_shipment_roles"),
-        patch("app.services.customs_service.ShipmentService.transition_status") as mock_trans,
+        patch("app.services.customs_service.NotificationService.notify_booking_roles"),
+        patch("app.services.customs_service.BookingService.transition_status") as mock_trans,
+        patch(
+            "app.services.customs_service.ContainerLifecycleService.recompute",
+            new_callable=AsyncMock,
+        ),
     ):
         await CustomsService.upsert(
             db, uuid.uuid4(), uuid.uuid4(), _make_body(CustomsStatus.CLEARED), actor, None

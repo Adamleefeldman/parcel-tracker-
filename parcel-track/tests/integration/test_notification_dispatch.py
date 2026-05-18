@@ -54,7 +54,7 @@ class TestPushDispatchTransactionSafety:
             await NotificationService.send(
                 db=db,
                 user_id=push_user.id,
-                shipment_id=None,
+                booking_id=None,
                 notification_type=NotificationType.PO_SUBMITTED,
             )
             # Before commit: no dispatch
@@ -69,7 +69,7 @@ class TestPushDispatchTransactionSafety:
             await NotificationService.send(
                 db=db,
                 user_id=push_user.id,
-                shipment_id=None,
+                booking_id=None,
                 notification_type=NotificationType.PO_SUBMITTED,
             )
             await db.rollback()
