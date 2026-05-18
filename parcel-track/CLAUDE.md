@@ -187,7 +187,7 @@ up to close the booking.
 | Concern | Path |
 |---|---|
 | Entry point, CORS, router mounts, exception handlers | `app/main.py` |
-| Per-resource route files (16 modules) | `app/api/routes/` — auth, bl, bookings, clearing, containers, customer_payments, customs, delivery, documents, invoices, notifications, parties (brokers + companies), po, supplier_payments, vessels |
+| Per-resource route files (15 modules, 16 routers — `parties.py` exports broker + company) | `app/api/routes/` — auth, bl, bookings, clearing, containers, customer_payments, customs, delivery, documents, invoices, notifications, parties (brokers + companies), po, supplier_payments, vessels |
 | Booking state machine — read before touching transitions | `app/services/booking_service.py` |
 | Container lifecycle derivation — recompute() called by every event writer | `app/services/container_lifecycle_service.py` |
 | Supplier vs Customer payment services | `app/services/supplier_payment_service.py`, `app/services/customer_payment_service.py` |
