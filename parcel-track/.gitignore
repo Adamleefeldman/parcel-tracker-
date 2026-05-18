@@ -18,6 +18,10 @@ venv/
 .env
 .env.*
 
+# Working-task scratchpad — CLAUDE.md ("Commit Rules") forbids committing
+# planning artifacts. The directory exists locally; nothing in it is tracked.
+tasks/
+
 # File-backed Docker secrets — never commit values. Only the dir scaffolding
 # (.gitkeep + README) is tracked; everything else is ignored.
 /secrets/*
