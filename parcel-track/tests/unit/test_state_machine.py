@@ -1,31 +1,31 @@
-"""Unit tests for the state-machine data and financial masking in shipment_service."""
+"""Unit tests for the state-machine data and financial masking in booking_service."""
 
 from __future__ import annotations
 
-from app.core.enums import ShipmentStatus
-from app.services.shipment_service import VALID_TRANSITIONS, ShipmentService
+from app.core.enums import BookingStatus
+from app.services.booking_service import VALID_TRANSITIONS, BookingService
 
 # ── VALID_TRANSITIONS ─────────────────────────────────────────────────────────
 
 _FORWARD_CHAIN = [
-    ShipmentStatus.DRAFT,
-    ShipmentStatus.PO_SUBMITTED,
-    ShipmentStatus.INVOICE_RECEIVED,
-    ShipmentStatus.PAYMENT_CONFIRMED,
-    ShipmentStatus.BL_ISSUED,
-    ShipmentStatus.IN_TRANSIT,
-    ShipmentStatus.CLEARED,
-    ShipmentStatus.COMPLETE,
+    BookingStatus.DRAFT,
+    BookingStatus.PO_SUBMITTED,
+    BookingStatus.INVOICE_RECEIVED,
+    BookingStatus.PAYMENT_CONFIRMED,
+    BookingStatus.BL_ISSUED,
+    BookingStatus.IN_TRANSIT,
+    BookingStatus.CLEARED,
+    BookingStatus.COMPLETE,
 ]
 
 
 def test_every_status_has_an_entry():
-    for s in ShipmentStatus:
+    for s in BookingStatus:
         assert s in VALID_TRANSITIONS, f"{s!r} missing from VALID_TRANSITIONS"
 
 
 def test_complete_is_terminal():
-    assert VALID_TRANSITIONS[ShipmentStatus.COMPLETE] == []
+    assert VALID_TRANSITIONS[BookingStatus.COMPLETE] == []
 
 
 def test_forward_chain_is_traversable():
@@ -61,7 +61,7 @@ _FINANCIAL_KEYS = {"total_value", "value", "amount", "swift_ref", "duty_paid", "
 _SAFE_KEYS = {"reference", "status", "id"}
 
 _SAMPLE = {
-    "reference": "SHP-001",
+    "reference": "BK-001",
     "status": "draft",
     "id": "abc-123",
     "total_value": "10000.00",
@@ -74,27 +74,27 @@ _SAMPLE = {
 
 
 def test_mask_financials_show_true_returns_unchanged():
-    result = ShipmentService.mask_financials(_SAMPLE.copy(), show=True)
+    result = BookingService.mask_financials(_SAMPLE.copy(), show=True)
     assert result == _SAMPLE
 
 
 def test_mask_financials_show_false_nulls_financial_keys():
-    result = ShipmentService.mask_financials(_SAMPLE.copy(), show=False)
+    result = BookingService.mask_financials(_SAMPLE.copy(), show=False)
     for key in _FINANCIAL_KEYS:
         assert result[key] is None, f"expected {key!r} to be None"
 
 
 def test_mask_financials_show_false_preserves_safe_keys():
-    result = ShipmentService.mask_financials(_SAMPLE.copy(), show=False)
+    result = BookingService.mask_financials(_SAMPLE.copy(), show=False)
     for key in _SAFE_KEYS:
         assert result[key] == _SAMPLE[key], f"expected {key!r} to be unchanged"
 
 
 def test_mask_financials_non_financial_obj_unaffected():
     obj = {"reference": "X", "status": "draft"}
-    assert ShipmentService.mask_financials(obj, show=False) == obj
+    assert BookingService.mask_financials(obj, show=False) == obj
 
 
 def test_mask_financials_empty_dict():
-    assert ShipmentService.mask_financials({}, show=False) == {}
-    assert ShipmentService.mask_financials({}, show=True) == {}
+    assert BookingService.mask_financials({}, show=False) == {}
+    assert BookingService.mask_financials({}, show=True) == {}

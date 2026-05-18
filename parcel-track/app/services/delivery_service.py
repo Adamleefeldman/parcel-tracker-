@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.enums import DeliveryStatus, NotificationType, ShipmentStatus, UserRole
+from app.core.enums import BookingStatus, DeliveryStatus, DeliveryType, NotificationType, UserRole
 from app.core.exceptions import handle_integrity_error
 from app.db.models import DeliveryContainer, DeliveryPoint, DeliverySchedule, User
 from app.schemas.pagination import PaginationParams, paginate
@@ -18,23 +18,29 @@ from app.schemas.schemas import (
     DeliveryScheduleCreate,
     DeliveryStatusUpdate,
 )
+from app.services.booking_service import BookingService
+from app.services.container_lifecycle_service import ContainerLifecycleService
 from app.services.notification_service import NotificationService
-from app.services.shipment_service import ShipmentService
 
 
 class DeliveryService:
     @staticmethod
     async def create_point(
         db: AsyncSession,
-        shipment_id: uuid.UUID,
+        booking_id: uuid.UUID,
         body: DeliveryPointCreate,
     ) -> DeliveryPoint:
         async with handle_integrity_error(
             "One or more containers are already assigned to a delivery point"
         ):
             point = DeliveryPoint(
-                shipment_id=shipment_id,
+                booking_id=booking_id,
                 customer_user_id=body.customer_user_id,
+                broker_id=body.broker_id,
+                end_company_id=body.end_company_id,
+                delivery_type=DeliveryType(body.delivery_type) if body.delivery_type else None,
+                warehouse_name=body.warehouse_name,
+                rebundled_at_warehouse=body.rebundled_at_warehouse,
                 recipient_name=body.recipient_name,
                 address=body.address,
                 contact_name=body.contact_name,
@@ -53,6 +59,8 @@ class DeliveryService:
             .where(DeliveryPoint.id == point.id)
             .options(
                 selectinload(DeliveryPoint.schedule),
+                selectinload(DeliveryPoint.broker),
+                selectinload(DeliveryPoint.end_company),
                 selectinload(DeliveryPoint.container_assignments).selectinload(
                     DeliveryContainer.container
                 ),
@@ -63,11 +71,11 @@ class DeliveryService:
     @staticmethod
     async def list_points(
         db: AsyncSession,
-        shipment_id: uuid.UUID,
+        booking_id: uuid.UUID,
         actor: User,
         pagination: PaginationParams,
     ) -> dict[str, Any]:
-        q = select(DeliveryPoint).where(DeliveryPoint.shipment_id == shipment_id)
+        q = select(DeliveryPoint).where(DeliveryPoint.booking_id == booking_id)
 
         if actor.role == UserRole.CUSTOMER:
             q = q.where(DeliveryPoint.customer_user_id == actor.id)
@@ -77,13 +85,15 @@ class DeliveryService:
                 DeliveryContainer.container
             ),
             selectinload(DeliveryPoint.schedule),
+            selectinload(DeliveryPoint.broker),
+            selectinload(DeliveryPoint.end_company),
         )
         return await paginate(db, q, pagination)
 
     @staticmethod
     async def schedule(
         db: AsyncSession,
-        shipment_id: uuid.UUID,
+        booking_id: uuid.UUID,
         point_id: uuid.UUID,
         body: DeliveryScheduleCreate,
         actor: User,
@@ -103,7 +113,7 @@ class DeliveryService:
             await NotificationService.send(
                 db=db,
                 user_id=point.customer_user_id,
-                shipment_id=shipment_id,
+                booking_id=booking_id,
                 notification_type=NotificationType.DELIVERY_SCHEDULED,
                 override_message=(
                     f"Your delivery is scheduled for {body.delivery_date}"
@@ -116,7 +126,7 @@ class DeliveryService:
     @staticmethod
     async def update_status(
         db: AsyncSession,
-        shipment_id: uuid.UUID,
+        booking_id: uuid.UUID,
         point_id: uuid.UUID,
         body: DeliveryStatusUpdate,
         actor: User,
@@ -146,13 +156,34 @@ class DeliveryService:
                 point.status = DeliveryStatus.AWAITING_SCHEDULE
 
         if new_status == DeliveryStatus.DELIVERED:
-            all_points = await db.execute(
-                select(DeliveryPoint).where(DeliveryPoint.shipment_id == shipment_id)
-            )
-            if all(p.status == DeliveryStatus.DELIVERED for p in all_points.scalars()):
-                shipment = await ShipmentService.get(db, shipment_id, actor)
-                await ShipmentService.transition_status(
-                    db, shipment, ShipmentStatus.COMPLETE, actor, client_ip
+            # Fan the delivered-state out to every container at this point so
+            # their lifecycle_status advances. The container-level state in
+            # turn unlocks the booking's COMPLETE precondition once all
+            # containers reach BANKED (or are explicitly acknowledged DISPUTED).
+            assignments_q = await db.execute(
+                select(DeliveryContainer.container_id).where(
+                    DeliveryContainer.delivery_point_id == point_id
                 )
+            )
+            await db.flush()
+            for (container_id,) in assignments_q.all():
+                await ContainerLifecycleService.recompute(db, container_id)
+
+            # COMPLETE preconditions now check container lifecycle_status —
+            # the precondition will reject if not all containers are BANKED,
+            # so a single DELIVERED update from the route layer is allowed
+            # to attempt the booking transition only if conditions are met.
+            booking = await BookingService.get(db, booking_id, actor)
+            try:
+                await BookingService.transition_status(
+                    db, booking, BookingStatus.COMPLETE, actor, client_ip
+                )
+            except HTTPException as exc:
+                # The COMPLETE precondition legitimately rejects when
+                # customers haven't paid yet (containers not BANKED). The
+                # delivery write still succeeded; we just don't graduate
+                # the booking. Anything other than a 400 propagates.
+                if exc.status_code != 400:
+                    raise
 
         return {"message": f"Delivery status updated to {new_status}"}

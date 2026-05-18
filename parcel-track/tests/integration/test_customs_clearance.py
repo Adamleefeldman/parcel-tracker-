@@ -21,19 +21,19 @@ from tests.integration.conftest import TestSession
 async def _build_awaiting_customs_state(client: AsyncClient, token: str) -> tuple[str, str, str]:
     """Drive the full pre-customs workflow.
 
-    Returns (shipment_id, container1_id, container2_id) with both containers
+    Returns (booking_id, container1_id, container2_id) with both containers
     in AWAITING_CUSTOMS state and the shipment in IN_TRANSIT.
     """
     hdrs = {"Authorization": f"Bearer {token}"}
 
     # 1. Create shipment
-    r = await client.post("/api/v1/shipments", json={"reference": "DAY6-SHIP"}, headers=hdrs)
+    r = await client.post("/api/v1/bookings", json={"reference": "DAY6-SHIP"}, headers=hdrs)
     assert r.status_code == 200, r.text
     ship_id = r.json()["id"]
 
-    # 2. Create PO
+    # 2. Create PO (standalone), then link it to the booking
     r = await client.post(
-        f"/api/v1/shipments/{ship_id}/po",
+        "/api/v1/purchase-orders",
         headers=hdrs,
         json={
             "po_number": "PO-001",
@@ -47,6 +47,12 @@ async def _build_awaiting_customs_state(client: AsyncClient, token: str) -> tupl
     )
     assert r.status_code == 200, r.text
     po_id = r.json()["id"]
+    r = await client.post(
+        f"/api/v1/bookings/{ship_id}/purchase-orders",
+        headers=hdrs,
+        json={"purchase_order_id": po_id},
+    )
+    assert r.status_code == 200, r.text
 
     # 3. Seed a Document row directly (bypasses S3)
     async with TestSession() as db:
@@ -71,12 +77,12 @@ async def _build_awaiting_customs_state(client: AsyncClient, token: str) -> tupl
         await db.commit()
 
     # 4. Submit PO
-    r = await client.patch(f"/api/v1/shipments/{ship_id}/po/{po_id}/submit", headers=hdrs)
+    r = await client.patch(f"/api/v1/purchase-orders/{po_id}/submit", headers=hdrs)
     assert r.status_code == 200, r.text
 
     # 5. Create invoice (matches PO value — no discrepancy flag)
     r = await client.post(
-        f"/api/v1/shipments/{ship_id}/invoice",
+        f"/api/v1/purchase-orders/{po_id}/invoice",
         headers={**hdrs, "Idempotency-Key": str(uuid.uuid4())},
         json={
             "invoice_number": "INV-001",
@@ -86,10 +92,11 @@ async def _build_awaiting_customs_state(client: AsyncClient, token: str) -> tupl
         },
     )
     assert r.status_code == 200, r.text
+    invoice_id = r.json()["id"]
 
-    # 6. Confirm payment
+    # 6. Confirm payment (against the supplier invoice)
     r = await client.post(
-        f"/api/v1/shipments/{ship_id}/payments",
+        f"/api/v1/invoices/{invoice_id}/supplier-payments",
         headers={**hdrs, "Idempotency-Key": str(uuid.uuid4())},
         json={
             "swift_ref": "SWIFT001",
@@ -103,7 +110,7 @@ async def _build_awaiting_customs_state(client: AsyncClient, token: str) -> tupl
 
     # 7. Upload BL with two containers
     r = await client.post(
-        f"/api/v1/shipments/{ship_id}/bl",
+        f"/api/v1/bookings/{ship_id}/bl",
         headers=hdrs,
         json={
             "bl_number": "BL-001",
@@ -127,7 +134,7 @@ async def _build_awaiting_customs_state(client: AsyncClient, token: str) -> tupl
 
     # 8. Assign vessel
     r = await client.post(
-        f"/api/v1/shipments/{ship_id}/vessel",
+        f"/api/v1/bookings/{ship_id}/vessel",
         headers=hdrs,
         json={
             "vessel_name": "MV Tanger",
@@ -140,7 +147,7 @@ async def _build_awaiting_customs_state(client: AsyncClient, token: str) -> tupl
 
     # 9. Confirm departure → IN_TRANSIT
     r = await client.patch(
-        f"/api/v1/shipments/{ship_id}/vessel/depart",
+        f"/api/v1/bookings/{ship_id}/vessel/depart",
         headers=hdrs,
         json={
             "atd": "2026-02-05",
@@ -151,7 +158,7 @@ async def _build_awaiting_customs_state(client: AsyncClient, token: str) -> tupl
 
     # 10. Record vessel arrival → containers → AWAITING_CUSTOMS
     r = await client.post(
-        f"/api/v1/shipments/{ship_id}/vessel/updates",
+        f"/api/v1/bookings/{ship_id}/vessel/updates",
         headers={**hdrs, "Idempotency-Key": str(uuid.uuid4())},
         json={
             "status": "arrived",
@@ -168,7 +175,7 @@ class TestCustomsClearance:
     async def test_upsert_customs_record(self, client: AsyncClient, admin_token: str):
         ship_id, c1_id, _ = await _build_awaiting_customs_state(client, admin_token)
         hdrs = {"Authorization": f"Bearer {admin_token}"}
-        base = f"/api/v1/shipments/{ship_id}/containers/{c1_id}/customs"
+        base = f"/api/v1/bookings/{ship_id}/containers/{c1_id}/customs"
 
         # Initial upsert — creates the record
         r = await client.put(
@@ -206,7 +213,7 @@ class TestCustomsClearance:
     async def test_add_customs_note(self, client: AsyncClient, admin_token: str):
         ship_id, c1_id, _ = await _build_awaiting_customs_state(client, admin_token)
         hdrs = {"Authorization": f"Bearer {admin_token}"}
-        customs_url = f"/api/v1/shipments/{ship_id}/containers/{c1_id}/customs"
+        customs_url = f"/api/v1/bookings/{ship_id}/containers/{c1_id}/customs"
 
         # Cannot add note before customs record exists
         r = await client.post(
@@ -238,7 +245,7 @@ class TestCustomsClearance:
 
         # Clear container 1
         r = await client.put(
-            f"/api/v1/shipments/{ship_id}/containers/{c1_id}/customs",
+            f"/api/v1/bookings/{ship_id}/containers/{c1_id}/customs",
             headers=hdrs,
             json={
                 "status": "cleared",
@@ -249,8 +256,8 @@ class TestCustomsClearance:
         assert r.status_code == 200, r.text
         assert r.json()["status"] == "cleared"
 
-        # Shipment must still be in_transit — container 2 is not cleared
-        r = await client.get(f"/api/v1/shipments/{ship_id}", headers=hdrs)
+        # Booking must still be in_transit — container 2 is not cleared
+        r = await client.get(f"/api/v1/bookings/{ship_id}", headers=hdrs)
         assert r.status_code == 200, r.text
         assert r.json()["status"] == "in_transit"
 
@@ -263,25 +270,25 @@ class TestCustomsClearance:
 
         # Clear container 1
         r = await client.put(
-            f"/api/v1/shipments/{ship_id}/containers/{c1_id}/customs",
+            f"/api/v1/bookings/{ship_id}/containers/{c1_id}/customs",
             headers=hdrs,
             json={"status": "cleared", "clearance_date": "2026-03-02"},
         )
         assert r.status_code == 200, r.text
 
-        # Shipment still blocked
-        r = await client.get(f"/api/v1/shipments/{ship_id}", headers=hdrs)
+        # Booking still blocked
+        r = await client.get(f"/api/v1/bookings/{ship_id}", headers=hdrs)
         assert r.json()["status"] == "in_transit"
 
         # Clear container 2
         r = await client.put(
-            f"/api/v1/shipments/{ship_id}/containers/{c2_id}/customs",
+            f"/api/v1/bookings/{ship_id}/containers/{c2_id}/customs",
             headers=hdrs,
             json={"status": "cleared", "clearance_date": "2026-03-02"},
         )
         assert r.status_code == 200, r.text
 
         # All containers cleared → shipment auto-transitions to cleared
-        r = await client.get(f"/api/v1/shipments/{ship_id}", headers=hdrs)
+        r = await client.get(f"/api/v1/bookings/{ship_id}", headers=hdrs)
         assert r.status_code == 200, r.text
         assert r.json()["status"] == "cleared"

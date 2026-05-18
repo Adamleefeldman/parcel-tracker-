@@ -51,10 +51,6 @@ app.dependency_overrides[get_db] = override_get_db
 
 
 # ── Redis client reset ────────────────────────────────────────────────────────
-# The Redis async client is a module-level singleton. pytest-asyncio creates a
-# fresh event loop per test, so the cached client from a previous test is bound
-# to a closed loop — causing "RuntimeError: Event loop is closed". Resetting
-# the singleton before each test forces a new connection on the current loop.
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -73,25 +69,6 @@ async def reset_redis():
 
 @pytest.fixture(autouse=True)
 def mock_storage_service():
-    """
-    Prevent every test from reaching AWS S3.
-
-    StorageService has four methods that talk to the network:
-      - generate_file_key  → builds an S3 object key string
-      - get_upload_url     → calls boto3 to generate a pre-signed PUT URL
-      - get_download_url   → calls boto3 to generate a pre-signed GET URL
-      - verify_upload      → HEADs the bucket to confirm a presigned PUT landed
-
-    Tests that exercise document-related flows (e.g. submit_po) need a
-    Document row to exist in the DB.  That row is created via the
-    POST /documents/confirm endpoint, which calls verify_upload (must succeed)
-    and get_download_url (must return a URL).  Without this mock both calls
-    crash immediately because there are no AWS credentials in the test
-    environment.
-
-    Using autouse=True means every test in this suite is protected
-    automatically — no individual test needs to remember to opt in.
-    """
     with (
         patch(
             "app.services.storage_service.StorageService.generate_file_key",
@@ -115,14 +92,6 @@ def mock_storage_service():
         ),
     ):
         yield
-
-
-# ── Celery push-notification dispatch ────────────────────────────────────────
-# NotificationService.send enqueues `send_push_notification.delay(notif_id)`.
-# Under the integration test suite we have no Celery broker, no Expo credentials,
-# and no interest in making outbound HTTP calls — so we replace `.delay` with a
-# no-op. Tests that need to assert push behaviour can override this fixture
-# locally with a stub that records the calls instead.
 
 
 @pytest.fixture(autouse=True)
@@ -154,7 +123,6 @@ async def seed_admin(email: str = "admin@test.com", password: str = "adminpass12
 
 
 async def login_and_get_tokens(client: AsyncClient, email: str, password: str) -> dict:
-    """Login and return the full token response dict (access_token, token_type, refresh_token)."""
     resp = await client.post(
         "/api/v1/auth/login",
         json={"email": email, "password": password},
@@ -164,18 +132,6 @@ async def login_and_get_tokens(client: AsyncClient, email: str, password: str) -
 
 
 def token_to_user_id(token: str) -> str:
-    """
-    Extract the user UUID from a JWT access token without re-hitting the DB.
-
-    JWTs are base64url-encoded and publicly readable — the signature
-    guarantees authenticity but the payload itself is not encrypted.
-    get_unverified_claims() decodes the payload section only, skipping
-    signature verification entirely.  This is safe for test helpers
-    because we already know these tokens came from our own test fixtures.
-
-    The 'sub' (subject) claim is set to the user's UUID string by
-    create_access_token() in app/core/security.py.
-    """
     claims = jose_jwt.get_unverified_claims(token)
     return claims["sub"]
 
@@ -183,29 +139,18 @@ def token_to_user_id(token: str) -> str:
 async def _add_member(
     client: AsyncClient,
     admin_token: str,
-    shipment_id: str,
+    booking_id: str,
     user_token: str,
     role_override: str | None = None,
 ) -> None:
-    """
-    Add a user as a member of a shipment via the admin API.
-
-    This is a plain async helper (not a fixture) because it must be
-    called mid-test with specific shipment IDs and user tokens that are
-    only known at runtime.  The user's UUID is extracted from their JWT
-    rather than making an extra /me round-trip.
-
-    Role enforcement tests rely on this: a user must be a shipment member
-    before the role check fires.  Without membership the request is
-    rejected at the membership gate, masking whether the role gate works.
-    """
+    """Add a user as a member of a booking via the admin API."""
     user_id = token_to_user_id(user_token)
     payload: dict = {"user_id": user_id}
     if role_override:
         payload["role_override"] = role_override
 
     resp = await client.post(
-        f"/api/v1/shipments/{shipment_id}/members",
+        f"/api/v1/bookings/{booking_id}/members",
         json=payload,
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -229,7 +174,6 @@ async def client():
 
 @pytest_asyncio.fixture
 async def admin_token(client: AsyncClient):
-    """Seed an admin user directly and return their access token."""
     async with TestSession() as db:
         from app.core.security import hash_password
         from app.db.models import User
@@ -256,7 +200,6 @@ async def admin_token(client: AsyncClient):
 
 @pytest_asyncio.fixture
 async def admin_refresh_token(client: AsyncClient):
-    """Seed a second admin user and return their refresh token."""
     async with TestSession() as db:
         from app.core.security import hash_password
         from app.db.models import User
@@ -283,7 +226,7 @@ async def admin_refresh_token(client: AsyncClient):
 
 @pytest_asyncio.fixture
 async def second_admin_token(client: AsyncClient):
-    """Seed a second admin user directly — used to test admin bypass (no shipment membership)."""
+    """Seed a second admin user directly — used to test admin bypass (no booking membership)."""
     async with TestSession() as db:
         from app.core.security import hash_password
         from app.db.models import User
@@ -311,7 +254,6 @@ async def second_admin_token(client: AsyncClient):
 async def _invite_and_register(
     client: AsyncClient, admin_token: str, email: str, role: str, name: str
 ) -> str:
-    """Helper: admin sends invite, user accepts, returns the new user's access token."""
     invite_resp = await client.post(
         "/api/v1/auth/invite",
         json={"email": email, "role": role},
@@ -334,7 +276,6 @@ async def _invite_and_register(
 
 @pytest_asyncio.fixture
 async def morocco_agent_token(client: AsyncClient, admin_token: str) -> str:
-    """Create a Morocco Agent user via the invite flow and return their access token."""
     return await _invite_and_register(
         client,
         admin_token,
@@ -346,7 +287,6 @@ async def morocco_agent_token(client: AsyncClient, admin_token: str) -> str:
 
 @pytest_asyncio.fixture
 async def uk_agent_token(client: AsyncClient, admin_token: str) -> str:
-    """Create a UK Agent user via the invite flow and return their access token."""
     return await _invite_and_register(
         client,
         admin_token,
@@ -358,7 +298,6 @@ async def uk_agent_token(client: AsyncClient, admin_token: str) -> str:
 
 @pytest_asyncio.fixture
 async def customer_token(client: AsyncClient, admin_token: str) -> str:
-    """Create a Customer user via the invite flow and return their access token."""
     return await _invite_and_register(
         client,
         admin_token,
@@ -369,15 +308,21 @@ async def customer_token(client: AsyncClient, admin_token: str) -> str:
 
 
 @pytest_asyncio.fixture
-async def shipment(client: AsyncClient, admin_token: str) -> str:
-    """Create a shipment as admin and return its ID as a string."""
+async def booking(client: AsyncClient, admin_token: str) -> str:
+    """Create a booking as admin and return its ID as a string."""
     resp = await client.post(
-        "/api/v1/shipments",
-        json={"reference": "TEST-SHIP-001"},
+        "/api/v1/bookings",
+        json={"reference": "TEST-BK-001"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
-    assert resp.status_code == 200, f"Shipment creation failed: {resp.json()}"
+    assert resp.status_code == 200, f"Booking creation failed: {resp.json()}"
     return resp.json()["id"]
+
+
+# Backwards-compatible alias — many older tests still spell this `shipment`.
+@pytest_asyncio.fixture
+async def shipment(booking: str) -> str:
+    return booking
 
 
 # ── State advancement helper ─────────────────────────────────────────────────
@@ -390,7 +335,7 @@ async def advance_to(
     ref: str = "ADV-001",
 ) -> tuple[str, dict]:
     """
-    Drive a freshly created shipment to *target* state and return ``(sid, ctx)``.
+    Drive a freshly created booking to *target* state and return ``(bid, ctx)``.
 
     ``ctx`` holds IDs needed by tests that manipulate specific sub-resources:
       ``po_id``         — available from ``po_submitted`` onwards
@@ -398,22 +343,20 @@ async def advance_to(
 
     Resource names (PO number, invoice number, etc.) are derived from *ref* so
     that multiple calls within a single test don't collide on unique constraints.
-
-    Valid targets:
-      ``"draft"``, ``"po_submitted"``, ``"invoice_received"``,
-      ``"payment_confirmed"``, ``"bl_issued"``, ``"in_transit"``, ``"cleared"``
     """
     import uuid
     from datetime import date
 
-    r = await client.post("/api/v1/shipments", json={"reference": ref}, headers=h)
-    assert r.status_code == 200, f"advance_to({target!r}): create shipment failed: {r.json()}"
-    sid = r.json()["id"]
+    # 1. Create the Booking.
+    r = await client.post("/api/v1/bookings", json={"reference": ref}, headers=h)
+    assert r.status_code == 200, f"advance_to({target!r}): create booking failed: {r.json()}"
+    bid = r.json()["id"]
     if target == "draft":
-        return sid, {}
+        return bid, {}
 
+    # 2. Create a standalone PO and attach it to the Booking.
     r = await client.post(
-        f"/api/v1/shipments/{sid}/po",
+        "/api/v1/purchase-orders",
         json={
             "po_number": f"PO-{ref}",
             "po_date": "2026-01-10",
@@ -429,6 +372,14 @@ async def advance_to(
     po_id = r.json()["id"]
 
     r = await client.post(
+        f"/api/v1/bookings/{bid}/purchase-orders",
+        json={"purchase_order_id": po_id},
+        headers=h,
+    )
+    assert r.status_code == 200, f"advance_to({target!r}): link PO to booking failed: {r.json()}"
+
+    # 3. Upload the PO's document so submit_po passes its document check.
+    r = await client.post(
         "/api/v1/documents/confirm",
         params={"entity_type": "purchase_order", "entity_id": po_id},
         json={"file_key": "k.pdf", "file_name": "po.pdf", "mime_type": "application/pdf"},
@@ -436,13 +387,16 @@ async def advance_to(
     )
     assert r.status_code == 200, f"advance_to({target!r}): confirm doc failed: {r.json()}"
 
-    r = await client.patch(f"/api/v1/shipments/{sid}/po/{po_id}/submit", headers=h)
+    # 4. Submit the PO. This advances the linked booking to PO_SUBMITTED.
+    r = await client.patch(f"/api/v1/purchase-orders/{po_id}/submit", headers=h)
     assert r.status_code == 200, f"advance_to({target!r}): submit PO failed: {r.json()}"
     if target == "po_submitted":
-        return sid, {"po_id": po_id}
+        return bid, {"po_id": po_id}
 
+    # 5. Create the supplier Invoice against the PO. This advances the booking
+    #    to INVOICE_RECEIVED (since every linked PO now has its invoice).
     r = await client.post(
-        f"/api/v1/shipments/{sid}/invoice",
+        f"/api/v1/purchase-orders/{po_id}/invoice",
         json={
             "invoice_number": f"INV-{ref}",
             "invoice_date": "2026-01-15",
@@ -452,11 +406,13 @@ async def advance_to(
         headers={**h, "Idempotency-Key": str(uuid.uuid4())},
     )
     assert r.status_code == 200, f"advance_to({target!r}): create invoice failed: {r.json()}"
+    invoice_id = r.json()["id"]
     if target == "invoice_received":
-        return sid, {"po_id": po_id}
+        return bid, {"po_id": po_id, "invoice_id": invoice_id}
 
+    # 6. Add a supplier payment against the invoice — advances to PAYMENT_CONFIRMED.
     r = await client.post(
-        f"/api/v1/shipments/{sid}/payments",
+        f"/api/v1/invoices/{invoice_id}/supplier-payments",
         json={
             "swift_ref": f"SW-{ref}",
             "payment_date": "2026-01-20",
@@ -468,10 +424,11 @@ async def advance_to(
     )
     assert r.status_code == 200, f"advance_to({target!r}): add payment failed: {r.json()}"
     if target == "payment_confirmed":
-        return sid, {"po_id": po_id}
+        return bid, {"po_id": po_id, "invoice_id": invoice_id}
 
+    # 7. Upload the BL — advances to BL_ISSUED.
     r = await client.post(
-        f"/api/v1/shipments/{sid}/bl",
+        f"/api/v1/bookings/{bid}/bl",
         json={
             "bl_number": f"BL-{ref}",
             "bl_date": "2026-01-25",
@@ -489,14 +446,15 @@ async def advance_to(
         headers=h,
     )
     assert r.status_code == 200, f"advance_to({target!r}): upload BL failed: {r.json()}"
-    r2 = await client.get(f"/api/v1/shipments/{sid}/bl", headers=h)
+    r2 = await client.get(f"/api/v1/bookings/{bid}/bl", headers=h)
     assert r2.status_code == 200, f"advance_to({target!r}): get BL failed: {r2.json()}"
     container_ids = [c["id"] for c in r2.json()["containers"]]
     if target == "bl_issued":
-        return sid, {"po_id": po_id, "container_ids": container_ids}
+        return bid, {"po_id": po_id, "container_ids": container_ids}
 
+    # 8. Create the vessel and confirm departure — advances to IN_TRANSIT.
     r = await client.post(
-        f"/api/v1/shipments/{sid}/vessel",
+        f"/api/v1/bookings/{bid}/vessel",
         json={
             "vessel_name": "Test Vessel",
             "shipping_line": "TestLine",
@@ -507,23 +465,24 @@ async def advance_to(
     )
     assert r.status_code == 200, f"advance_to({target!r}): create vessel failed: {r.json()}"
     r = await client.patch(
-        f"/api/v1/shipments/{sid}/vessel/depart",
+        f"/api/v1/bookings/{bid}/vessel/depart",
         json={"atd": "2026-02-01", "eta": "2026-02-14"},
         headers=h,
     )
     assert r.status_code == 200, f"advance_to({target!r}): confirm departure failed: {r.json()}"
     if target == "in_transit":
-        return sid, {"po_id": po_id, "container_ids": container_ids}
+        return bid, {"po_id": po_id, "container_ids": container_ids}
 
+    # 9. Clear customs on every container — advances to CLEARED.
     clearance_date = date.today().isoformat()
     for cid in container_ids:
         r = await client.put(
-            f"/api/v1/shipments/{sid}/containers/{cid}/customs",
+            f"/api/v1/bookings/{bid}/containers/{cid}/customs",
             json={"status": "cleared", "clearance_date": clearance_date},
             headers=h,
         )
         assert r.status_code == 200, f"advance_to({target!r}): upsert customs failed: {r.json()}"
     if target == "cleared":
-        return sid, {"po_id": po_id, "container_ids": container_ids}
+        return bid, {"po_id": po_id, "container_ids": container_ids}
 
     raise ValueError(f"advance_to: unknown target state {target!r}")

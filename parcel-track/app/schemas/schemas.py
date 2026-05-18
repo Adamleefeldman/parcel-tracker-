@@ -26,7 +26,7 @@ class UUIDModel(BaseModel):
 class InviteRequest(BaseModel):
     email: EmailStr
     role: str  # UserRole value
-    shipment_id: uuid.UUID | None = None
+    booking_id: uuid.UUID | None = None
 
 
 class AcceptInviteRequest(BaseModel):
@@ -65,38 +65,44 @@ class UserOut(UUIDModel):
     created_at: datetime
 
 
-# ── Shipments ─────────────────────────────────────────────────────────────────
+# ── Bookings ──────────────────────────────────────────────────────────────────
 
 
-class ShipmentCreate(BaseModel):
+class BookingCreate(BaseModel):
     reference: str
+    booking_number: str | None = None
 
 
-class ShipmentOut(UUIDModel):
+class BookingOut(UUIDModel):
     reference: str
+    booking_number: str | None = None
     status: str
     created_at: datetime
     updated_at: datetime
 
 
-class ShipmentAddMember(BaseModel):
+class BookingAddMember(BaseModel):
     user_id: uuid.UUID
     role_override: str | None = None
 
 
-class ShipmentDetailOut(ShipmentOut):
-    """Full shipment detail — used by GET /shipments/{id}. Includes all nested relationships."""
+class BookingPOLinkIn(BaseModel):
+    purchase_order_id: uuid.UUID
 
-    purchase_order: Optional["POOut"] = None
-    invoice: Optional["InvoiceOut"] = None
-    payments: list["PaymentOut"] = []
+
+class BookingDetailOut(BookingOut):
+    """Full booking detail — used by GET /bookings/{id}. Includes all nested relationships."""
+
+    purchase_orders: list["POOut"] = []
+    payments: list["SupplierPaymentOut"] = []
     bill_of_lading: Optional["BLOut"] = None
     clearing_docs: Optional["ClearingDocsOut"] = None
     delivery_points: list["DeliveryPointOut"] = []
 
 
-class ShipmentUpdate(BaseModel):
+class BookingUpdate(BaseModel):
     reference: str | None = None
+    booking_number: str | None = None
     # Extend with other editable fields (e.g. notes) if/when needed
 
 
@@ -132,6 +138,7 @@ class POOut(UUIDModel):
     currency: str
     status: str
     notes: str | None = None
+    invoice: Optional["InvoiceOut"] = None
     created_at: datetime
 
 
@@ -172,10 +179,10 @@ class InvoiceOut(UUIDModel):
     created_at: datetime
 
 
-# ── Payment ───────────────────────────────────────────────────────────────────
+# ── Supplier payment ─────────────────────────────────────────────────────────
 
 
-class PaymentCreate(BaseModel):
+class SupplierPaymentCreate(BaseModel):
     swift_ref: str
     payment_date: date
     amount: Decimal
@@ -192,13 +199,82 @@ class PaymentCreate(BaseModel):
         return v
 
 
-class PaymentOut(UUIDModel):
+class SupplierPaymentOut(UUIDModel):
     swift_ref: str | None = None  # None for non-admins
     payment_date: date
     amount: Decimal | None = None  # None for non-admins
     currency: str
     payment_type: str
     status: str
+    created_at: datetime
+
+
+# ── Customer payment (inbound from broker) ───────────────────────────────────
+
+
+class CustomerPaymentCreate(BaseModel):
+    """Create a single tranche of an inbound customer payment for a container.
+
+    Multi-tranche pattern: a container can take ≥1 tranche across days. The
+    caller sets `tranche_index` explicitly so the bookkeeping is unambiguous.
+    """
+
+    payment_date: date
+    method: str  # "cash" | "transfer"
+    amount_received: Decimal  # GBP
+    variance: Decimal | None = None  # signed: negative = short, positive = over
+    expense_courier: Decimal | None = None
+    expense_bank_charge: Decimal | None = None
+    banked_total: Decimal | None = None
+    sender_bank: str | None = None
+    receiver_bank: str | None = None
+    tranche_index: int = 1
+    customer_invoice_ref: str | None = None
+    notes: str | None = None
+
+    @field_validator("method")
+    @classmethod
+    def validate_method(cls, v: str) -> str:
+        if v not in ("cash", "transfer"):
+            raise ValueError("method must be one of: cash, transfer")
+        return v
+
+    @field_validator("amount_received")
+    @classmethod
+    def amount_received_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("amount_received must be greater than zero")
+        return v
+
+    @field_validator("expense_courier", "expense_bank_charge")
+    @classmethod
+    def expenses_non_negative(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v < 0:
+            raise ValueError("Expenses must be non-negative")
+        return v
+
+    @field_validator("tranche_index")
+    @classmethod
+    def tranche_index_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("tranche_index must be >= 1")
+        return v
+
+
+class CustomerPaymentOut(UUIDModel):
+    container_id: uuid.UUID
+    payment_date: date
+    method: str
+    amount_received: Decimal | None = None  # None for non-admins
+    variance: Decimal | None = None
+    expense_courier: Decimal | None = None
+    expense_bank_charge: Decimal | None = None
+    banked_total: Decimal | None = None
+    sender_bank: str | None = None
+    receiver_bank: str | None = None
+    tranche_index: int
+    customer_invoice_ref: str | None = None
+    notes: str | None = None
     created_at: datetime
 
 
@@ -251,14 +327,80 @@ class BLCreate(BaseModel):
         return self
 
 
+class BrokerOut(UUIDModel):
+    code: str
+    name: str
+    phone: str | None = None
+
+
+class CompanyOut(UUIDModel):
+    legal_name: str
+    aliases: list[str] | None = None
+    registration_no: str | None = None
+    vat_no: str | None = None
+    default_address: str | None = None
+
+
+class BrokerCreate(BaseModel):
+    code: str
+    name: str
+    phone: str | None = None
+
+
+class CompanyCreate(BaseModel):
+    legal_name: str
+    aliases: list[str] | None = None
+    registration_no: str | None = None
+    vat_no: str | None = None
+    default_address: str | None = None
+
+
 class ContainerOut(UUIDModel):
     container_number: str
     seal_number: str | None = None
     port_status: str
     status: str
+    lifecycle_status: str = "ordered"
     destin8_ref: str | None = None
     notes: str | None = None
+    delivery_type: str | None = None
+    broker: BrokerOut | None = None
+    end_company: CompanyOut | None = None
+    sale_price_per_tray: Decimal | None = None
+    sale_price_per_pallet: Decimal | None = None
+    sale_price_total: Decimal | None = None
+    sale_currency: str = "GBP"
+    dispute_reason: str | None = None
+    disputed_at: datetime | None = None
     updated_at: datetime
+
+
+class ContainerSaleUpdate(BaseModel):
+    """PATCH payload to attach sale-side data to a container."""
+
+    delivery_type: str | None = None
+    broker_id: uuid.UUID | None = None
+    end_company_id: uuid.UUID | None = None
+    sale_price_per_tray: Decimal | None = None
+    sale_price_per_pallet: Decimal | None = None
+    sale_price_total: Decimal | None = None
+    sale_currency: str | None = None
+
+    @field_validator("delivery_type")
+    @classmethod
+    def validate_delivery_type(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if v not in ("direct", "via_warehouse"):
+            raise ValueError("delivery_type must be one of: direct, via_warehouse")
+        return v
+
+    @field_validator("sale_price_per_tray", "sale_price_per_pallet", "sale_price_total")
+    @classmethod
+    def sale_prices_non_negative(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v < 0:
+            raise ValueError("Sale price must be non-negative")
+        return v
 
 
 class BLOut(UUIDModel):
@@ -429,8 +571,24 @@ class DeliveryPointCreate(BaseModel):
     contact_name: str
     contact_phone: str
     container_ids: list[uuid.UUID]
+    broker_id: uuid.UUID | None = None
+    end_company_id: uuid.UUID | None = None
+    delivery_type: str | None = None  # "direct" | "via_warehouse"
+    warehouse_name: str | None = None
+    rebundled_at_warehouse: bool = False
+    # Legacy field — kept for back-compat with older clients. New clients
+    # should use broker_id + end_company_id instead.
     customer_user_id: uuid.UUID | None = None
     special_instructions: str | None = None
+
+    @field_validator("delivery_type")
+    @classmethod
+    def validate_delivery_type(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if v not in ("direct", "via_warehouse"):
+            raise ValueError("delivery_type must be one of: direct, via_warehouse")
+        return v
 
 
 class DeliveryScheduleCreate(BaseModel):
@@ -487,6 +645,11 @@ class DeliveryPointOut(UUIDModel):
     contact_phone: str
     special_instructions: str | None = None
     status: str
+    delivery_type: str | None = None
+    warehouse_name: str | None = None
+    rebundled_at_warehouse: bool = False
+    broker: BrokerOut | None = None
+    end_company: CompanyOut | None = None
     schedule: DeliveryScheduleOut | None = None
     containers: list[ContainerOut] = []
     created_at: datetime
@@ -556,7 +719,7 @@ class NotificationOut(UUIDModel):
     title: str
     message: str
     read: bool
-    shipment_id: uuid.UUID | None = None
+    booking_id: uuid.UUID | None = None
     created_at: datetime
 
 
@@ -573,5 +736,6 @@ class PaginatedResponse(BaseModel):
 
 
 # Resolve forward references now that all schemas are defined
-ShipmentDetailOut.model_rebuild()
+BookingDetailOut.model_rebuild()
 BLOut.model_rebuild()
+POOut.model_rebuild()

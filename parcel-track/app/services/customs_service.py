@@ -1,6 +1,6 @@
 """Customs service — upsert customs records and add notes.
 
-This is the highest-leverage service: the all-containers-cleared → shipment CLEARED
+This is the highest-leverage service: the all-containers-cleared → booking CLEARED
 cascade will also be called by the Destin8 poller (P1.4) without going through HTTP.
 """
 
@@ -12,24 +12,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.enums import (
+    BookingStatus,
     ContainerStatus,
     CustomsStatus,
     NotificationType,
     PortStatus,
-    ShipmentStatus,
     UserRole,
 )
 from app.db.models import BillOfLading, Container, CustomsNote, CustomsRecord, User
 from app.schemas.schemas import CustomsNoteCreate, CustomsUpdate
+from app.services.booking_service import BookingService
+from app.services.container_lifecycle_service import ContainerLifecycleService
 from app.services.notification_service import NotificationService
-from app.services.shipment_service import ShipmentService
 
 
 class CustomsService:
     @staticmethod
     async def upsert(
         db: AsyncSession,
-        shipment_id: uuid.UUID,
+        booking_id: uuid.UUID,
         container_id: uuid.UUID,
         body: CustomsUpdate,
         actor: User,
@@ -74,27 +75,29 @@ class CustomsService:
         if new_status == CustomsStatus.CLEARED:
             container.status = ContainerStatus.CLEARED
             container.port_status = PortStatus.RELEASED
-            await NotificationService.notify_shipment_roles(
-                db, shipment_id, NotificationType.CONTAINER_CLEARED, [UserRole.ADMIN]
+            await db.flush()
+            await ContainerLifecycleService.recompute(db, container.id)
+            await NotificationService.notify_booking_roles(
+                db, booking_id, NotificationType.CONTAINER_CLEARED, [UserRole.ADMIN]
             )
             all_containers = await db.execute(
                 select(Container)
                 .join(BillOfLading, Container.bl_id == BillOfLading.id)
-                .where(BillOfLading.shipment_id == shipment_id)
+                .where(BillOfLading.booking_id == booking_id)
             )
             containers = all_containers.scalars().all()
             if all(c.status == ContainerStatus.CLEARED for c in containers):
-                shipment = await ShipmentService.get(db, shipment_id, actor)
-                await ShipmentService.transition_status(
-                    db, shipment, ShipmentStatus.CLEARED, actor, client_ip
+                booking = await BookingService.get(db, booking_id, actor)
+                await BookingService.transition_status(
+                    db, booking, BookingStatus.CLEARED, actor, client_ip
                 )
 
         elif new_status in (CustomsStatus.ON_HOLD, CustomsStatus.EXAMINATION):
             container.status = ContainerStatus.ON_HOLD
             container.port_status = PortStatus.CUSTOMS_HOLD
-            await NotificationService.notify_shipment_roles(
+            await NotificationService.notify_booking_roles(
                 db,
-                shipment_id,
+                booking_id,
                 NotificationType.CONTAINER_HOLD,
                 [UserRole.ADMIN],
                 override_message=(

@@ -2,7 +2,7 @@
 Auth & permission middleware.
 
 Every protected route depends on `get_current_user`.
-Shipment-scoped routes additionally call `require_shipment_access`.
+Booking-scoped routes additionally call `require_booking_member`.
 Financial data is stripped via `financial_fields_allowed`.
 """
 
@@ -21,7 +21,7 @@ from app.core.network import get_client_ip as _resolve_client_ip
 from app.core.redis import is_token_revoked
 from app.core.security import decode_access_token
 from app.db.database import get_db
-from app.db.models import ShipmentUser, User
+from app.db.models import BookingUser, User
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -85,11 +85,11 @@ def require_role(*roles: UserRole):
 require_admin = require_role(UserRole.ADMIN)
 
 
-# ── Shipment-scoped access ────────────────────────────────────────────────────
+# ── Booking-scoped access ─────────────────────────────────────────────────────
 
 
 @runtime_checkable
-class ShipmentMembership(Protocol):
+class BookingMembership(Protocol):
     """Minimal contract every membership object exposes to callers."""
 
     @property
@@ -98,69 +98,69 @@ class ShipmentMembership(Protocol):
 
 @dataclass(frozen=True)
 class _AdminMembership:
-    """Synthetic membership for admins — satisfies ShipmentMembership."""
+    """Synthetic membership for admins — satisfies BookingMembership."""
 
     effective_role: UserRole = UserRole.ADMIN
 
 
-async def get_shipment_member(
-    shipment_id: uuid.UUID,
+async def get_booking_member(
+    booking_id: uuid.UUID,
     current_user: User,
     db: AsyncSession,
-) -> ShipmentMembership:
+) -> BookingMembership:
     """
-    Checks that the current user is a member of the given shipment.
-    Returns an object exposing `effective_role` — either a ShipmentUser
+    Checks that the current user is a member of the given booking.
+    Returns an object exposing `effective_role` — either a BookingUser
     row or a synthetic admin membership. Admins are always granted access.
     """
     if current_user.role == UserRole.ADMIN:
         return _AdminMembership()
 
     result = await db.execute(
-        select(ShipmentUser).where(
-            ShipmentUser.shipment_id == shipment_id,
-            ShipmentUser.user_id == current_user.id,
+        select(BookingUser).where(
+            BookingUser.booking_id == booking_id,
+            BookingUser.user_id == current_user.id,
         )
     )
     membership = result.scalar_one_or_none()
     if not membership:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="No access to this shipment"
+            status_code=status.HTTP_403_FORBIDDEN, detail="No access to this booking"
         )
 
     return membership
 
 
-async def require_shipment_member(
-    shipment_id: uuid.UUID,
+async def require_booking_member(
+    booking_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """
-    Dependency: verifies the current user is a member of the shipment (any role).
+    Dependency: verifies the current user is a member of the booking (any role).
     Admins bypass the check automatically via the synthetic admin membership.
     Returns the User so route handlers need no signature changes.
     """
-    await get_shipment_member(shipment_id, current_user, db)
+    await get_booking_member(booking_id, current_user, db)
     return current_user
 
 
-def require_shipment_role(*roles: UserRole):
+def require_booking_role(*roles: UserRole):
     """
-    Dependency factory for shipment-scoped routes.
-    Usage: Depends(require_shipment_role(UserRole.ADMIN, UserRole.UK_AGENT))
+    Dependency factory for booking-scoped routes.
+    Usage: Depends(require_booking_role(UserRole.ADMIN, UserRole.UK_AGENT))
     """
 
     async def check(
-        shipment_id: uuid.UUID,
+        booking_id: uuid.UUID,
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
-    ) -> tuple[User, ShipmentMembership]:
-        membership = await get_shipment_member(shipment_id, current_user, db)
+    ) -> tuple[User, BookingMembership]:
+        membership = await get_booking_member(booking_id, current_user, db)
         if membership.effective_role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient role for this shipment action",
+                detail="Insufficient role for this booking action",
             )
         return current_user, membership
 

@@ -7,32 +7,32 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.enums import BLStatus, NotificationType, ShipmentStatus, UserRole
+from app.core.enums import BLStatus, BookingStatus, NotificationType, UserRole
 from app.core.exceptions import handle_integrity_error
 from app.db.database import get_db
 from app.db.models import BillOfLading, Container, User, Vessel
-from app.middleware.auth import get_client_ip, require_shipment_member
+from app.middleware.auth import get_client_ip, require_booking_member
 from app.schemas.schemas import BLCreate, BLOut
+from app.services.booking_service import BookingService
 from app.services.notification_service import NotificationService
-from app.services.shipment_service import ShipmentService
 
-bl_router = APIRouter(prefix="/shipments/{shipment_id}/bl", tags=["bill-of-lading"])
+bl_router = APIRouter(prefix="/bookings/{booking_id}/bl", tags=["bill-of-lading"])
 
 
 @bl_router.post("", response_model=BLOut)
 async def upload_bl(
-    shipment_id: uuid.UUID,
+    booking_id: uuid.UUID,
     body: BLCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_shipment_member),
+    actor: User = Depends(require_booking_member),
 ):
     if actor.role not in (UserRole.ADMIN, UserRole.MOROCCO_AGENT):
         raise HTTPException(403, "Only admin or Morocco agent can upload BL")
 
     async with handle_integrity_error("A BL or container number in this request already exists"):
         bl = BillOfLading(
-            shipment_id=shipment_id,
+            booking_id=booking_id,
             bl_number=body.bl_number,
             bl_date=body.bl_date,
             shipper_name=body.shipper_name,
@@ -57,13 +57,13 @@ async def upload_bl(
 
         bl.status = BLStatus.CONTAINERS_CREATED
 
-    shipment = await ShipmentService.get(db, shipment_id, actor)
-    await ShipmentService.transition_status(
-        db, shipment, ShipmentStatus.BL_ISSUED, actor, get_client_ip(request)
+    booking = await BookingService.get(db, booking_id, actor)
+    await BookingService.transition_status(
+        db, booking, BookingStatus.BL_ISSUED, actor, get_client_ip(request)
     )
 
-    await NotificationService.notify_shipment_roles(
-        db, shipment_id, NotificationType.BL_UPLOADED, [UserRole.ADMIN, UserRole.UK_AGENT]
+    await NotificationService.notify_booking_roles(
+        db, booking_id, NotificationType.BL_UPLOADED, [UserRole.ADMIN, UserRole.UK_AGENT]
     )
 
     await db.flush()
@@ -71,7 +71,8 @@ async def upload_bl(
         select(BillOfLading)
         .where(BillOfLading.id == bl.id)
         .options(
-            selectinload(BillOfLading.containers),
+            selectinload(BillOfLading.containers).selectinload(Container.broker),
+            selectinload(BillOfLading.containers).selectinload(Container.end_company),
             selectinload(BillOfLading.vessel),
         )
     )
@@ -80,15 +81,16 @@ async def upload_bl(
 
 @bl_router.get("", response_model=BLOut)
 async def get_bl(
-    shipment_id: uuid.UUID,
+    booking_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(require_shipment_member),
+    actor: User = Depends(require_booking_member),
 ):
     result = await db.execute(
         select(BillOfLading)
-        .where(BillOfLading.shipment_id == shipment_id)
+        .where(BillOfLading.booking_id == booking_id)
         .options(
-            selectinload(BillOfLading.containers),
+            selectinload(BillOfLading.containers).selectinload(Container.broker),
+            selectinload(BillOfLading.containers).selectinload(Container.end_company),
             selectinload(BillOfLading.vessel).selectinload(Vessel.updates),
         )
     )

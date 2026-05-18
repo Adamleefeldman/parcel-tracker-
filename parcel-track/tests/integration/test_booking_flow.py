@@ -24,7 +24,7 @@ class TestAuth:
         assert resp.status_code == 401
 
     async def test_protected_route_without_token(self, client: AsyncClient):
-        resp = await client.get("/api/v1/shipments")
+        resp = await client.get("/api/v1/bookings")
         assert resp.status_code == 401
 
     async def test_invite_and_accept(self, client: AsyncClient, admin_token):
@@ -50,13 +50,13 @@ class TestAuth:
         assert "access_token" in resp.json()
 
 
-# ── Shipment lifecycle tests ───────────────────────────────────────────────────
+# ── Booking lifecycle tests ───────────────────────────────────────────────────
 
 
-class TestShipmentLifecycle:
+class TestBookingLifecycle:
     async def test_create_shipment(self, client: AsyncClient, admin_token):
         resp = await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "SHIP-001"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -66,12 +66,12 @@ class TestShipmentLifecycle:
 
     async def test_duplicate_reference_rejected(self, client: AsyncClient, admin_token):
         await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "SHIP-001"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         resp = await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "SHIP-001"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -79,7 +79,7 @@ class TestShipmentLifecycle:
 
     async def test_cannot_skip_state(self, client: AsyncClient, admin_token):
         """Cannot jump from draft to BL_ISSUED — must follow the chain."""
-        # This would require mocking the full state but the logic is in ShipmentService
+        # This would require mocking the full state but the logic is in BookingService
         # Left as a placeholder for full integration testing
         pass
 
@@ -103,7 +103,7 @@ class TestShipmentLifecycle:
         agent_token = accept_resp.json()["access_token"]
 
         resp = await client.post(
-            "/api/v1/shipments",
+            "/api/v1/bookings",
             json={"reference": "SHIP-002"},
             headers={"Authorization": f"Bearer {agent_token}"},
         )

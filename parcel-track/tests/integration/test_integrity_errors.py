@@ -1,7 +1,7 @@
 """
 Integrity error tests.
 
-Validates that ``handle_integrity_error`` (WS3) translates unique constraint
+Validates that ``handle_integrity_error`` translates unique constraint
 violations into clean 409 responses instead of 500s.  All unique constraints
 tested here are declared on the SQLAlchemy model metadata (``unique=True``),
 so they fire in both SQLite (local) and Postgres (CI).
@@ -20,12 +20,6 @@ class TestDuplicateResourceRejection:
     async def test_duplicate_po_number_returns_409(self, client: AsyncClient, admin_token: str):
         h = {"Authorization": f"Bearer {admin_token}"}
 
-        # Create two separate shipments
-        r1 = await client.post("/api/v1/shipments", json={"reference": "DUP-PO-1"}, headers=h)
-        r2 = await client.post("/api/v1/shipments", json={"reference": "DUP-PO-2"}, headers=h)
-        sid1 = r1.json()["id"]
-        sid2 = r2.json()["id"]
-
         po_body = {
             "po_number": "PO-DUPLICATE",
             "po_date": "2026-01-10",
@@ -36,10 +30,11 @@ class TestDuplicateResourceRejection:
             "currency": "USD",
         }
 
-        r = await client.post(f"/api/v1/shipments/{sid1}/po", json=po_body, headers=h)
+        # POs are standalone now — duplicate po_number fires on the second create.
+        r = await client.post("/api/v1/purchase-orders", json=po_body, headers=h)
         assert r.status_code == 200
 
-        r = await client.post(f"/api/v1/shipments/{sid2}/po", json=po_body, headers=h)
+        r = await client.post("/api/v1/purchase-orders", json=po_body, headers=h)
         assert r.status_code == 409
 
     async def test_duplicate_invoice_number_returns_409(
@@ -47,8 +42,8 @@ class TestDuplicateResourceRejection:
     ):
         h = {"Authorization": f"Bearer {admin_token}"}
 
-        sid1, _ = await advance_to(client, h, "po_submitted", ref="DUP-INV-1")
-        sid2, _ = await advance_to(client, h, "po_submitted", ref="DUP-INV-2")
+        _sid1, ctx1 = await advance_to(client, h, "po_submitted", ref="DUP-INV-1")
+        _sid2, ctx2 = await advance_to(client, h, "po_submitted", ref="DUP-INV-2")
 
         invoice_body = {
             "invoice_number": "INV-DUPLICATE",
@@ -58,14 +53,14 @@ class TestDuplicateResourceRejection:
         }
 
         r = await client.post(
-            f"/api/v1/shipments/{sid1}/invoice",
+            f"/api/v1/purchase-orders/{ctx1['po_id']}/invoice",
             json=invoice_body,
             headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
         assert r.status_code == 200
 
         r = await client.post(
-            f"/api/v1/shipments/{sid2}/invoice",
+            f"/api/v1/purchase-orders/{ctx2['po_id']}/invoice",
             json=invoice_body,
             headers={**h, "Idempotency-Key": str(uuid.uuid4())},
         )
@@ -89,19 +84,22 @@ class TestDuplicateResourceRejection:
             "gross_weight_kg": "5000.00",
         }
 
-        r = await client.post(f"/api/v1/shipments/{sid1}/bl", json=bl_body, headers=h)
+        r = await client.post(f"/api/v1/bookings/{sid1}/bl", json=bl_body, headers=h)
         assert r.status_code == 200
 
-        r = await client.post(f"/api/v1/shipments/{sid2}/bl", json=bl_body, headers=h)
+        # Same BL number on a second booking — must conflict on the bl_number unique constraint.
+        # The container number is also duplicated; use a different one to isolate the BL check.
+        bl_body2 = {**bl_body, "containers": [{"container_number": "DUPL7654321"}]}
+        r = await client.post(f"/api/v1/bookings/{sid2}/bl", json=bl_body2, headers=h)
         assert r.status_code == 409
 
-    async def test_duplicate_shipment_member_returns_409(
+    async def test_duplicate_booking_member_returns_409(
         self, client: AsyncClient, admin_token: str
     ):
         h = {"Authorization": f"Bearer {admin_token}"}
 
-        # Create shipment and a second user
-        r = await client.post("/api/v1/shipments", json={"reference": "DUP-MEMBER"}, headers=h)
+        # Create booking and a second user
+        r = await client.post("/api/v1/bookings", json={"reference": "DUP-MEMBER"}, headers=h)
         sid = r.json()["id"]
 
         invite_r = await client.post(
@@ -123,7 +121,7 @@ class TestDuplicateResourceRejection:
 
         # First add — should succeed
         r = await client.post(
-            f"/api/v1/shipments/{sid}/members",
+            f"/api/v1/bookings/{sid}/members",
             json={"user_id": user_id},
             headers=h,
         )
@@ -131,7 +129,7 @@ class TestDuplicateResourceRejection:
 
         # Duplicate add — should return 409
         r = await client.post(
-            f"/api/v1/shipments/{sid}/members",
+            f"/api/v1/bookings/{sid}/members",
             json={"user_id": user_id},
             headers=h,
         )

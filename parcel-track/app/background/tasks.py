@@ -84,7 +84,7 @@ def _setup_celery_task_logger(**kwargs):
 @celery_app.task(name="app.background.tasks.check_clearing_doc_deadlines")
 def check_clearing_doc_deadlines():
     """
-    Scheduled: finds all in-transit shipments where:
+    Scheduled: finds all in-transit bookings where:
     - Vessel ETA is within 2 days
     - Clearing docs status is not COMPLETE
     Fires an urgent notification to admin + UK agent.
@@ -95,9 +95,9 @@ def check_clearing_doc_deadlines():
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
 
-    from app.core.enums import ClearingDocsStatus, NotificationType, ShipmentStatus, UserRole
+    from app.core.enums import BookingStatus, ClearingDocsStatus, NotificationType, UserRole
     from app.db.database import AsyncSessionLocal
-    from app.db.models import BillOfLading, ClearingDocs, Shipment, Vessel
+    from app.db.models import BillOfLading, Booking, ClearingDocs, Vessel
 
     logger.info("Running clearing doc deadline check")
 
@@ -107,10 +107,10 @@ def check_clearing_doc_deadlines():
             result = await db.execute(
                 select(Vessel)
                 .join(BillOfLading, Vessel.bl_id == BillOfLading.id)
-                .join(Shipment, BillOfLading.shipment_id == Shipment.id)
+                .join(Booking, BillOfLading.booking_id == Booking.id)
                 .options(selectinload(Vessel.bill_of_lading))
                 .where(
-                    Shipment.status == ShipmentStatus.IN_TRANSIT,
+                    Booking.status == BookingStatus.IN_TRANSIT,
                     Vessel.eta <= cutoff,
                     Vessel.eta >= date.today(),
                 )
@@ -120,16 +120,16 @@ def check_clearing_doc_deadlines():
             for vessel in vessels:
                 bl = vessel.bill_of_lading
                 docs_result = await db.execute(
-                    select(ClearingDocs).where(ClearingDocs.shipment_id == bl.shipment_id)
+                    select(ClearingDocs).where(ClearingDocs.booking_id == bl.booking_id)
                 )
                 docs = docs_result.scalar_one_or_none()
 
                 if not docs or docs.status != ClearingDocsStatus.COMPLETE:
                     from app.services.notification_service import NotificationService
 
-                    await NotificationService.notify_shipment_roles(
+                    await NotificationService.notify_booking_roles(
                         db=db,
-                        shipment_id=bl.shipment_id,
+                        booking_id=bl.booking_id,
                         notification_type=NotificationType.CLEARING_DOCS_URGENT,
                         roles=[UserRole.ADMIN, UserRole.UK_AGENT],
                         override_message=(

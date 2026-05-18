@@ -30,7 +30,7 @@ class TestDocumentConfirmVerification:
 
         # Create a PO so we have a valid entity_id to attach a document to.
         r = await client.post(
-            f"/api/v1/shipments/{sid}/po",
+            "/api/v1/purchase-orders",
             json={
                 "po_number": "PO-DOC-MISSING",
                 "po_date": "2026-01-10",
@@ -44,6 +44,12 @@ class TestDocumentConfirmVerification:
         )
         assert r.status_code == 200, r.json()
         po_id = r.json()["id"]
+        r = await client.post(
+            f"/api/v1/bookings/{sid}/purchase-orders",
+            json={"purchase_order_id": po_id},
+            headers=h,
+        )
+        assert r.status_code == 200, r.json()
 
         with patch.object(
             StorageService,
@@ -72,7 +78,7 @@ class TestDocumentConfirmVerification:
         sid, _ = await advance_to(client, h, "draft", ref="DOC-OVERSIZE")
 
         r = await client.post(
-            f"/api/v1/shipments/{sid}/po",
+            "/api/v1/purchase-orders",
             json={
                 "po_number": "PO-DOC-OVERSIZE",
                 "po_date": "2026-01-10",
@@ -86,6 +92,12 @@ class TestDocumentConfirmVerification:
         )
         assert r.status_code == 200, r.json()
         po_id = r.json()["id"]
+        r = await client.post(
+            f"/api/v1/bookings/{sid}/purchase-orders",
+            json={"purchase_order_id": po_id},
+            headers=h,
+        )
+        assert r.status_code == 200, r.json()
 
         oversize = StorageService.MAX_FILE_SIZE_BYTES + 1
         with patch.object(
@@ -117,7 +129,7 @@ class TestDocumentConfirmVerification:
         sid, _ = await advance_to(client, h, "draft", ref="DOC-REAL-SIZE")
 
         r = await client.post(
-            f"/api/v1/shipments/{sid}/po",
+            "/api/v1/purchase-orders",
             json={
                 "po_number": "PO-DOC-REAL-SIZE",
                 "po_date": "2026-01-10",
@@ -131,6 +143,12 @@ class TestDocumentConfirmVerification:
         )
         assert r.status_code == 200, r.json()
         po_id = r.json()["id"]
+        r = await client.post(
+            f"/api/v1/bookings/{sid}/purchase-orders",
+            json={"purchase_order_id": po_id},
+            headers=h,
+        )
+        assert r.status_code == 200, r.json()
 
         # Client lies about size; server should record what R2 actually has.
         # Autouse mock already returns size=1024 — override only to widen the gap.

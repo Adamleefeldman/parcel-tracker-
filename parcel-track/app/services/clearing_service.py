@@ -29,20 +29,18 @@ class ClearingService:
     @staticmethod
     async def upsert(
         db: AsyncSession,
-        shipment_id: uuid.UUID,
+        booking_id: uuid.UUID,
         body: ClearingDocsUpdate,
         actor: User,
     ) -> ClearingDocs:
         if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):
             raise HTTPException(403, "Only admin or UK agent can update clearing docs")
 
-        result = await db.execute(
-            select(ClearingDocs).where(ClearingDocs.shipment_id == shipment_id)
-        )
+        result = await db.execute(select(ClearingDocs).where(ClearingDocs.booking_id == booking_id))
         docs = result.scalar_one_or_none()
 
         if not docs:
-            docs = ClearingDocs(shipment_id=shipment_id, uploaded_by=actor.id)
+            docs = ClearingDocs(booking_id=booking_id, uploaded_by=actor.id)
             db.add(docs)
             await db.flush()
 

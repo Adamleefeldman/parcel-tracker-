@@ -3,16 +3,18 @@
 Detailed task specs for work beyond P0. CLAUDE.md carries only the high-level status
 table; the file-by-file breakdowns and acceptance criteria live here.
 
-## Status summary (as of 2026-05-04)
+## Status summary (as of 2026-05-18)
 
-- **P0** — COMPLETE (PR #6, `main` at `09da227`)
-- **P1** — PARTIALLY COMPLETE (Tasks 1, 2, 3, 5 merged; Task 4 Destin8 still blocked on tier/credentials)
-- **P2** — COMPLETE (all 7 items done; P2.18 service-layer extraction merged on `p2-service-layer`)
+- **P0 (initial)** — COMPLETE (PR #6, `main` at `09da227`)
+- **P1 (infra)** — PARTIALLY COMPLETE (Tasks 1, 2, 3, 5 merged; Task 4 Destin8 still blocked on tier/credentials)
+- **P2 (hardening)** — COMPLETE (all 7 items done; P2.18 service-layer extraction merged on `p2-service-layer`)
 - **P2.5** — COMPLETE (RLS enabled on all 22 public tables, migration `5ab45b2e1574`)
 - **Phase B** — COMPLETE (post-RLS correctness fixes, PR #20, `main` at `50d46a7`)
 - **Phase C** — COMPLETE (hygiene sweep, PR #21)
 - **Phase D** — COMPLETE (D1 docs lockdown PR #23; D2 payment-service mock fix PR #22; `main` at `7f3b0cd`)
 - **Phase H** — COMPLETE (docker dev-stack hygiene + R2 secrets adoption, PR #24, `main` at `047ebed`)
+- **Trading-core remediation (P0.1–P0.5)** — COMPLETE on `p0-trading-core-refactor` (PR #28). See § Trading-core remediation below.
+- **Trading P1** — TODO (multi-leg ShipmentLeg, booking-confirmation free-day fields, UK port enum, A/R aging cron, demurrage alerts, outbound CustomerInvoiceBatch). See § Trading P1 below.
 - **P3** — TODO
 - **Phase G** — TODO (runtime upgrade prep: passlib must go before Python ≥3.13)
 
@@ -339,3 +341,149 @@ Resolved: CF R2 account (Task 3 done); VesselFinder plan + customer notification
 **P3 done when:**
 - Load test: 100 concurrent users on shipment-list + shipment-detail, p95 < 300ms
 - OpenAPI page curated and locked behind admin auth in production ✅ (Phase D1, PR #23)
+
+---
+
+## Trading-core remediation (P0.1–P0.5) — COMPLETE on `p0-trading-core-refactor` (PR #28)
+
+Deep-dive analysis of the client's `FMCG HUB – COMPLETE TRADING TRACKER 2026-2.xlsx`
+plus supporting POs / PFIs / commercial invoices / booking confirmations / SWBs /
+declarations / FF invoices surfaced five load-bearing gaps in the original schema.
+This branch fixes them. Client (WT Trading LLC, trading as The FMCG Hub) had not
+yet onboarded, so breaking migrations were on the table.
+
+| Tier | Goal | Migration | Key entities / routes |
+|---|---|---|---|
+| P0.1 | Decouple `PurchaseOrder` from `Shipment`; introduce `Booking` | `c3d4e5f6a7b8` | `bookings`, `booking_users`, `booking_purchase_orders` junction; `Invoice.purchase_order_id`; `/bookings/*`, `/bookings/{id}/purchase-orders`, `/purchase-orders/{id}/invoice` |
+| P0.2 | Container as the operational unit (sale-side fields, broker, end-company) | `d4e5f6a7b8c9` | `Broker`, `Company`; container `delivery_type`, `sale_price_*`, `broker_id`, `end_company_id`, `sale_currency`; `/brokers`, `/companies`, `PATCH /containers/{id}/sale` |
+| P0.3 | Split `Payment` into `SupplierPayment` (per-Invoice, USD) + `CustomerPayment` (per-Container, GBP, multi-tranche, cash/transfer, variance, courier+bank charges, banked_total) | `e5f6a7b8c9d0` | `supplier_payments`, `customer_payments`; `CustomerPaymentMethod`; `/invoices/{id}/supplier-payments`, `/bookings/{id}/containers/{id}/customer-payments` |
+| P0.4 | Customer-paid lifecycle. `ContainerLifecycleStatus` derived from concrete events; booking `COMPLETE` requires every container `BANKED` | `f6a7b8c9d0e1` | `ContainerLifecycleStatus`; `Container.lifecycle_status`, `dispute_reason`, `disputed_at`; `Vessel.ata`; `ContainerLifecycleService.recompute()` wired into vessel-depart, vessel-arrived, customs-cleared, delivery-delivered, customer-payment-add |
+| P0.5 | `DeliveryPoint` gains broker, end-company, delivery-type, warehouse fields | `a7b8c9d0e1f2` | `DeliveryPoint.{broker_id, end_company_id, delivery_type, warehouse_name, rebundled_at_warehouse}`; legacy `customer_user_id` kept nullable |
+
+**Architectural shifts that downstream code must respect:**
+
+1. **One Booking, many POs.** All booking-level preconditions walk `BookingPurchaseOrder
+   → PurchaseOrder → Invoice`. There is no longer a `shipment_id` on PO / Invoice / BL —
+   it's `booking_id` (BL, ClearingDocs, DeliveryPoint, Notification, AuditLog) or `purchase_order_id`
+   (Invoice).
+2. **Container is the addressable unit.** Sale price, broker, end-company, lifecycle
+   state and customer payment live on `Container`. Cross-cutting reads should eager-load
+   `Container.broker` + `Container.end_company` with explicit `selectinload`.
+3. **`Container.lifecycle_status` is derived, not pushed.** Always call
+   `ContainerLifecycleService.recompute()` after any event that could shift it. The
+   list of writers is exhaustive today: vessel depart/arrive (`app/api/routes/vessels.py`),
+   customs cleared (`app/services/customs_service.py`), delivery delivered
+   (`app/services/delivery_service.py`), customer payment add
+   (`app/services/customer_payment_service.py`).
+4. **Booking `COMPLETE` = every container `BANKED`.** Marking deliveries delivered no
+   longer auto-completes a booking. The customer payment leg must close (sum of
+   `CustomerPayment.banked_total` for that container ≥ `Container.sale_price_total`).
+5. **Two payment directions.** Never write a generic Payment — pick `SupplierPayment`
+   (per Invoice, USD outbound) or `CustomerPayment` (per Container, GBP inbound).
+
+**Verification snapshot at merge:**
+- 292/292 tests passing (unit + integration)
+- `ruff check app/ tests/` — clean
+- `ruff format` — 103 files clean
+- `mypy app/` — 72 files, 0 errors
+
+**Intentionally deferred from this train** (live in Trading P1 below): multi-leg
+shipment legs, demurrage / free-day fields, UK port enum, A/R aging cron,
+outbound `CustomerInvoiceBatch` entity, mixed-at-warehouse pallet rebundling.
+
+---
+
+## Trading P1 — follow-up work surfaced by the trading-core remediation
+
+These are the items the deep-dive plan flagged as P1 (important, but not
+load-bearing for client onboarding). Each is independently shippable; pick by
+business pressure.
+
+### Trading P1.1 — Multi-leg `ShipmentLeg`
+
+Real Maersk routes transship (e.g. Casa → Algeciras on MAERSK NEWARK V602E,
+then Algeciras → London Gateway on MADRID MAERSK V601W). Today `Vessel` is 1:1
+with `BillOfLading` and only carries the *last* leg's data.
+
+**New entity:**
+- `ShipmentLeg(id, booking_id, leg_index, vessel_name, imo_number, voyage_number,
+  shipping_line, port_from, port_to, etd, atd, eta, ata)`
+- `Booking.legs: list[ShipmentLeg]` ordered by `leg_index`
+
+**Migration approach:** additive — keep the existing `Vessel` row as "primary
+carrier" for backward read paths during cutover. `VesselPollService` polls
+leg-by-leg; lifecycle derivation looks at the *last* leg's `ata` for ARRIVED.
+
+### Trading P1.2 — Booking-confirmation free-day / rate fields on `Booking`
+
+Maersk booking PDFs carry `free_days_detention`, `free_days_demurrage`, per-day
+rates after free-time, gate-in cut-off, empty-container release date, empty
+return deadline, and the port-of-discharge terminal. These are the inputs for
+the demurrage countdown alerts in Trading P1.5.
+
+**Additions to `Booking`:** `gate_in_cutoff`, `empty_pickup_release`,
+`empty_return_deadline`, `free_days_detention: int`, `free_days_demurrage: int`,
+`detention_rate_gbp_after: Decimal`, `demurrage_rate_gbp_after: Decimal`,
+`port_of_discharge_terminal: str`, `service_mode: str` (CY/CY default).
+
+### Trading P1.3 — UK port-of-discharge enum + per-port templates
+
+Today `BillOfLading.port_of_discharge` is free-text. Real data has Felixstowe,
+London Gateway, Tilbury, Southampton, Liverpool — each with distinct fee
+structures.
+
+- New `UKPort` enum (`FELIXSTOWE`, `LONDON_GATEWAY`, `TILBURY`, `SOUTHAMPTON`,
+  `LIVERPOOL`, `OTHER`)
+- Optional `PortTemplate` lookup carrying default free-days + rate-per-day for
+  each port; `Booking` picks from the template when the port is set.
+
+### Trading P1.4 — A/R aging Celery task
+
+**Goal:** detect containers delivered N days ago that have not been banked.
+
+- Daily cron: scan containers where `lifecycle_status` ∈ {`DELIVERED`, `INVOICED`,
+  `PAID`} and `updated_at < now() - settings.AR_AGING_THRESHOLD_DAYS`
+- Notify `ADMIN` + `UK_AGENT` once per container per week
+- Configurable threshold in `app/core/config.py` (`AR_AGING_THRESHOLD_DAYS: int = 14`)
+
+### Trading P1.5 — Demurrage countdown alerts
+
+Uses the P1.2 booking-confirmation fields. Once `Vessel.ata` is set, days-since-arrival
+is computed; when `free_days_demurrage` (default 5) is within 2 days of expiry, fire a
+`NotificationType.DEMURRAGE_WARNING` (new) to admin + UK agent.
+
+### Trading P1.6 — Outbound `CustomerInvoiceBatch`
+
+`CustomerPayment.customer_invoice_ref` is a free-text string today. Promote it
+to a real entity so multiple containers can share one outbound invoice
+(matches the spreadsheet's `INV-2603-61` covering four containers).
+
+**New entity:**
+- `CustomerInvoiceBatch(id, invoice_number unique, issued_at, total_gbp, customer_id)`
+- `CustomerInvoiceBatchContainer(batch_id, container_id)` junction
+- Replace `CustomerPayment.customer_invoice_ref: str` with FK
+  `customer_invoice_batch_id` (nullable until issued)
+
+PDF generation, outbound delivery, GDPR retention — all deferred to Trading P2.
+
+### Trading P2.1 — Dispute acknowledgement flow
+
+`Container.lifecycle_status = DISPUTED` + `dispute_reason` + `disputed_at` already
+exist. P2.1 adds:
+- `PATCH /containers/{id}/dispute` (admin) to open a dispute
+- `PATCH /containers/{id}/dispute/acknowledge` (admin) to clear it
+- Booking `COMPLETE` precondition counts acknowledged disputes as
+  closed — currently any DISPUTED row blocks completion.
+
+### Trading P2.2 — Mixed-at-warehouse pallet rebundling
+
+Spreadsheet notes like `MIXED AT W/H 7/7/7` mean pallets get re-allocated across
+containers at the UK warehouse. Adds a `PalletMovement` event log on top of P0 data.
+Only worth doing once warehouse activity becomes high-volume.
+
+### Trading P3 — Deferred (revisit before scale)
+
+- **PO numbering canonicalisation** (`PO-2026-01` vs `PO-011`) — `po_number_normalised` shadow column + index
+- **Read-side container aggregate cache** — denormalise `lifecycle_status` + aging + £-banked for the dashboard list view (premature today)
+- **Multi-currency FX** — separate amount + currency + fx_rate_to_usd columns; defer until USD/GBP/EUR/MAD/AED reconciliation becomes a real blocker
+- **Investor ledger module** — its own subsystem; modelled after the trading tracker's `CapitalLedgerEntry` rather than shoehorned into trading state machine

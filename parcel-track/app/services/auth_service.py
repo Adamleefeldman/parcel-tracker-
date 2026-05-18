@@ -22,7 +22,7 @@ from app.core.security import (
     refresh_token_expiry,
     verify_password,
 )
-from app.db.models import InviteToken, RefreshToken, ShipmentUser, User
+from app.db.models import BookingUser, InviteToken, RefreshToken, User
 from app.schemas.schemas import (
     AcceptInviteRequest,
     InviteRequest,
@@ -45,7 +45,7 @@ class AuthService:
             token_hash=token_hash,
             email=request.email,
             role=UserRole(request.role),
-            shipment_id=request.shipment_id,
+            booking_id=request.booking_id,
             created_by=actor.id,
             expires_at=invite_token_expiry(),
         )
@@ -103,10 +103,10 @@ class AuthService:
         db.add(user)
         await db.flush()
 
-        # If invite is tied to a shipment, add membership automatically
-        if invite.shipment_id:
-            membership = ShipmentUser(
-                shipment_id=invite.shipment_id,
+        # If invite is tied to a booking, add membership automatically
+        if invite.booking_id:
+            membership = BookingUser(
+                booking_id=invite.booking_id,
                 user_id=user.id,
             )
             db.add(membership)

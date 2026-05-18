@@ -19,17 +19,17 @@ from sqlalchemy import select
 
 from app.core.enums import (
     BLStatus,
+    BookingStatus,
     NotificationType,
-    ShipmentStatus,
     UserRole,
     VesselStatus,
     VesselUpdateStatus,
 )
 from app.db.models import (
     BillOfLading,
+    Booking,
+    BookingUser,
     Notification,
-    Shipment,
-    ShipmentUser,
     User,
     Vessel,
     VesselUpdate,
@@ -106,9 +106,9 @@ async def seeded_shipment():
         db.add_all([admin, customer])
         await db.flush()
 
-        shipment = Shipment(
+        shipment = Booking(
             reference=f"VP-SHIP-{uuid.uuid4().hex[:6]}",
-            status=ShipmentStatus.IN_TRANSIT,
+            status=BookingStatus.IN_TRANSIT,
             created_by=admin.id,
         )
         db.add(shipment)
@@ -116,13 +116,13 @@ async def seeded_shipment():
 
         db.add_all(
             [
-                ShipmentUser(shipment_id=shipment.id, user_id=admin.id),
-                ShipmentUser(shipment_id=shipment.id, user_id=customer.id),
+                BookingUser(booking_id=shipment.id, user_id=admin.id),
+                BookingUser(booking_id=shipment.id, user_id=customer.id),
             ]
         )
 
         bl = BillOfLading(
-            shipment_id=shipment.id,
+            booking_id=shipment.id,
             bl_number=f"BL-{uuid.uuid4().hex[:8]}",
             bl_date=date(2026, 4, 1),
             shipper_name="Acme Tiles",
@@ -152,7 +152,7 @@ async def seeded_shipment():
         await db.commit()
 
         return {
-            "shipment_id": shipment.id,
+            "booking_id": shipment.id,
             "vessel_id": vessel.id,
             "admin_id": admin.id,
             "customer_id": customer.id,
@@ -232,15 +232,15 @@ async def test_poll_matches_imo_case_insensitively():
         )
         db.add(admin)
         await db.flush()
-        shipment = Shipment(
+        shipment = Booking(
             reference=f"CI-{uuid.uuid4().hex[:6]}",
-            status=ShipmentStatus.IN_TRANSIT,
+            status=BookingStatus.IN_TRANSIT,
             created_by=admin.id,
         )
         db.add(shipment)
         await db.flush()
         bl = BillOfLading(
-            shipment_id=shipment.id,
+            booking_id=shipment.id,
             bl_number=f"BL-{uuid.uuid4().hex[:8]}",
             bl_date=date(2026, 4, 1),
             shipper_name="A",
@@ -300,15 +300,15 @@ async def test_poll_skips_vessel_with_no_imo():
         )
         db.add(admin)
         await db.flush()
-        shipment = Shipment(
+        shipment = Booking(
             reference=f"NOIMO-{uuid.uuid4().hex[:6]}",
-            status=ShipmentStatus.IN_TRANSIT,
+            status=BookingStatus.IN_TRANSIT,
             created_by=admin.id,
         )
         db.add(shipment)
         await db.flush()
         bl = BillOfLading(
-            shipment_id=shipment.id,
+            booking_id=shipment.id,
             bl_number=f"BL-{uuid.uuid4().hex[:8]}",
             bl_date=date(2026, 4, 1),
             shipper_name="A",
@@ -369,7 +369,7 @@ async def test_poll_fires_notification_on_transition_to_approaching(seeded_shipm
             (
                 await db.execute(
                     select(Notification).where(
-                        Notification.shipment_id == seeded_shipment["shipment_id"],
+                        Notification.booking_id == seeded_shipment["booking_id"],
                         Notification.type == NotificationType.VESSEL_APPROACHING,
                     )
                 )
@@ -466,15 +466,15 @@ async def test_per_vessel_error_does_not_abort_cycle(seeded_shipment, monkeypatc
         )
         db.add(admin)
         await db.flush()
-        shipment = Shipment(
+        shipment = Booking(
             reference=f"ERR-{uuid.uuid4().hex[:6]}",
-            status=ShipmentStatus.IN_TRANSIT,
+            status=BookingStatus.IN_TRANSIT,
             created_by=admin.id,
         )
         db.add(shipment)
         await db.flush()
         bl = BillOfLading(
-            shipment_id=shipment.id,
+            booking_id=shipment.id,
             bl_number=f"BL-{uuid.uuid4().hex[:8]}",
             bl_date=date(2026, 4, 1),
             shipper_name="A",
