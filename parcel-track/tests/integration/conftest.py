@@ -164,6 +164,13 @@ async def setup_db():
     yield
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+    # Dispose the engine after each test. With sqlite+aiosqlite the pooled
+    # connection runs a non-daemon background worker thread; if it is never
+    # closed, the interpreter hangs at shutdown in threading._shutdown()
+    # waiting to join it. dispose() closes the connection and stops that
+    # thread. (CI uses Postgres/asyncpg, which has no such thread — this is
+    # only load-bearing for the local SQLite default.)
+    await engine.dispose()
 
 
 @pytest_asyncio.fixture

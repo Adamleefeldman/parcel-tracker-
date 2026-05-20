@@ -35,6 +35,7 @@ from app.api.routes import (
     notif_router,
     payment_router,
     po_router,
+    shipment_leg_router,
     vessel_router,
 )
 from app.core.config import get_settings
@@ -209,6 +210,7 @@ app.include_router(payment_router, prefix=PREFIX)
 app.include_router(customer_payment_router, prefix=PREFIX)
 app.include_router(bl_router, prefix=PREFIX)
 app.include_router(vessel_router, prefix=PREFIX)
+app.include_router(shipment_leg_router, prefix=PREFIX)
 app.include_router(container_router, prefix=PREFIX)
 app.include_router(customs_router, prefix=PREFIX)
 app.include_router(clearing_router, prefix=PREFIX)

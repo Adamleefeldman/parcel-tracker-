@@ -14,7 +14,7 @@ table; the file-by-file breakdowns and acceptance criteria live here.
 - **Phase D** — COMPLETE (D1 docs lockdown PR #23; D2 payment-service mock fix PR #22; `main` at `7f3b0cd`)
 - **Phase H** — COMPLETE (docker dev-stack hygiene + R2 secrets adoption, PR #24, `main` at `047ebed`)
 - **Trading-core remediation (P0.1–P0.5)** — COMPLETE on `p0-trading-core-refactor` (PR #28). See § Trading-core remediation below.
-- **Trading P1** — TODO (multi-leg ShipmentLeg, booking-confirmation free-day fields, UK port enum, A/R aging cron, demurrage alerts, outbound CustomerInvoiceBatch). See § Trading P1 below.
+- **Trading P1** — IN PROGRESS (P1.1 multi-leg ShipmentLeg COMPLETE on `trading-p1.1-shipment-legs`; P1.2 booking-confirmation free-day fields, P1.3 UK port enum, P1.4 A/R aging cron, P1.5 demurrage alerts, P1.6 outbound CustomerInvoiceBatch still TODO). See § Trading P1 below.
 - **P3** — TODO
 - **Phase G** — TODO (runtime upgrade prep: passlib must go before Python ≥3.13)
 
@@ -399,20 +399,28 @@ These are the items the deep-dive plan flagged as P1 (important, but not
 load-bearing for client onboarding). Each is independently shippable; pick by
 business pressure.
 
-### Trading P1.1 — Multi-leg `ShipmentLeg`
+### Trading P1.1 — Multi-leg `ShipmentLeg` — COMPLETE (`trading-p1.1-shipment-legs`)
 
 Real Maersk routes transship (e.g. Casa → Algeciras on MAERSK NEWARK V602E,
-then Algeciras → London Gateway on MADRID MAERSK V601W). Today `Vessel` is 1:1
-with `BillOfLading` and only carries the *last* leg's data.
+then Algeciras → London Gateway on MADRID MAERSK V601W). `Vessel` is 1:1 with
+`BillOfLading` and only carries one leg's data.
 
-**New entity:**
-- `ShipmentLeg(id, booking_id, leg_index, vessel_name, imo_number, voyage_number,
-  shipping_line, port_from, port_to, etd, atd, eta, ata)`
-- `Booking.legs: list[ShipmentLeg]` ordered by `leg_index`
+**Delivered (additive):**
+- New `ShipmentLeg` model + `shipment_legs` table (migration `f1a2b3c4d5e6`):
+  `id, booking_id, leg_index, vessel_name, imo_number, voyage_number,
+  shipping_line, port_from, port_to, etd, atd, eta, ata` + audit timestamps;
+  unique `(booking_id, leg_index)`, CHECK `leg_index >= 1`, RLS enabled.
+- `Booking.legs: list[ShipmentLeg]` ordered by `leg_index`.
+- `ShipmentLegService` (add / update / list) — auto-assigns `leg_index`, writes
+  an `AuditLog` row per create/update.
+- Routes: `POST/GET/PATCH /bookings/{id}/legs` (`shipment_legs.py`); legs surface
+  in the `GET /bookings/{id}` detail response.
 
-**Migration approach:** additive — keep the existing `Vessel` row as "primary
-carrier" for backward read paths during cutover. `VesselPollService` polls
-leg-by-leg; lifecycle derivation looks at the *last* leg's `ata` for ARRIVED.
+**Scope decision:** `Vessel`, `VesselPollService`, the Celery beat schedule,
+and `ContainerLifecycleService` are **untouched** — lifecycle + AIS polling
+stay on the 1:1 `Vessel` (the final, UK-arriving leg). `ShipmentLeg` is an
+ordered route-history record. Unifying `Vessel` into `ShipmentLeg` (and
+leg-by-leg polling) is deferred to a future phase.
 
 ### Trading P1.2 — Booking-confirmation free-day / rate fields on `Booking`
 

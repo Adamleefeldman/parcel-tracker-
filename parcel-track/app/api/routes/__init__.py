@@ -13,6 +13,7 @@ from app.api.routes.invoices import invoice_router
 from app.api.routes.notifications import notif_router
 from app.api.routes.parties import broker_router, company_router
 from app.api.routes.po import po_router
+from app.api.routes.shipment_legs import shipment_leg_router
 from app.api.routes.supplier_payments import payment_router
 from app.api.routes.vessels import vessel_router
 
@@ -32,5 +33,6 @@ __all__ = [
     "notif_router",
     "payment_router",
     "po_router",
+    "shipment_leg_router",
     "vessel_router",
 ]

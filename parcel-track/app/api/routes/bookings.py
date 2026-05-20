@@ -19,6 +19,7 @@ from app.schemas.schemas import (
     BookingOut,
     BookingPOLinkIn,
     BookingUpdate,
+    ShipmentLegOut,
 )
 from app.services.booking_service import BookingService
 
@@ -93,6 +94,7 @@ async def get_booking(
         bill_of_lading=_bl_to_out(booking.bill_of_lading) if booking.bill_of_lading else None,
         clearing_docs=_cd_to_out(booking.clearing_docs) if booking.clearing_docs else None,
         delivery_points=[_dp_to_out(p) for p in booking.delivery_points],
+        legs=[ShipmentLegOut.model_validate(leg) for leg in booking.legs],
     )
 
 
