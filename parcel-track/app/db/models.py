@@ -175,6 +175,14 @@ class Booking(Base):
     delivery_points: Mapped[list["DeliveryPoint"]] = relationship(back_populates="booking")
     audit_logs: Mapped[list["AuditLog"]] = relationship(back_populates="booking")
     notifications: Mapped[list["Notification"]] = relationship(back_populates="booking")
+    # Ordered list of transshipment legs (P1.1). A direct sailing has one leg;
+    # a Maersk route via Algeciras has two (Casablanca→Algeciras, then
+    # Algeciras→London Gateway), each with its own vessel + voyage.
+    legs: Mapped[list["ShipmentLeg"]] = relationship(
+        back_populates="booking",
+        cascade="all, delete-orphan",
+        order_by="ShipmentLeg.leg_index",
+    )
 
     @property
     def purchase_orders(self) -> list["PurchaseOrder"]:
@@ -562,6 +570,51 @@ class VesselUpdate(Base):
     created_at: Mapped[datetime] = now_utc()
 
     vessel: Mapped["Vessel"] = relationship(back_populates="updates")
+
+
+# ── Shipment legs ─────────────────────────────────────────────────────────────
+
+
+class ShipmentLeg(Base):
+    """
+    One ordered leg of a booking's shipping route (P1.1).
+
+    Real Maersk routes transship at Algeciras with a distinct vessel and
+    voyage per leg (e.g. Casablanca→Algeciras on MAERSK NEWARK V602E, then
+    Algeciras→London Gateway on MADRID MAERSK V601W). `Vessel` (1:1 with the
+    BL) stays the polling + lifecycle driver for the final, UK-arriving leg;
+    `ShipmentLeg` records the full ordered route for visibility. `leg_index`
+    is 1-based and unique within a booking.
+    """
+
+    __tablename__ = "shipment_legs"
+    __table_args__ = (
+        UniqueConstraint("booking_id", "leg_index", name="uq_shipment_legs_booking_leg_index"),
+        CheckConstraint("leg_index >= 1", name="ck_shipment_legs_leg_index_positive"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    booking_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("bookings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    leg_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    vessel_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    imo_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    voyage_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    shipping_line: Mapped[str] = mapped_column(String(255), nullable=False)
+    port_from: Mapped[str] = mapped_column(String(100), nullable=False)
+    port_to: Mapped[str] = mapped_column(String(100), nullable=False)
+    etd: Mapped[date | None] = mapped_column(Date, nullable=True)
+    atd: Mapped[date | None] = mapped_column(Date, nullable=True)
+    eta: Mapped[date | None] = mapped_column(Date, nullable=True)
+    ata: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = now_utc()
+    updated_at: Mapped[datetime] = updated_at()
+
+    booking: Mapped["Booking"] = relationship(back_populates="legs")
 
 
 # ── Containers ────────────────────────────────────────────────────────────────

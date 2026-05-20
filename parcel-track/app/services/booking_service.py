@@ -103,6 +103,8 @@ class BookingService:
                 .selectinload(BillOfLading.vessel)
                 .selectinload(Vessel.updates),
                 selectinload(Booking.clearing_docs),
+                # Transshipment legs (P1.1) — ordered route history.
+                selectinload(Booking.legs),
                 selectinload(Booking.delivery_points).selectinload(DeliveryPoint.schedule),
                 # Delivery-point-level broker / end_company (P0.5) so the
                 # detail view can show who's receiving each drop.

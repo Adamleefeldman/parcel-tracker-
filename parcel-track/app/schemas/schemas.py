@@ -98,6 +98,7 @@ class BookingDetailOut(BookingOut):
     bill_of_lading: Optional["BLOut"] = None
     clearing_docs: Optional["ClearingDocsOut"] = None
     delivery_points: list["DeliveryPointOut"] = []
+    legs: list["ShipmentLegOut"] = []
 
 
 class BookingUpdate(BaseModel):
@@ -474,6 +475,60 @@ class VesselOut(UUIDModel):
     eta: date | None = None
     status: str
     updates: list[VesselUpdateOut] = []
+
+
+# ── Shipment legs (P1.1 — multi-leg routes) ──────────────────────────────────
+
+
+class ShipmentLegCreate(BaseModel):
+    vessel_name: str
+    imo_number: str | None = None
+    voyage_number: str | None = None
+    shipping_line: str
+    port_from: str
+    port_to: str
+    etd: date | None = None
+    eta: date | None = None
+    # Optional: when omitted the service appends the leg at the next index.
+    leg_index: int | None = None
+
+    @model_validator(mode="after")
+    def leg_index_positive(self):
+        if self.leg_index is not None and self.leg_index < 1:
+            raise ValueError("leg_index must be >= 1")
+        return self
+
+
+class ShipmentLegUpdate(BaseModel):
+    """All fields optional — this is how atd/ata/revised eta get set later."""
+
+    vessel_name: str | None = None
+    imo_number: str | None = None
+    voyage_number: str | None = None
+    shipping_line: str | None = None
+    port_from: str | None = None
+    port_to: str | None = None
+    etd: date | None = None
+    atd: date | None = None
+    eta: date | None = None
+    ata: date | None = None
+
+
+class ShipmentLegOut(UUIDModel):
+    booking_id: uuid.UUID
+    leg_index: int
+    vessel_name: str
+    imo_number: str | None = None
+    voyage_number: str | None = None
+    shipping_line: str
+    port_from: str
+    port_to: str
+    etd: date | None = None
+    atd: date | None = None
+    eta: date | None = None
+    ata: date | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 # ── Container status update ───────────────────────────────────────────────────
