@@ -61,6 +61,16 @@ celery_app.conf.update(
             "task": "app.background.tasks.poll_vesselfinder",
             "schedule": settings.VESSELFINDER_POLL_INTERVAL_MINUTES * 60,
         },
+        # Daily A/R aging sweep — delivered-but-unbanked containers (P1.4).
+        "check-ar-aging": {
+            "task": "app.background.tasks.check_ar_aging",
+            "schedule": crontab(hour=7, minute=0),
+        },
+        # Daily demurrage countdown — free-time about to expire (P1.5).
+        "check-demurrage-countdown": {
+            "task": "app.background.tasks.check_demurrage_countdown",
+            "schedule": crontab(hour=7, minute=15),
+        },
     },
 )
 
@@ -274,3 +284,49 @@ def poll_vesselfinder(self):
         # Retrying won't fix a bad key.
         logger.warning("poll_vesselfinder permanent failure", exc_info=True)
         return {"error": "permanent"}
+
+
+@celery_app.task(name="app.background.tasks.check_ar_aging")
+def check_ar_aging():
+    """Daily (P1.4): flag delivered/invoiced/paid containers that have not been
+    banked past the A/R aging threshold. No-ops when AR_AGING_ENABLED is false.
+    All logic lives in ARagingService — this is a thin Celery shell."""
+    import asyncio
+
+    from app.db.database import AsyncSessionLocal
+    from app.services.ar_aging_service import ARagingService
+
+    if not settings.AR_AGING_ENABLED:
+        logger.debug("check_ar_aging skipped — AR_AGING_ENABLED is false")
+        return {"skipped": "disabled"}
+
+    async def _run() -> dict[str, int]:
+        async with AsyncSessionLocal() as db:
+            alerted = await ARagingService.run(db)
+            await db.commit()
+            return {"alerted": alerted}
+
+    return asyncio.run(_run())
+
+
+@celery_app.task(name="app.background.tasks.check_demurrage_countdown")
+def check_demurrage_countdown():
+    """Daily (P1.5): warn when a container's free demurrage time at the UK port
+    is about to expire. No-ops when DEMURRAGE_ALERTS_ENABLED is false. All logic
+    lives in DemurrageService — this is a thin Celery shell."""
+    import asyncio
+
+    from app.db.database import AsyncSessionLocal
+    from app.services.demurrage_service import DemurrageService
+
+    if not settings.DEMURRAGE_ALERTS_ENABLED:
+        logger.debug("check_demurrage_countdown skipped — DEMURRAGE_ALERTS_ENABLED is false")
+        return {"skipped": "disabled"}
+
+    async def _run() -> dict[str, int]:
+        async with AsyncSessionLocal() as db:
+            alerted = await DemurrageService.run(db)
+            await db.commit()
+            return {"alerted": alerted}
+
+    return asyncio.run(_run())

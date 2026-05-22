@@ -250,6 +250,24 @@ class NotificationType(str, Enum):  # noqa: UP042
     CLEARING_DOCS_URGENT = "clearing_docs_urgent"
     DELIVERY_SCHEDULED = "delivery_scheduled"
     DELIVERY_COMPLETE = "delivery_complete"
+    AR_AGING_ALERT = "ar_aging_alert"
+    DEMURRAGE_WARNING = "demurrage_warning"
+
+
+# ── UK ports (P1.3) ───────────────────────────────────────────────────────────
+#
+# UK port of discharge. Each port has distinct free-day defaults and fee
+# structures, captured per-port in the PortTemplate table. OTHER is the
+# catch-all for ports not yet modelled.
+
+
+class UKPort(str, Enum):  # noqa: UP042
+    FELIXSTOWE = "felixstowe"
+    LONDON_GATEWAY = "london_gateway"
+    TILBURY = "tilbury"
+    SOUTHAMPTON = "southampton"
+    LIVERPOOL = "liverpool"
+    OTHER = "other"
 
 
 # ── Currency ──────────────────────────────────────────────────────────────────

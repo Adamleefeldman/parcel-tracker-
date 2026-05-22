@@ -187,9 +187,10 @@ up to close the booking.
 | Concern | Path |
 |---|---|
 | Entry point, CORS, router mounts, exception handlers | `app/main.py` |
-| Per-resource route files (16 modules, 17 routers — `parties.py` exports broker + company) | `app/api/routes/` — auth, bl, bookings, clearing, containers, customer_payments, customs, delivery, documents, invoices, notifications, parties (brokers + companies), po, shipment_legs, supplier_payments, vessels |
+| Per-resource route files (17 modules, 18 routers — `parties.py` exports broker + company) | `app/api/routes/` — auth, bl, bookings, clearing, containers, customer_payments, customs, delivery, documents, invoices, notifications, parties (brokers + companies), po, port_templates, shipment_legs, supplier_payments, vessels |
 | Booking state machine — read before touching transitions | `app/services/booking_service.py` |
 | Shipment-leg service (multi-leg transshipment routes) | `app/services/shipment_leg_service.py` |
+| Port-template / A/R-aging / demurrage services | `app/services/port_template_service.py`, `ar_aging_service.py`, `demurrage_service.py` |
 | Container lifecycle derivation — recompute() called by every event writer | `app/services/container_lifecycle_service.py` |
 | Supplier vs Customer payment services | `app/services/supplier_payment_service.py`, `app/services/customer_payment_service.py` |
 | Auth service — JWT issue, bcrypt hashing, refresh | `app/services/auth_service.py` |
@@ -198,7 +199,7 @@ up to close the booking.
 | Trusted-proxy IP resolution | `app/core/network.py` |
 | Settings + boot-time validation | `app/core/config.py` |
 | Structured JSON logging + `request_id` contextvar | `app/core/logging.py` |
-| ORM models (Booking, BookingUser, BookingPurchaseOrder, Container w/ sale-side + lifecycle, Broker, Company, SupplierPayment, CustomerPayment, ShipmentLeg, AuditLog, CustomsRecord, CustomsNote, VesselUpdate, DeliverySchedule, DeliveryContainer) | `app/db/models.py` |
+| ORM models (Booking w/ confirmation fields, BookingUser, BookingPurchaseOrder, Container w/ sale-side + lifecycle, Broker, Company, PortTemplate, SupplierPayment, CustomerPayment, ShipmentLeg, AuditLog, CustomsRecord, CustomsNote, VesselUpdate, DeliverySchedule, DeliveryContainer) | `app/db/models.py` |
 | DB engine + session factory | `app/db/database.py` |
 | Celery tasks + beat schedule | `app/background/tasks.py` |
 | Storage (presigned URLs) | `app/services/storage_service.py` |
@@ -288,7 +289,8 @@ Both must be set. Never swap them. Production `config.py` validates that
 **Phase D** — COMPLETE. `/docs` admin lockdown in production + payment-service AsyncMock fix (PRs #22 + #23, `main` at `7f3b0cd`).
 **Phase H** — COMPLETE. Docker dev-stack hygiene + Docker-secrets adoption for R2 credentials (PR #24, `main` at `047ebed`).
 **Trading-core remediation (P0.1–P0.5)** — COMPLETE on `p0-trading-core-refactor` (PR #28). Realigns the schema with the client's actual workflow: Booking entity, M:N Booking↔PO, supplier-vs-customer payment split, ContainerLifecycleStatus end-to-end, broker + end-company on container and delivery point. Five migrations in order: `c3d4e5f6a7b8` → `d4e5f6a7b8c9` → `e5f6a7b8c9d0` → `f6a7b8c9d0e1` → `a7b8c9d0e1f2`. 292 tests green, ruff + mypy clean.
-**Trading P1.1** — COMPLETE on `trading-p1.1-shipment-legs`. Additive multi-leg support: new `shipment_legs` table (migration `f1a2b3c4d5e6`) + `ShipmentLegService` + `/bookings/{id}/legs` routes. `Vessel` and the VesselFinder poller are untouched — legs are an ordered route-history record surfaced in the booking detail. P1.2–P1.6 still TODO.
+**Trading P1.1** — COMPLETE (PR #29). Additive multi-leg support: `shipment_legs` table (migration `f1a2b3c4d5e6`) + `ShipmentLegService` + `/bookings/{id}/legs` routes. `Vessel` and the VesselFinder poller untouched — legs are an ordered route-history record.
+**Trading P1.2–P1.5** — COMPLETE on `trading-p1.2-p1.5`. P1.2: 9 booking-confirmation columns on `Booking`. P1.3: `UKPort` enum (`BillOfLading.port_of_discharge` is now typed) + `PortTemplate` per-port defaults + `/port-templates` routes; a new BL inherits port free-day defaults onto its booking. P1.4: daily `check_ar_aging` task flags delivered-but-unbanked containers. P1.5: daily `check_demurrage_countdown` task warns near free-time expiry. Migrations `b1c2d3e4f5a6` → `c2d3e4f5a6b7` → `d3e4f5a6b7c8`. P1.6 (CustomerInvoiceBatch) still TODO — blocked on the invoice-numbering decision.
 **P3** — TODO (read cache, soft delete, TZ audit, load test; `/docs` lockdown landed early in Phase D).
 **Phase G** — TODO. Replace `passlib` before any Python ≥3.13 upgrade; optional `python-jose` → `pyjwt` swap.
 
@@ -298,10 +300,10 @@ Full task specs (acceptance criteria, file lists, poller algorithms) live in
 | # | Item | Status | Blocker |
 |---|---|---|---|
 | P1.1 (trading) | Multi-leg ShipmentLeg (transshipment legs) | DONE | additive `shipment_legs` table + `/bookings/{id}/legs` routes |
-| P1.2 (trading) | Booking-confirmation free-day / detention-rate fields | TODO | none |
-| P1.3 (trading) | UK port-of-discharge enum + per-port templates | TODO | none |
-| P1.4 (trading) | A/R aging Celery task | TODO | none |
-| P1.5 (trading) | Demurrage countdown alerts | TODO | none |
+| P1.2 (trading) | Booking-confirmation free-day / detention-rate fields | DONE | 9 columns on `Booking` |
+| P1.3 (trading) | UK port-of-discharge enum + per-port templates | DONE | `UKPort` enum + `PortTemplate` + `/port-templates` |
+| P1.4 (trading) | A/R aging Celery task | DONE | daily `check_ar_aging` |
+| P1.5 (trading) | Demurrage countdown alerts | DONE | daily `check_demurrage_countdown` |
 | P1.6 (trading) | Outbound `CustomerInvoiceBatch` entity (replaces free-text customer_invoice_ref) | TODO | none |
 | P1.4 (infra)  | Destin8 polling worker | BLOCKED | API credentials + tier choice |
 | P2.x (trading) | Dispute acknowledgement flow + ops dashboard alerts | TODO | none |

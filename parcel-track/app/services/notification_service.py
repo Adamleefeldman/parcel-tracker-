@@ -68,6 +68,14 @@ NOTIFICATION_TEMPLATES: dict[NotificationType, tuple[str, str]] = {
         "Your delivery has been scheduled.",
     ),
     NotificationType.DELIVERY_COMPLETE: ("Delivery complete", "Your delivery has been completed."),
+    NotificationType.AR_AGING_ALERT: (
+        "Receivable overdue",
+        "A delivered container has not been banked and is overdue.",
+    ),
+    NotificationType.DEMURRAGE_WARNING: (
+        "Demurrage warning",
+        "Free demurrage time at the UK port is about to expire.",
+    ),
 }
 
 

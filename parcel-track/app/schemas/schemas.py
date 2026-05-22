@@ -12,6 +12,8 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
+from app.core.enums import UKPort
+
 # ── Base ──────────────────────────────────────────────────────────────────────
 
 
@@ -99,12 +101,32 @@ class BookingDetailOut(BookingOut):
     clearing_docs: Optional["ClearingDocsOut"] = None
     delivery_points: list["DeliveryPointOut"] = []
     legs: list["ShipmentLegOut"] = []
+    # Booking-confirmation fields (P1.2)
+    gate_in_cutoff: datetime | None = None
+    empty_pickup_release: datetime | None = None
+    empty_return_deadline: datetime | None = None
+    free_days_detention: int | None = None
+    free_days_demurrage: int | None = None
+    detention_rate_gbp_after: Decimal | None = None
+    demurrage_rate_gbp_after: Decimal | None = None
+    port_of_discharge_terminal: str | None = None
+    service_mode: str | None = None
 
 
 class BookingUpdate(BaseModel):
     reference: str | None = None
     booking_number: str | None = None
-    # Extend with other editable fields (e.g. notes) if/when needed
+    # Booking-confirmation fields (P1.2) — populated after the carrier's
+    # Booking Confirmation PDF arrives.
+    gate_in_cutoff: datetime | None = None
+    empty_pickup_release: datetime | None = None
+    empty_return_deadline: datetime | None = None
+    free_days_detention: int | None = None
+    free_days_demurrage: int | None = None
+    detention_rate_gbp_after: Decimal | None = None
+    demurrage_rate_gbp_after: Decimal | None = None
+    port_of_discharge_terminal: str | None = None
+    service_mode: str | None = None
 
 
 # ── Purchase Order ─────────────────────────────────────────────────────────────
@@ -305,7 +327,7 @@ class BLCreate(BaseModel):
     consignee_name: str
     notify_party: str | None = None
     port_of_loading: str
-    port_of_discharge: str
+    port_of_discharge: UKPort
     containers: list[ContainerInput]
     commodity_description: str
     gross_weight_kg: Decimal
@@ -410,7 +432,7 @@ class BLOut(UUIDModel):
     shipper_name: str
     consignee_name: str
     port_of_loading: str
-    port_of_discharge: str
+    port_of_discharge: UKPort
     container_count: int
     commodity_description: str
     gross_weight_kg: Decimal
@@ -418,6 +440,40 @@ class BLOut(UUIDModel):
     containers: list[ContainerOut] = []
     vessel: Optional["VesselOut"] = None
     created_at: datetime
+
+
+# ── Port templates (P1.3) ────────────────────────────────────────────────────
+
+
+class PortTemplateUpsert(BaseModel):
+    free_days_detention: int
+    free_days_demurrage: int
+    detention_rate_gbp_after: Decimal | None = None
+    demurrage_rate_gbp_after: Decimal | None = None
+
+    @field_validator("free_days_detention", "free_days_demurrage")
+    @classmethod
+    def free_days_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("Free days must be >= 0")
+        return v
+
+    @field_validator("detention_rate_gbp_after", "demurrage_rate_gbp_after")
+    @classmethod
+    def rate_non_negative(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v < 0:
+            raise ValueError("Rate must be >= 0")
+        return v
+
+
+class PortTemplateOut(UUIDModel):
+    port: UKPort
+    free_days_detention: int
+    free_days_demurrage: int
+    detention_rate_gbp_after: Decimal | None = None
+    demurrage_rate_gbp_after: Decimal | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 # ── Vessel ────────────────────────────────────────────────────────────────────

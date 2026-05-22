@@ -78,7 +78,7 @@ class TestDuplicateResourceRejection:
             "shipper_name": "Shipper",
             "consignee_name": "Consignee",
             "port_of_loading": "Casablanca",
-            "port_of_discharge": "Felixstowe",
+            "port_of_discharge": "felixstowe",
             "containers": [{"container_number": "DUPL1234567"}],
             "commodity_description": "Tiles",
             "gross_weight_kg": "5000.00",

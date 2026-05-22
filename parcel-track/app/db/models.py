@@ -47,6 +47,7 @@ from app.core.enums import (
     PortStatus,
     POStatus,
     SupplierPaymentType,
+    UKPort,
     UserRole,
     VesselStatus,
     VesselUpdateStatus,
@@ -144,6 +145,16 @@ class Booking(Base):
     """
 
     __tablename__ = "bookings"
+    __table_args__ = (
+        CheckConstraint(
+            "detention_rate_gbp_after IS NULL OR detention_rate_gbp_after >= 0",
+            name="ck_bookings_detention_rate_non_negative",
+        ),
+        CheckConstraint(
+            "demurrage_rate_gbp_after IS NULL OR demurrage_rate_gbp_after >= 0",
+            name="ck_bookings_demurrage_rate_non_negative",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     reference: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
@@ -158,6 +169,24 @@ class Booking(Base):
     )
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
+
+    # ── Booking-confirmation fields (P1.2) ────────────────────────────────────
+    # Populated from the carrier's Booking Confirmation PDF after the booking is
+    # created. All nullable — a booking starts in DRAFT before the confirmation
+    # arrives. Free-day / rate fields feed the demurrage countdown alerts (P1.5).
+    gate_in_cutoff: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    empty_pickup_release: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    empty_return_deadline: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    free_days_detention: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    free_days_demurrage: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    detention_rate_gbp_after: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    demurrage_rate_gbp_after: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    port_of_discharge_terminal: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    service_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Relationships
     members: Mapped[list["BookingUser"]] = relationship(
@@ -284,6 +313,41 @@ class Company(Base):
     registration_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
     vat_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
     default_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = now_utc()
+    updated_at: Mapped[datetime] = updated_at()
+
+
+# ── Port templates (P1.3) ────────────────────────────────────────────────────
+
+
+class PortTemplate(Base):
+    """Per-UK-port default free-days + post-free-time rates.
+
+    Each UK discharge port has its own detention/demurrage free-time and
+    per-day rates. When a BL is created with a `port_of_discharge`, the parent
+    Booking inherits these defaults for any P1.2 fields not already set.
+    """
+
+    __tablename__ = "port_templates"
+    __table_args__ = (
+        CheckConstraint("free_days_detention >= 0", name="ck_port_templates_detention_days"),
+        CheckConstraint("free_days_demurrage >= 0", name="ck_port_templates_demurrage_days"),
+        CheckConstraint(
+            "detention_rate_gbp_after IS NULL OR detention_rate_gbp_after >= 0",
+            name="ck_port_templates_detention_rate",
+        ),
+        CheckConstraint(
+            "demurrage_rate_gbp_after IS NULL OR demurrage_rate_gbp_after >= 0",
+            name="ck_port_templates_demurrage_rate",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    port: Mapped[UKPort] = mapped_column(SAEnum(UKPort), unique=True, nullable=False)
+    free_days_detention: Mapped[int] = mapped_column(Integer, nullable=False)
+    free_days_demurrage: Mapped[int] = mapped_column(Integer, nullable=False)
+    detention_rate_gbp_after: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    demurrage_rate_gbp_after: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
 
@@ -491,7 +555,9 @@ class BillOfLading(Base):
     consignee_name: Mapped[str] = mapped_column(String(255), nullable=False)
     notify_party: Mapped[str | None] = mapped_column(String(255), nullable=True)
     port_of_loading: Mapped[str] = mapped_column(String(100), nullable=False)
-    port_of_discharge: Mapped[str] = mapped_column(String(100), nullable=False)
+    # UK port of discharge as a typed enum (P1.3). Each UK port has distinct
+    # free-day defaults + fee structures — see PortTemplate.
+    port_of_discharge: Mapped[UKPort] = mapped_column(SAEnum(UKPort), nullable=False)
     container_count: Mapped[int] = mapped_column(Integer, nullable=False)
     commodity_description: Mapped[str] = mapped_column(Text, nullable=False)
     gross_weight_kg: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
