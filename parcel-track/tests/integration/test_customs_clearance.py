@@ -118,7 +118,7 @@ async def _build_awaiting_customs_state(client: AsyncClient, token: str) -> tupl
             "shipper_name": "Shipper Co",
             "consignee_name": "Consignee Ltd",
             "port_of_loading": "Casablanca",
-            "port_of_discharge": "Felixstowe",
+            "port_of_discharge": "felixstowe",
             "commodity_description": "Industrial widgets",
             "gross_weight_kg": "5000.00",
             "containers": [
@@ -140,7 +140,7 @@ async def _build_awaiting_customs_state(client: AsyncClient, token: str) -> tupl
             "vessel_name": "MV Tanger",
             "shipping_line": "Maersk",
             "port_of_loading": "Casablanca",
-            "port_of_discharge": "Felixstowe",
+            "port_of_discharge": "felixstowe",
         },
     )
     assert r.status_code == 200, r.text

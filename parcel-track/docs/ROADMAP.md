@@ -14,7 +14,7 @@ table; the file-by-file breakdowns and acceptance criteria live here.
 - **Phase D** — COMPLETE (D1 docs lockdown PR #23; D2 payment-service mock fix PR #22; `main` at `7f3b0cd`)
 - **Phase H** — COMPLETE (docker dev-stack hygiene + R2 secrets adoption, PR #24, `main` at `047ebed`)
 - **Trading-core remediation (P0.1–P0.5)** — COMPLETE on `p0-trading-core-refactor` (PR #28). See § Trading-core remediation below.
-- **Trading P1** — IN PROGRESS (P1.1 multi-leg ShipmentLeg COMPLETE on `trading-p1.1-shipment-legs`; P1.2 booking-confirmation free-day fields, P1.3 UK port enum, P1.4 A/R aging cron, P1.5 demurrage alerts, P1.6 outbound CustomerInvoiceBatch still TODO). See § Trading P1 below.
+- **Trading P1** — IN PROGRESS (P1.1 multi-leg ShipmentLeg COMPLETE via PR #29; P1.2–P1.5 COMPLETE on `trading-p1.2-p1.5` — booking-confirmation fields, UK port enum + templates, A/R aging cron, demurrage alerts; P1.6 outbound CustomerInvoiceBatch still TODO, blocked on the invoice-numbering decision). See § Trading P1 below.
 - **P3** — TODO
 - **Phase G** — TODO (runtime upgrade prep: passlib must go before Python ≥3.13)
 
@@ -422,43 +422,41 @@ stay on the 1:1 `Vessel` (the final, UK-arriving leg). `ShipmentLeg` is an
 ordered route-history record. Unifying `Vessel` into `ShipmentLeg` (and
 leg-by-leg polling) is deferred to a future phase.
 
-### Trading P1.2 — Booking-confirmation free-day / rate fields on `Booking`
+### Trading P1.2 — Booking-confirmation fields — COMPLETE (`trading-p1.2-p1.5`)
 
-Maersk booking PDFs carry `free_days_detention`, `free_days_demurrage`, per-day
-rates after free-time, gate-in cut-off, empty-container release date, empty
-return deadline, and the port-of-discharge terminal. These are the inputs for
-the demurrage countdown alerts in Trading P1.5.
+9 nullable columns added to `Booking` (migration `b1c2d3e4f5a6`):
+`gate_in_cutoff`, `empty_pickup_release`, `empty_return_deadline`,
+`free_days_detention`, `free_days_demurrage`, `detention_rate_gbp_after`,
+`demurrage_rate_gbp_after`, `port_of_discharge_terminal`, `service_mode`.
+Populated via `PATCH /bookings/{id}`; surfaced on the booking detail response.
 
-**Additions to `Booking`:** `gate_in_cutoff`, `empty_pickup_release`,
-`empty_return_deadline`, `free_days_detention: int`, `free_days_demurrage: int`,
-`detention_rate_gbp_after: Decimal`, `demurrage_rate_gbp_after: Decimal`,
-`port_of_discharge_terminal: str`, `service_mode: str` (CY/CY default).
+### Trading P1.3 — UK port-of-discharge enum + PortTemplate — COMPLETE (`trading-p1.2-p1.5`)
 
-### Trading P1.3 — UK port-of-discharge enum + per-port templates
+- `UKPort` enum (`FELIXSTOWE`, `LONDON_GATEWAY`, `TILBURY`, `SOUTHAMPTON`,
+  `LIVERPOOL`, `OTHER`); `BillOfLading.port_of_discharge` converted free-text →
+  enum (migration `c2d3e4f5a6b7`). `Vessel.port_of_discharge` left as String
+  (feeds the VesselFinder UNLOCODE lookup).
+- `PortTemplate` table (one row per port) carrying default free-days + rates;
+  `/port-templates` routes (admin upsert, member list). When a BL is created
+  with a port, the parent booking inherits the template's defaults for any
+  unset P1.2 fields.
 
-Today `BillOfLading.port_of_discharge` is free-text. Real data has Felixstowe,
-London Gateway, Tilbury, Southampton, Liverpool — each with distinct fee
-structures.
+### Trading P1.4 — A/R aging Celery task — COMPLETE (`trading-p1.2-p1.5`)
 
-- New `UKPort` enum (`FELIXSTOWE`, `LONDON_GATEWAY`, `TILBURY`, `SOUTHAMPTON`,
-  `LIVERPOOL`, `OTHER`)
-- Optional `PortTemplate` lookup carrying default free-days + rate-per-day for
-  each port; `Booking` picks from the template when the port is set.
+Daily `check_ar_aging` task → `ARagingService`: scans containers where
+`lifecycle_status` ∈ {`DELIVERED`, `INVOICED`, `PAID`} and
+`updated_at < now() - AR_AGING_THRESHOLD_DAYS` (default 14); notifies
+`ADMIN` + `UK_AGENT`, deduplicated once per container per week via Redis.
+`AR_AGING_ENABLED` kill switch.
 
-### Trading P1.4 — A/R aging Celery task
+### Trading P1.5 — Demurrage countdown alerts — COMPLETE (`trading-p1.2-p1.5`)
 
-**Goal:** detect containers delivered N days ago that have not been banked.
-
-- Daily cron: scan containers where `lifecycle_status` ∈ {`DELIVERED`, `INVOICED`,
-  `PAID`} and `updated_at < now() - settings.AR_AGING_THRESHOLD_DAYS`
-- Notify `ADMIN` + `UK_AGENT` once per container per week
-- Configurable threshold in `app/core/config.py` (`AR_AGING_THRESHOLD_DAYS: int = 14`)
-
-### Trading P1.5 — Demurrage countdown alerts
-
-Uses the P1.2 booking-confirmation fields. Once `Vessel.ata` is set, days-since-arrival
-is computed; when `free_days_demurrage` (default 5) is within 2 days of expiry, fire a
-`NotificationType.DEMURRAGE_WARNING` (new) to admin + UK agent.
+Daily `check_demurrage_countdown` task → `DemurrageService`: for each arrived
+vessel (`Vessel.ata` set) on a non-COMPLETE booking, computes days of free
+demurrage left (`Booking.free_days_demurrage` or `DEMURRAGE_DEFAULT_FREE_DAYS`);
+within `DEMURRAGE_WARNING_LEAD_DAYS` of expiry fires `NotificationType.DEMURRAGE_WARNING`
+to `ADMIN` + `UK_AGENT`, deduplicated once per booking per day. New
+`notificationtype` enum values added in migration `d3e4f5a6b7c8`.
 
 ### Trading P1.6 — Outbound `CustomerInvoiceBatch`
 

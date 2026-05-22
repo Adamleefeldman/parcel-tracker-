@@ -15,6 +15,7 @@ from app.middleware.auth import get_client_ip, require_booking_member
 from app.schemas.schemas import BLCreate, BLOut
 from app.services.booking_service import BookingService
 from app.services.notification_service import NotificationService
+from app.services.port_template_service import PortTemplateService
 
 bl_router = APIRouter(prefix="/bookings/{booking_id}/bl", tags=["bill-of-lading"])
 
@@ -56,6 +57,10 @@ async def upload_bl(
             )
 
         bl.status = BLStatus.CONTAINERS_CREATED
+
+    # Inherit per-port detention/demurrage defaults onto the booking for any
+    # P1.2 confirmation fields not already set (P1.3).
+    await PortTemplateService.apply_to_booking(db, booking_id, body.port_of_discharge)
 
     booking = await BookingService.get(db, booking_id, actor)
     await BookingService.transition_status(

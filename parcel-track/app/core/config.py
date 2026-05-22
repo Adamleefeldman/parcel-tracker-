@@ -92,6 +92,18 @@ class Settings(BaseSettings):
     LOGIN_MAX_ATTEMPTS: int = 5
     LOGIN_LOCKOUT_WINDOW_SECONDS: int = 900  # 15-minute sliding window
 
+    # A/R aging (P1.4) — daily task flags containers delivered/invoiced/paid but
+    # not banked, aged past the threshold. AR_AGING_ENABLED is a kill switch.
+    AR_AGING_ENABLED: bool = True
+    AR_AGING_THRESHOLD_DAYS: int = 14
+
+    # Demurrage countdown alerts (P1.5) — daily task warns when free demurrage
+    # time at the UK port is near expiry. DEMURRAGE_DEFAULT_FREE_DAYS is the
+    # fallback when Booking.free_days_demurrage is unset.
+    DEMURRAGE_ALERTS_ENABLED: bool = True
+    DEMURRAGE_WARNING_LEAD_DAYS: int = 2
+    DEMURRAGE_DEFAULT_FREE_DAYS: int = 5
+
     # Sentry error tracking.
     SENTRY_DSN: str = ""
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1

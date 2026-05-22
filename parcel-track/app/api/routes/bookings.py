@@ -95,6 +95,15 @@ async def get_booking(
         clearing_docs=_cd_to_out(booking.clearing_docs) if booking.clearing_docs else None,
         delivery_points=[_dp_to_out(p) for p in booking.delivery_points],
         legs=[ShipmentLegOut.model_validate(leg) for leg in booking.legs],
+        gate_in_cutoff=booking.gate_in_cutoff,
+        empty_pickup_release=booking.empty_pickup_release,
+        empty_return_deadline=booking.empty_return_deadline,
+        free_days_detention=booking.free_days_detention,
+        free_days_demurrage=booking.free_days_demurrage,
+        detention_rate_gbp_after=booking.detention_rate_gbp_after,
+        demurrage_rate_gbp_after=booking.demurrage_rate_gbp_after,
+        port_of_discharge_terminal=booking.port_of_discharge_terminal,
+        service_mode=booking.service_mode,
     )
 
 

@@ -442,7 +442,7 @@ async def advance_to(
             "shipper_name": "Shipper",
             "consignee_name": "Consignee",
             "port_of_loading": "Casablanca",
-            "port_of_discharge": "Felixstowe",
+            "port_of_discharge": "felixstowe",
             "containers": [
                 {"container_number": f"TCKU{abs(hash(ref)) % 10**7:07d}"},
                 {"container_number": f"MSCU{abs(hash(ref + '_2')) % 10**7:07d}"},
@@ -466,7 +466,7 @@ async def advance_to(
             "vessel_name": "Test Vessel",
             "shipping_line": "TestLine",
             "port_of_loading": "Casablanca",
-            "port_of_discharge": "Felixstowe",
+            "port_of_discharge": "felixstowe",
         },
         headers=h,
     )
