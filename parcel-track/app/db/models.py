@@ -745,6 +745,16 @@ class Container(Base):
     )
     dispute_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     disputed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # P2.1 — admin acknowledgement of an open dispute. Setting these does NOT
+    # clear `dispute_reason` (history preserved) or move lifecycle out of
+    # DISPUTED; it simply lets the booking COMPLETE precondition treat the
+    # dispute as closed.
+    dispute_acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    dispute_acknowledged_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
 
     # ── Sale-side ────────────────────────────────────────────────────────
     delivery_type: Mapped[DeliveryType | None] = mapped_column(SAEnum(DeliveryType), nullable=True)

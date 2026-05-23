@@ -255,6 +255,8 @@ def _container_to_out(c):
         sale_currency=c.sale_currency.value,
         dispute_reason=c.dispute_reason,
         disputed_at=c.disputed_at,
+        dispute_acknowledged_at=c.dispute_acknowledged_at,
+        dispute_acknowledged_by=c.dispute_acknowledged_by,
         updated_at=c.updated_at,
     )
 

@@ -1,15 +1,21 @@
-"""Container listing, port-status, and sale-side updates."""
+"""Container listing, port-status, sale-side, and dispute updates."""
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.db.models import User
-from app.middleware.auth import require_admin, require_booking_member
+from app.middleware.auth import get_client_ip, require_admin, require_booking_member
 from app.schemas.pagination import PaginatedResponse, PaginationParams
-from app.schemas.schemas import ContainerOut, ContainerSaleUpdate, ContainerStatusUpdate
+from app.schemas.schemas import (
+    ContainerOut,
+    ContainerSaleUpdate,
+    ContainerStatusUpdate,
+    DisputeAcknowledge,
+    DisputeOpen,
+)
 from app.services.container_service import ContainerService
 
 container_router = APIRouter(prefix="/bookings/{booking_id}/containers", tags=["containers"])
@@ -49,6 +55,45 @@ async def update_sale(
     delivery type, GBP sale prices). Admin-only — pricing is sensitive."""
     container = await ContainerService.update_sale(db, container_id, body, actor)
     # Reuse the helper from the bookings router for consistent serialisation.
+    from app.api.routes.bookings import _container_to_out
+
+    return _container_to_out(container)
+
+
+@container_router.patch("/{container_id}/dispute", response_model=ContainerOut)
+async def open_dispute(
+    booking_id: uuid.UUID,
+    container_id: uuid.UUID,
+    body: DisputeOpen,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_admin),
+):
+    """Open a dispute on a container (admin-only, P2.1). Sets the lifecycle to
+    DISPUTED and blocks the parent booking from reaching COMPLETE until an
+    admin acknowledges the dispute."""
+    container = await ContainerService.open_dispute(
+        db, container_id, body.reason, actor, get_client_ip(request)
+    )
+    from app.api.routes.bookings import _container_to_out
+
+    return _container_to_out(container)
+
+
+@container_router.patch("/{container_id}/dispute/acknowledge", response_model=ContainerOut)
+async def acknowledge_dispute(
+    booking_id: uuid.UUID,
+    container_id: uuid.UUID,
+    body: DisputeAcknowledge,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(require_admin),
+):
+    """Acknowledge an open dispute (admin-only, P2.1). Preserves the dispute
+    history; clears the booking-completion blocker."""
+    container = await ContainerService.acknowledge_dispute(
+        db, container_id, actor, get_client_ip(request)
+    )
     from app.api.routes.bookings import _container_to_out
 
     return _container_to_out(container)

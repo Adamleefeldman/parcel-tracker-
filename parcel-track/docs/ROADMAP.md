@@ -472,14 +472,25 @@ to a real entity so multiple containers can share one outbound invoice
 
 PDF generation, outbound delivery, GDPR retention — all deferred to Trading P2.
 
-### Trading P2.1 — Dispute acknowledgement flow
+### Trading P2.1 — Dispute acknowledgement flow — COMPLETE (`trading-p2.1-dispute-ack`)
 
-`Container.lifecycle_status = DISPUTED` + `dispute_reason` + `disputed_at` already
-exist. P2.1 adds:
-- `PATCH /containers/{id}/dispute` (admin) to open a dispute
-- `PATCH /containers/{id}/dispute/acknowledge` (admin) to clear it
-- Booking `COMPLETE` precondition counts acknowledged disputes as
-  closed — currently any DISPUTED row blocks completion.
+Closes the dispute dead-end: previously any `Container.lifecycle_status = DISPUTED`
+permanently blocked `Booking.COMPLETE` with no resolution path.
+
+**Delivered (marker model, no eraser):**
+- Two new `Container` columns: `dispute_acknowledged_at`,
+  `dispute_acknowledged_by` (migration `e4f5a6b7c8d9`). `dispute_reason` /
+  `disputed_at` are preserved — the dispute history stays visible.
+- `PATCH /bookings/{booking_id}/containers/{container_id}/dispute` (admin) —
+  sets `dispute_reason` + `disputed_at`, triggers `recompute()` to move
+  lifecycle to `DISPUTED`, clears any prior ack (re-opening is supported).
+- `PATCH …/dispute/acknowledge` (admin) — sets the ack timestamp + actor;
+  rejects (400) if the container isn't currently `DISPUTED`. Lifecycle stays
+  `DISPUTED` deliberately (history).
+- `BookingService._check_preconditions` for `COMPLETE`: containers whose
+  lifecycle is `DISPUTED` *and* `dispute_acknowledged_at IS NOT NULL` count
+  as resolved; only unacknowledged disputes block.
+- AuditLog rows for both open + acknowledge.
 
 ### Trading P2.2 — Mixed-at-warehouse pallet rebundling
 

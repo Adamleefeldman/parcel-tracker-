@@ -1,6 +1,9 @@
-"""Container service — list, update port status, and update sale-side fields."""
+"""Container service — list, update port status, update sale-side fields,
+and open / acknowledge disputes."""
 
+import json
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException
@@ -8,10 +11,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.enums import Currency, DeliveryType, PortStatus, UserRole
-from app.db.models import BillOfLading, Broker, Company, Container, User
+from app.core.enums import (
+    ContainerLifecycleStatus,
+    Currency,
+    DeliveryType,
+    PortStatus,
+    UserRole,
+)
+from app.db.models import AuditLog, BillOfLading, Broker, Company, Container, User
 from app.schemas.pagination import PaginationParams, paginate
 from app.schemas.schemas import ContainerSaleUpdate, ContainerStatusUpdate
+from app.services.container_lifecycle_service import ContainerLifecycleService
 
 
 class ContainerService:
@@ -118,3 +128,123 @@ class ContainerService:
             )
         )
         return refreshed.scalar_one()
+
+    # ── Dispute open / acknowledge (P2.1) ──────────────────────────────────
+
+    @staticmethod
+    async def _get_container_for_dispute(db: AsyncSession, container_id: uuid.UUID) -> Container:
+        result = await db.execute(
+            select(Container)
+            .where(Container.id == container_id)
+            .options(
+                selectinload(Container.bill_of_lading),
+                selectinload(Container.broker),
+                selectinload(Container.end_company),
+            )
+        )
+        container = result.scalar_one_or_none()
+        if not container:
+            raise HTTPException(404, "Container not found")
+        return container
+
+    @staticmethod
+    async def open_dispute(
+        db: AsyncSession,
+        container_id: uuid.UUID,
+        reason: str,
+        actor: User,
+        client_ip: str | None,
+    ) -> Container:
+        """Mark a container as disputed. Re-opening a previously-acknowledged
+        dispute clears the acknowledgement so the booking is blocked again."""
+        if actor.role != UserRole.ADMIN:
+            raise HTTPException(403, "Only admin can open a dispute")
+
+        container = await ContainerService._get_container_for_dispute(db, container_id)
+        old = {
+            "dispute_reason": container.dispute_reason,
+            "disputed_at": container.disputed_at.isoformat() if container.disputed_at else None,
+            "dispute_acknowledged_at": (
+                container.dispute_acknowledged_at.isoformat()
+                if container.dispute_acknowledged_at
+                else None
+            ),
+        }
+
+        container.dispute_reason = reason
+        container.disputed_at = datetime.now(UTC)
+        # Re-opening clears any prior acknowledgement.
+        container.dispute_acknowledged_at = None
+        container.dispute_acknowledged_by = None
+        await db.flush()
+
+        # Recompute mutates lifecycle_status to DISPUTED in memory. Flush
+        # again before refresh — otherwise the upcoming refresh() reads back
+        # the stale lifecycle from the DB and overwrites our change.
+        await ContainerLifecycleService.recompute(db, container_id)
+        await db.flush()
+
+        new = {
+            "dispute_reason": container.dispute_reason,
+            "disputed_at": container.disputed_at.isoformat(),
+            "dispute_acknowledged_at": None,
+        }
+        booking_id = container.bill_of_lading.booking_id if container.bill_of_lading else None
+        db.add(
+            AuditLog(
+                booking_id=booking_id,
+                actor_id=actor.id,
+                action="container.dispute_opened",
+                entity_type="container",
+                entity_id=container.id,
+                old_value=json.dumps(old),
+                new_value=json.dumps(new),
+                ip_address=client_ip,
+            )
+        )
+        await db.refresh(container)
+        return container
+
+    @staticmethod
+    async def acknowledge_dispute(
+        db: AsyncSession,
+        container_id: uuid.UUID,
+        actor: User,
+        client_ip: str | None,
+    ) -> Container:
+        """Acknowledge an open dispute. Preserves `dispute_reason` /
+        `disputed_at` (history) and keeps `lifecycle_status == DISPUTED` —
+        the booking COMPLETE precondition treats acknowledged disputes as
+        resolved."""
+        if actor.role != UserRole.ADMIN:
+            raise HTTPException(403, "Only admin can acknowledge a dispute")
+
+        container = await ContainerService._get_container_for_dispute(db, container_id)
+        if container.lifecycle_status != ContainerLifecycleStatus.DISPUTED:
+            raise HTTPException(400, "Container is not currently disputed")
+
+        container.dispute_acknowledged_at = datetime.now(UTC)
+        container.dispute_acknowledged_by = actor.id
+        await db.flush()
+
+        db.add(
+            AuditLog(
+                booking_id=container.bill_of_lading.booking_id
+                if container.bill_of_lading
+                else None,
+                actor_id=actor.id,
+                action="container.dispute_acknowledged",
+                entity_type="container",
+                entity_id=container.id,
+                old_value=None,
+                new_value=json.dumps(
+                    {
+                        "dispute_acknowledged_at": container.dispute_acknowledged_at.isoformat(),
+                        "dispute_acknowledged_by": str(actor.id),
+                    }
+                ),
+                ip_address=client_ip,
+            )
+        )
+        await db.refresh(container)
+        return container

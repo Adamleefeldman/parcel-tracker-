@@ -379,6 +379,9 @@ class BookingService:
                 raise HTTPException(400, "No containers found for this booking")
 
             terminal = {ContainerLifecycleStatus.BANKED, ContainerLifecycleStatus.CLOSED}
+            # DISPUTED containers are handled by the dedicated check below — they
+            # are neither "pending banking" nor a transient lifecycle state, so we
+            # exclude them from the pending filter to surface a clearer message.
             pending = [
                 c
                 for c in all_containers
@@ -392,12 +395,13 @@ class BookingService:
                     f"{[c.container_number for c in pending]}",
                 )
 
-            # Disputed containers must have an acknowledgement (an admin
-            # explicitly OK'd them via the dispute-acknowledge route — for
-            # now we require dispute_reason be cleared to count as resolved;
-            # full acknowledgement flow lands in P2.5).
+            # P2.1 — disputed containers count as resolved only when an admin
+            # has explicitly acknowledged them via PATCH /containers/{id}/dispute/acknowledge.
             unresolved_disputes = [
-                c for c in all_containers if c.lifecycle_status == ContainerLifecycleStatus.DISPUTED
+                c
+                for c in all_containers
+                if c.lifecycle_status == ContainerLifecycleStatus.DISPUTED
+                and c.dispute_acknowledged_at is None
             ]
             if unresolved_disputes:
                 raise HTTPException(
