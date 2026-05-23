@@ -395,7 +395,27 @@ class ContainerOut(UUIDModel):
     sale_currency: str = "GBP"
     dispute_reason: str | None = None
     disputed_at: datetime | None = None
+    dispute_acknowledged_at: datetime | None = None
+    dispute_acknowledged_by: uuid.UUID | None = None
     updated_at: datetime
+
+
+class DisputeOpen(BaseModel):
+    """PATCH payload to open a dispute on a container (P2.1)."""
+
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def reason_non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Dispute reason cannot be empty")
+        return v
+
+
+class DisputeAcknowledge(BaseModel):
+    """PATCH payload to acknowledge an open dispute (P2.1). Empty for now —
+    extension point for an optional acknowledgement note in a later phase."""
 
 
 class ContainerSaleUpdate(BaseModel):

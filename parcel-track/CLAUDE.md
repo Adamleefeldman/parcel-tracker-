@@ -290,7 +290,8 @@ Both must be set. Never swap them. Production `config.py` validates that
 **Phase H** — COMPLETE. Docker dev-stack hygiene + Docker-secrets adoption for R2 credentials (PR #24, `main` at `047ebed`).
 **Trading-core remediation (P0.1–P0.5)** — COMPLETE on `p0-trading-core-refactor` (PR #28). Realigns the schema with the client's actual workflow: Booking entity, M:N Booking↔PO, supplier-vs-customer payment split, ContainerLifecycleStatus end-to-end, broker + end-company on container and delivery point. Five migrations in order: `c3d4e5f6a7b8` → `d4e5f6a7b8c9` → `e5f6a7b8c9d0` → `f6a7b8c9d0e1` → `a7b8c9d0e1f2`. 292 tests green, ruff + mypy clean.
 **Trading P1.1** — COMPLETE (PR #29). Additive multi-leg support: `shipment_legs` table (migration `f1a2b3c4d5e6`) + `ShipmentLegService` + `/bookings/{id}/legs` routes. `Vessel` and the VesselFinder poller untouched — legs are an ordered route-history record.
-**Trading P1.2–P1.5** — COMPLETE on `trading-p1.2-p1.5`. P1.2: 9 booking-confirmation columns on `Booking`. P1.3: `UKPort` enum (`BillOfLading.port_of_discharge` is now typed) + `PortTemplate` per-port defaults + `/port-templates` routes; a new BL inherits port free-day defaults onto its booking. P1.4: daily `check_ar_aging` task flags delivered-but-unbanked containers. P1.5: daily `check_demurrage_countdown` task warns near free-time expiry. Migrations `b1c2d3e4f5a6` → `c2d3e4f5a6b7` → `d3e4f5a6b7c8`. P1.6 (CustomerInvoiceBatch) still TODO — blocked on the invoice-numbering decision.
+**Trading P1.2–P1.5** — COMPLETE (PR #30). P1.2: 9 booking-confirmation columns on `Booking`. P1.3: `UKPort` enum (`BillOfLading.port_of_discharge` is now typed) + `PortTemplate` per-port defaults + `/port-templates` routes; a new BL inherits port free-day defaults onto its booking. P1.4: daily `check_ar_aging` task flags delivered-but-unbanked containers. P1.5: daily `check_demurrage_countdown` task warns near free-time expiry. Migrations `b1c2d3e4f5a6` → `c2d3e4f5a6b7` → `d3e4f5a6b7c8`. P1.6 (CustomerInvoiceBatch) still TODO — blocked on the invoice-numbering decision.
+**Trading P2.1** — COMPLETE on `trading-p2.1-dispute-ack`. New `Container.dispute_acknowledged_at` + `dispute_acknowledged_by` (migration `e4f5a6b7c8d9`); admin-only `PATCH /bookings/{id}/containers/{cid}/dispute` (open) and `…/dispute/acknowledge` (clear). `Booking.COMPLETE` precondition now counts acknowledged disputes as resolved — closes the dead-end that previously left disputed bookings permanently stuck. Marker model: lifecycle stays `DISPUTED` (history preserved), only the booking-completion blocker is lifted.
 **P3** — TODO (read cache, soft delete, TZ audit, load test; `/docs` lockdown landed early in Phase D).
 **Phase G** — TODO. Replace `passlib` before any Python ≥3.13 upgrade; optional `python-jose` → `pyjwt` swap.
 
@@ -306,7 +307,7 @@ Full task specs (acceptance criteria, file lists, poller algorithms) live in
 | P1.5 (trading) | Demurrage countdown alerts | DONE | daily `check_demurrage_countdown` |
 | P1.6 (trading) | Outbound `CustomerInvoiceBatch` entity (replaces free-text customer_invoice_ref) | TODO | none |
 | P1.4 (infra)  | Destin8 polling worker | BLOCKED | API credentials + tier choice |
-| P2.x (trading) | Dispute acknowledgement flow + ops dashboard alerts | TODO | none |
+| P2.1 (trading) | Dispute acknowledgement flow | DONE | open/ack dispute routes + COMPLETE precondition counts acked as resolved |
 | P3 | Read caching, soft delete, TZ audit, locust load test | TODO | product decisions |
 | G1 | Replace `passlib` (blocks Python ≥3.13) | TODO | none |
 
