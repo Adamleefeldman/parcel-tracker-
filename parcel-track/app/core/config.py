@@ -118,6 +118,13 @@ class Settings(BaseSettings):
     # Production refuses to boot with this empty (see app/main.py).
     CORS_ALLOWED_ORIGINS: str = ""
 
+    # Trusted hosts — comma-separated list of allowed Host header values.
+    # Example: "api.thefmcghub.com,parcel-tracker-production-477c.up.railway.app"
+    # Production refuses to boot with this empty. Dev falls back to wildcard so
+    # local uvicorn / pytest don't need the env var set. Enforced by Starlette's
+    # TrustedHostMiddleware — see app/main.py.
+    ALLOWED_HOSTS: str = ""
+
     @property
     def is_production(self) -> bool:
         return self.APP_ENV == "production"
@@ -126,6 +133,11 @@ class Settings(BaseSettings):
     def cors_origins(self) -> list[str]:
         """Parse CORS_ALLOWED_ORIGINS into a clean list, dropping empties/whitespace."""
         return [o.strip() for o in self.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def allowed_hosts(self) -> list[str]:
+        """Parse ALLOWED_HOSTS into a clean list, dropping empties/whitespace."""
+        return [h.strip() for h in self.ALLOWED_HOSTS.split(",") if h.strip()]
 
     @model_validator(mode="after")
     def _validate_settings(self) -> "Settings":
@@ -185,6 +197,13 @@ class Settings(BaseSettings):
                     "CORS_ALLOWED_ORIGINS must be set in production. "
                     "Provide a comma-separated list of allowed origins, e.g. "
                     "'https://app.example.com,https://admin.example.com'."
+                )
+
+            if not self.allowed_hosts:
+                raise ValueError(
+                    "ALLOWED_HOSTS must be set in production. "
+                    "Provide a comma-separated list of allowed Host header values, "
+                    "e.g. 'api.example.com,api-staging.example.com'."
                 )
 
         return self

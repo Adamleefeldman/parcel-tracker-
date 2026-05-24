@@ -9,6 +9,7 @@ import logging
 import sentry_sdk
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
@@ -112,6 +113,22 @@ else:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+
+# ── Trusted hosts ────────────────────────────────────────────────────────────
+#
+# Reject any request whose Host header isn't on the explicit allowlist.
+# Defense-in-depth against Host-header injection and stray traffic hitting the
+# public IP with arbitrary Host values. Production refuses to boot when
+# ALLOWED_HOSTS is empty (see app/core/config.py); dev falls back to wildcard
+# so local uvicorn / pytest don't need the env var set.
+#
+# Mounted between CORS and SecurityHeaders so that a 400 from this middleware
+# still flows back through SecurityHeaders + RequestLogging on the response
+# path (security headers applied, request_id logged).
+
+allowed_hosts = settings.allowed_hosts if settings.allowed_hosts else ["*"]
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
 
 # ── Security headers ─────────────────────────────────────────────────────────
