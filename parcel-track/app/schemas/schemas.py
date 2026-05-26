@@ -25,10 +25,23 @@ class UUIDModel(BaseModel):
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 
+# Emails are treated as case-insensitive end-to-end. `EmailStr` already
+# lowercases the domain; this also lowercases the local part so a user who
+# signed up as `Foo@x.com` can log in as `foo@x.com`. See tasks/lessons.md
+# (2026-05-26).
+def _normalize_email(v: str) -> str:
+    return v.strip().lower()
+
+
 class InviteRequest(BaseModel):
     email: EmailStr
     role: str  # UserRole value
     booking_id: uuid.UUID | None = None
+
+    @field_validator("email")
+    @classmethod
+    def _lowercase_email(cls, v: str) -> str:
+        return _normalize_email(v)
 
 
 class AcceptInviteRequest(BaseModel):
@@ -47,6 +60,11 @@ class AcceptInviteRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def _lowercase_email(cls, v: str) -> str:
+        return _normalize_email(v)
 
 
 class TokenResponse(BaseModel):
