@@ -22,6 +22,19 @@ export async function loginRequest(email: string, password: string): Promise<Tok
   const raw = await apiRequest<RawTokenResponse>('/api/v1/auth/login', {
     method: 'POST',
     body: { email, password },
+    auth: 'skip',
+  });
+  return {
+    accessToken: raw.access_token,
+    refreshToken: raw.refresh_token,
+  };
+}
+
+export async function refreshRequest(refreshToken: string): Promise<TokenPair> {
+  const raw = await apiRequest<RawTokenResponse>('/api/v1/auth/refresh', {
+    method: 'POST',
+    body: { refresh_token: refreshToken },
+    auth: 'skip',
   });
   return {
     accessToken: raw.access_token,
