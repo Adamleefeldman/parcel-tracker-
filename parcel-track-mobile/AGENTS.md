@@ -32,20 +32,36 @@ TypeScript's DOM lib is loaded by default, which silently allows things like `DO
 
 JWTs go in `expo-secure-store`, NEVER `AsyncStorage`. Tokens are credentials, treat them like passwords.
 
+### 401 → refresh → retry flow
+
+Authenticated calls go through `apiRequest` (`src/api/client.ts`). On a 401, it:
+
+1. Calls `POST /api/v1/auth/refresh` with the stored refresh token (single-flighted — N concurrent 401s do exactly one refresh).
+2. On refresh success, persists the new pair via `setTokens()` and retries the original request once with the new access token.
+3. On refresh failure (any non-2xx, network error, missing refresh token), calls `clearTokens()` and emits a `sessionExpired` event via `src/auth/sessionEvents.ts`. `AuthProvider` listens and flips status → `anonymous`, which renders `LoginScreen`.
+
+The retried request is final — a second 401 surfaces as a 401; we never loop. Auth-endpoint calls (login, refresh itself) pass `auth: 'skip'` to opt out of the interceptor — a 401 there means bad creds / dead refresh token and must propagate as-is.
+
+### Cached user identity
+
+`AuthContext` exposes a `user: { id, role } | null` derived by decoding the access token's payload client-side (`src/auth/jwt.ts`, `jwt-decode`). Signature verification is the backend's job — the client only reads claims for UI.
+
+When the backend grows a `/me` endpoint, swap `decodeUserFromToken` for a real fetch and extend the `User` type with `name` + `email`. The cold-start path can also become a real `/me` call at that point (currently lazy — we trust the SecureStore token on boot and let the first authenticated screen self-heal via the 401 flow above).
+
 ## CI
 
-A single workflow at `../.github/workflows/ci.yml` (monorepo root) runs `npm ci` + `npx tsc --noEmit` as the `mobile-typecheck` job on every push/PR touching this directory. No tests, no lint yet — add when there's a real test suite or a style we want enforced. Run locally with `npx tsc --noEmit` to catch failures before pushing.
+A single workflow at `../.github/workflows/ci.yml` (monorepo root) runs two mobile jobs on every push/PR touching this directory:
+
+- `mobile-typecheck` — `npm ci` + `npx tsc --noEmit`
+- `mobile-test` — `npm ci` + `npm test` (jest, ts-jest preset, node env; pure-logic tests only)
+
+No lint yet — add when there's a style we want enforced. Run locally with `npx tsc --noEmit` and `npm test` to catch failures before pushing.
 
 Caveat: a workflow trigger runs ALL jobs (backend + mobile), so a mobile-only PR still runs the backend pytest job (and vice versa). Inefficient but simpler than per-job path filtering. Acceptable cost at this scale.
 
-## Deferred fixes (apply when adding the first authenticated screen)
+## Deferred fixes
 
-Bootstrap login works, but the following are intentionally NOT yet implemented. The next agent/PR that touches authenticated calls should land them together:
-
-1. **401-driven refresh-token flow.** When the access token expires (~15 min default), authenticated calls will fail and the user is silently stuck. Wire an interceptor in `src/api/client.ts` that, on 401, calls `POST /api/v1/auth/refresh` with the stored refresh token, persists the new pair via `setTokens()`, and retries the original request once. On refresh failure, call `clearTokens()` and flip auth status to `anonymous`.
-2. **Cold-start token validation.** `AuthContext` currently trusts whatever token is in SecureStore on boot. With the refresh flow above in place, the first authenticated call (e.g. `GET /api/v1/users/me`) will self-heal — no separate boot validation needed.
-3. **Cache user identity in `AuthContext`.** Once `/me` exists in the bootstrap flow, store the user object (id, email, name, role) in context so screens don't refetch. Currently only tokens are stored.
-4. **Nav library.** Adopt Expo Router once we have ≥3 screens or need deep linking. Until then, conditional render in `App.tsx` is sufficient.
+1. **Nav library.** Adopt Expo Router once we have ≥3 screens or need deep linking. Until then, conditional render in `App.tsx` is sufficient.
 
 ## Known `npm audit` noise
 

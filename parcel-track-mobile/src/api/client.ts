@@ -6,8 +6,17 @@
  *   - JSON content negotiation
  *   - Bearer-token injection (caller supplies; this module is auth-agnostic)
  *   - Uniform error shape (ApiError) so callers don't branch on fetch internals
+ *   - 401 → refresh → retry-once flow for normal (auth: 'normal') calls
+ *
+ * The 401 flow lives here, not in a wrapper layer, so every authenticated
+ * caller automatically gets it. Auth-endpoint calls (login, refresh itself)
+ * pass `auth: 'skip'` to opt out — a 401 from those means bad creds or a
+ * dead refresh token, not "access token expired."
  */
 
+import { refreshRequest } from '../auth/authApi';
+import { emitSessionExpired } from '../auth/sessionEvents';
+import { clearTokens, getRefreshToken, setTokens } from '../auth/tokenStorage';
 import { API_BASE_URL } from '../config/api';
 
 /** Default request timeout. Long enough for slow LTE, short enough not to hang the UI. */
@@ -25,6 +34,12 @@ export interface ApiRequestOptions {
   headers?: Record<string, string>;
   /** Override request timeout in ms. Defaults to 15 s. */
   timeoutMs?: number;
+  /**
+   * 'normal' (default): on 401, try one refresh + retry; on refresh failure,
+   * clear tokens and emit a session-expired event.
+   * 'skip': pass 401s straight through. Used by login + refresh themselves.
+   */
+  auth?: 'normal' | 'skip';
 }
 
 export class ApiError extends Error {
@@ -44,10 +59,20 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, accessToken, headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS } =
-    options;
+interface RawResponse {
+  status: number;
+  ok: boolean;
+  parsed: unknown;
+}
 
+async function performRequest(
+  path: string,
+  method: string,
+  body: unknown,
+  accessToken: string | undefined,
+  headers: Record<string, string>,
+  timeoutMs: number,
+): Promise<RawResponse> {
   const url = `${API_BASE_URL}${path}`;
   const finalHeaders: Record<string, string> = {
     Accept: 'application/json',
@@ -99,12 +124,78 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     }
   }
 
-  if (!response.ok) {
-    const message = extractErrorMessage(parsed, `Request failed: ${response.status}`);
-    throw new ApiError(response.status, message, parsed);
+  return { status: response.status, ok: response.ok, parsed };
+}
+
+// Module-level single-flight gate. If 5 authenticated requests all 401 at
+// the same time, we run exactly one refresh and the other 4 await its result.
+let refreshInFlight: Promise<string> | null = null;
+
+/**
+ * Get a fresh access token, single-flighting concurrent refreshes.
+ *
+ * Returns the new access token. Throws on refresh failure (caller is
+ * responsible for clearing tokens + emitting session-expired).
+ */
+async function refreshAccessToken(): Promise<string> {
+  if (refreshInFlight) {
+    return refreshInFlight;
+  }
+  refreshInFlight = (async () => {
+    const stored = await getRefreshToken();
+    if (!stored) {
+      throw new Error('no refresh token stored');
+    }
+    const tokens = await refreshRequest(stored);
+    await setTokens(tokens);
+    return tokens.accessToken;
+  })();
+  try {
+    return await refreshInFlight;
+  } finally {
+    refreshInFlight = null;
+  }
+}
+
+export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  const {
+    method = 'GET',
+    body,
+    accessToken,
+    headers = {},
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    auth = 'normal',
+  } = options;
+
+  let result = await performRequest(path, method, body, accessToken, headers, timeoutMs);
+
+  if (result.status === 401 && auth === 'normal') {
+    // Access token is (likely) expired. Try one refresh + retry. Whatever
+    // comes back from the retry is final — no second refresh, no loop.
+    let newAccessToken: string;
+    try {
+      newAccessToken = await refreshAccessToken();
+    } catch {
+      // Refresh failed (refresh token dead, network down mid-refresh, etc.).
+      // Tear down the session and let the original 401 propagate so the
+      // caller still sees a real failure.
+      await clearTokens();
+      emitSessionExpired();
+      throw new ApiError(
+        result.status,
+        extractErrorMessage(result.parsed, `Request failed: ${result.status}`),
+        result.parsed,
+      );
+    }
+    result = await performRequest(path, method, body, newAccessToken, headers, timeoutMs);
   }
 
-  return parsed as T;
+  if (!result.ok) {
+    const message = extractErrorMessage(result.parsed, `Request failed: ${result.status}`);
+    throw new ApiError(result.status, message, result.parsed);
+  }
+
+  return result.parsed as T;
 }
 
 /**
