@@ -275,6 +275,7 @@ Both must be set. Never swap them. Production `config.py` validates that
 | Writing `Container.lifecycle_status` directly | Use `ContainerLifecycleService.recompute(db, container_id)` — it derives the value from inputs (vessel atd/ata, customs, delivery, customer-payment banked total) |
 | Treating Shipment as a 1:1 with PO and BL | The model is `Booking ← M:N → PurchaseOrder` (via `booking_purchase_orders`), `Booking 1:1 BillOfLading`, `Invoice 1:1 PurchaseOrder`. Preconditions walk the join chain |
 | Putting credentials in `.env` | `.env` is for non-secret config only. Real credentials (R2 access key + secret) live in `./secrets/<NAME>` files mounted as Docker secrets at `/run/secrets/<NAME>`. Pydantic-Settings reads them via `secrets_dir`. This keeps `docker compose config` from rendering values as plaintext |
+| Script "worked" but the API doesn't see the data | The host's `.env` targets local Docker Postgres; the API container targets the same. Anything pointing at prod requires `uv run --env-file .env.supabase ...`. If you used the host `.env` to target prod by accident, your changes never reached the API stack |
 
 ---
 

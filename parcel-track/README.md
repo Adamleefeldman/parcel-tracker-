@@ -39,7 +39,19 @@ curl http://localhost:8000/health
 
 The API service bind-mounts `./app` for hot reload — code changes take effect immediately without rebuilding.
 
+**`.env` is local-Docker-by-default.** Its `DATABASE_URL` / `DATABASE_URL_SYNC` /
+`REDIS_URL` settings point at the localhost-forwarded ports of the compose
+services, so any host-run script (`uv run python ...`, ad-hoc Alembic) talks
+to the same database the API container talks to. Production Supabase access
+requires the explicit flag described in [Running against production
+Supabase](#running-against-production-supabase) below.
+
 ## Quick start (local, no Docker)
+
+If you prefer to run Postgres/Redis directly on the host (no compose), the
+defaults in `.env.example` still apply — they just expect Postgres on
+`localhost:5432` (user/pw/db `postgres`/`postgres`/`parceltrack`) and Redis
+on `localhost:6379`.
 
 ```bash
 # 1. Install dependencies (requires uv: https://docs.astral.sh/uv/)
@@ -48,10 +60,39 @@ uv sync --group dev
 # 2. Copy and configure .env (see above)
 cp .env.example .env
 
-# 3. Start Postgres and Redis however you prefer, then:
+# 3. Start Postgres and Redis however you prefer (matching the .env URLs), then:
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000
 ```
+
+## Running against production Supabase
+
+The default `.env` targets local Docker. To run a host command against the
+production Supabase database (or production Upstash Redis), pass an
+`--env-file` override and use a gitignored `.env.supabase` containing the
+prod URLs:
+
+```bash
+# Create .env.supabase from the template (commit-safe values only — no creds):
+cat > .env.supabase <<'EOF'
+DATABASE_URL=postgresql+asyncpg://<user>:<pw>@<supabase-pooler-host>:5432/postgres
+DATABASE_URL_SYNC=postgresql://<user>:<pw>@<supabase-pooler-host>:5432/postgres
+# Optional — only if running against prod Upstash:
+# REDIS_URL=rediss://default:<token>@<endpoint>.upstash.io:6379
+EOF
+chmod 600 .env.supabase   # treat as a credentials file
+
+# Use it explicitly per command:
+uv run --env-file .env.supabase alembic current
+uv run --env-file .env.supabase alembic upgrade head
+uv run --env-file .env.supabase python scripts/<your_script>.py
+```
+
+`.env.supabase` is gitignored by the existing `.env*` rule. There is **no
+default fallback** to prod — without the `--env-file` flag, every host
+command stays on local Docker. This is intentional: it prevents the
+split-brain mode where a typo'd Alembic downgrade or an ad-hoc `DELETE FROM`
+hits production unnoticed.
 
 ## Pre-commit hooks (required)
 
