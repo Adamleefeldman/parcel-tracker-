@@ -167,6 +167,35 @@ class TestLogin:
         )
         assert resp.status_code == 401
 
+    async def test_login_is_case_insensitive(self, client: AsyncClient):
+        # Regression: prior to the Pydantic email-normalization fix, a user
+        # whose stored email was lowercased (bootstrap_admin path) could not
+        # log in when the client sent a different casing — the SQL comparison
+        # `User.email == request.email` was case-sensitive and 401'd, then
+        # accumulated failed-login counters and eventually rate-limited.
+        from app.core.enums import UserRole
+        from app.core.security import hash_password
+        from app.db.models import User
+        from tests.integration.conftest import TestSession
+
+        async with TestSession() as db:
+            db.add(
+                User(
+                    email="mixedcase@test.com",
+                    hashed_password=hash_password("pass12345678"),
+                    name="Mixed Case",
+                    role=UserRole.CUSTOMER,
+                )
+            )
+            await db.commit()
+
+        for variant in ("MixedCase@Test.com", "MIXEDCASE@TEST.COM", " mixedcase@test.com "):
+            resp = await client.post(
+                "/api/v1/auth/login",
+                json={"email": variant, "password": "pass12345678"},
+            )
+            assert resp.status_code == 200, f"login failed for variant {variant!r}: {resp.json()}"
+
 
 class TestRefresh:
     async def test_refresh_returns_new_access_token(
