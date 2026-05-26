@@ -1,12 +1,21 @@
-# ParcelTrack backend CI pipeline.
+# ParcelTrack CI pipeline.
 #
-# Runs on every push and PR to main. Three parallel jobs:
-#   1. lint   — ruff check + ruff format --check (fast, fails the pipeline)
-#   2. test   — pytest against a real Postgres service container (fails the pipeline)
-#   3. typecheck — mypy (non-blocking in P0, will become blocking in P2)
+# Backend jobs (lint / test / typecheck) trigger only on changes under
+# parcel-track/**; mobile job (mobile-typecheck) triggers only on changes
+# under parcel-track-mobile/**. A change touching only one side runs only
+# that side's jobs.
 #
-# The tests run against Postgres (not SQLite) to match production behaviour.
-# A TEST_DATABASE_URL env var is set so conftest.py can pick it up.
+# Backend (parcel-track/) — three parallel jobs:
+#   1. lint        — ruff check + ruff format --check
+#   2. test        — pytest against a real Postgres service container
+#   3. typecheck   — mypy
+#
+# Mobile (parcel-track-mobile/) — one job:
+#   4. mobile-typecheck — npm ci + tsc --noEmit (minimal until a real test
+#      suite lands; see AGENTS.md in the mobile project for plans).
+#
+# The backend tests run against Postgres (not SQLite) to match production
+# behaviour. A TEST_DATABASE_URL env var is set so conftest.py can pick it up.
 
 name: CI
 
@@ -15,22 +24,28 @@ on:
     branches: [main]
     paths:
       - "parcel-track/**"
+      - "parcel-track-mobile/**"
       - ".github/workflows/ci.yml"
   pull_request:
     branches: [main]
     paths:
       - "parcel-track/**"
+      - "parcel-track-mobile/**"
       - ".github/workflows/ci.yml"
 
-defaults:
-  run:
-    working-directory: parcel-track
+# NOTE: no top-level `defaults.run.working-directory` — each job sets its
+# own. Backend jobs run from `parcel-track/`, mobile jobs from
+# `parcel-track-mobile/`. A single shared default would break one or the
+# other.
 
 jobs:
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
     name: Ruff lint + format
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: parcel-track
     steps:
       - uses: actions/checkout@v4
 
@@ -55,6 +70,9 @@ jobs:
   test:
     name: Pytest (Postgres)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: parcel-track
 
     services:
       postgres:
@@ -121,6 +139,9 @@ jobs:
   typecheck:
     name: Mypy
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: parcel-track
 
     steps:
       - uses: actions/checkout@v4
@@ -138,3 +159,32 @@ jobs:
 
       - name: Mypy
         run: uv run mypy app/
+
+  # ── Mobile typecheck ──────────────────────────────────────────────────────
+  mobile-typecheck:
+    name: TS typecheck (mobile)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: parcel-track-mobile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # `npm ci` is reproducible (uses package-lock.json exactly) and faster
+      # than `npm install` in CI. Requires the lockfile to be committed.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: parcel-track-mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Catches missing imports, type errors, broken refactors.
+      # Does NOT catch runtime-only issues (e.g. RN missing browser globals
+      # like DOMException — TS's default DOM lib lies about availability).
+      - name: TypeScript check
+        run: npx tsc --noEmit
