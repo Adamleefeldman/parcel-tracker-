@@ -1,5 +1,17 @@
 # macOS
 .DS_Store
 
-# Environment variables (root-level, if any)
-.env
+# Root-level environment file only — subprojects manage their own `.env`
+# rules in their nested .gitignore (backend: parcel-track/.gitignore;
+# mobile: parcel-track-mobile/.gitignore). A bare `.env` here would match
+# at any depth and shadow those nested rules.
+/.env
+
+# Defense-in-depth for artifacts that should never enter the repo, even if
+# a new subdir is added without its own .gitignore. The active subprojects
+# already cover these locally; this is belt-and-suspenders.
+**/node_modules/
+**/.expo/
+**/dist/
+**/build/
+**/*.log
