@@ -133,11 +133,44 @@ function SaleSection({ container }: { container: Container }) {
 }
 
 function PartiesSection({ container }: { container: Container }) {
+  const { broker, end_company } = container;
   return (
     <Section title="Parties">
-      <View style={styles.grid}>
-        <KV label="Broker" value={container.broker?.name ?? 'Not assigned'} />
-        <KV label="End company" value={container.end_company?.legal_name ?? 'Not assigned'} />
+      <View style={styles.partyBlock}>
+        <Text variant="small" muted>
+          Broker
+        </Text>
+        {broker ? (
+          <View style={styles.grid}>
+            <KV label="Name" value={broker.name} />
+            <KV label="Code" value={broker.code} />
+            <KV label="Phone" value={broker.phone ?? '—'} />
+          </View>
+        ) : (
+          <Text variant="body" muted>
+            Not assigned
+          </Text>
+        )}
+      </View>
+      <View style={styles.partyBlock}>
+        <Text variant="small" muted>
+          End company
+        </Text>
+        {end_company ? (
+          <View style={styles.grid}>
+            <KV label="Legal name" value={end_company.legal_name} />
+            <KV label="Registration no." value={end_company.registration_no ?? '—'} />
+            <KV label="VAT no." value={end_company.vat_no ?? '—'} />
+            <KV label="Address" value={end_company.default_address ?? '—'} />
+            {end_company.aliases && end_company.aliases.length > 0 ? (
+              <KV label="Aliases" value={end_company.aliases.join(', ')} />
+            ) : null}
+          </View>
+        ) : (
+          <Text variant="body" muted>
+            Not assigned
+          </Text>
+        )}
       </View>
     </Section>
   );
@@ -263,6 +296,10 @@ const styles = StyleSheet.create({
   notesBlock: {
     marginTop: spacing.md,
     gap: spacing.xs,
+  },
+  partyBlock: {
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
   },
   disputeCard: {
     backgroundColor: '#fde6e6',
