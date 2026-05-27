@@ -223,6 +223,27 @@ Bump when a matching Expo Go ships: `npx expo install expo@latest --fix`, then u
 
 ---
 
+## Editor setup
+
+If you open the **monorepo root** (`parcel-tracker/`) in VSCode instead of `parcel-track-mobile/` directly, you'll see phantom red squigglies on every test file: `Cannot find name 'describe'`, `'expect'`, `'jest'`, `'beforeEach'`. Both `npx tsc --noEmit` and CI's `mobile-typecheck` job stay green, so the code is fine — it's the editor's TS server that's misconfigured.
+
+**Why:** VSCode looks for `node_modules/typescript/` at the workspace root to populate "Use Workspace Version." The only TypeScript install in this monorepo lives at `parcel-track-mobile/node_modules/typescript/` (the backend is Python). Without finding a root-level TS, VSCode falls back to its bundled TypeScript, which doesn't auto-include the mobile project's `@types/jest`.
+
+**Fix (already committed at `.vscode/settings.json`):**
+
+```json
+{
+  "typescript.tsdk": "parcel-track-mobile/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}
+```
+
+After this file lands, in VSCode: `Cmd+Shift+P → TypeScript: Restart TS Server`. The picker will now offer "Use Workspace Version" pointing at the mobile TS install, and the phantom errors disappear.
+
+If you prefer multi-root or open the mobile folder directly, those work too — the only failure mode is opening the monorepo root *without* this settings file.
+
+---
+
 ## Testing policy
 
 - **Pure-logic + API-client behaviour only**, for now. Anything that doesn't render — JWT decode, error-message extraction, single-flight refresh, token storage helpers — should have a jest test alongside it (`x.test.ts` next to `x.ts`).
