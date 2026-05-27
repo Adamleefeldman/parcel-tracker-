@@ -59,9 +59,46 @@ No lint yet — add when there's a style we want enforced. Run locally with `npx
 
 Caveat: a workflow trigger runs ALL jobs (backend + mobile), so a mobile-only PR still runs the backend pytest job (and vice versa). Inefficient but simpler than per-job path filtering. Acceptable cost at this scale.
 
-## Deferred fixes
+## Navigation
 
-1. **Nav library.** Adopt Expo Router once we have ≥3 screens or need deep linking. Until then, conditional render in `App.tsx` is sufficient.
+File-based routing via **Expo Router** (`app/` directory). The root `app/_layout.tsx` wires the three top-level providers in this order: `QueryClientProvider` → `SafeAreaProvider` → `AuthProvider` → `<Slot/>`.
+
+Two route groups, each with its own redirect-based guard:
+
+- `app/(auth)/` — login + future auth screens. Layout redirects to `/(authed)` when `status === 'authenticated'`.
+- `app/(authed)/` — every screen behind the login wall. Layout redirects to `/(auth)/login` when `status !== 'authenticated'`.
+
+Route groups (`(name)`) don't appear in URLs but scope layouts, so the guard logic lives in one place per group, not on every screen. `status === 'loading'` short-circuits both guards to a `<Spinner centered />` so the cold-start flash doesn't ping-pong.
+
+Navigation: `import { useRouter } from 'expo-router'` and `router.push('/(authed)/bookings/[id]')` — file paths, not screen names.
+
+## Server state
+
+All data fetching goes through **TanStack Query** hooks living in `src/api/queries/`. The `QueryClient` lives in the root layout with `staleTime: 30s`, `retry: 1`, `refetchOnWindowFocus: true`.
+
+Hooks call `authedApiRequest` (`src/api/authedClient.ts`), NOT `apiRequest` directly. The wrapper pulls the access token from SecureStore so the 401-refresh flow in `apiRequest` has something to expire. Use `apiRequest` directly only for auth-skipping calls (login, refresh).
+
+Query-key convention — always an array, resource name first, stable-keyed filters object second:
+
+```ts
+['bookings', { status, date_from, date_to, page }]
+['bookings', id]
+['containers', { booking_id }]
+```
+
+`bookings/index.tsx` is the reference implementation: pull-to-refresh wired to `refetch`, error state with retry button, empty state, list of `<ListItem>` + `<Pill>`.
+
+## UI primitives
+
+`src/components/ui/` holds the in-repo design system. `src/theme/tokens.ts` is the single source of truth for colors, spacing, typography, and radii. Components: `Text`, `Button`, `Input`, `Card`, `ListItem`, `Pill`, `ScreenContainer`, `Spinner`.
+
+**Extend the tokens, then add a component — don't inline `StyleSheet` in screens.** Screens should only use primitives + token-derived layout values (`spacing.lg`, etc.). When a token isn't enough, the answer is usually a new primitive, not a one-off color literal.
+
+No theme provider yet (single light theme). When dark mode lands, swap `tokens.ts` for a context-driven palette but keep the export names stable.
+
+## Peer-dep noise
+
+`.npmrc` sets `legacy-peer-deps=true` because Expo SDK 54 pins `react@19.1.0` while transitive deps (e.g. `react-dom@19.2.6` from `expo-router`) demand `react@^19.2.6`. The graph still resolves — Expo runs `npm install --legacy-peer-deps` under the hood for `npx expo install`, and CI's `npm ci` inherits the flag from `.npmrc`. Revisit when Expo unpins react.
 
 ## Known `npm audit` noise
 
