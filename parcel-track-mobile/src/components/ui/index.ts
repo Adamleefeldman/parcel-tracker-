@@ -11,5 +11,7 @@ export { ScreenContainer } from './ScreenContainer';
 export type { ScreenContainerProps } from './ScreenContainer';
 export { Spinner } from './Spinner';
 export type { SpinnerProps } from './Spinner';
+export { StatusPill } from './StatusPill';
+export type { StatusPillProps } from './StatusPill';
 export { Text } from './Text';
 export type { TextProps } from './Text';
