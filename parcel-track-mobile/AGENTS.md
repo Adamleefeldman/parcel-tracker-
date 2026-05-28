@@ -1,107 +1,281 @@
-# Project notes for AI agents
+# AGENTS.md — parcel-track-mobile
 
-## Expo HAS CHANGED
+_Last reviewed: 2026-05-27. The Expo SDK pin and any "current state" notes below go stale fast — update this date whenever you touch them._
 
-Read the exact versioned docs at https://docs.expo.dev/versions/v54.0.0/ before writing any code.
+The companion backend doc is [`../parcel-track/CLAUDE.md`](../parcel-track/CLAUDE.md). Read it before doing anything that crosses the API boundary (auth shape, status enums, endpoint paths under `/api/v1`, error envelope).
 
-(We're pinned to SDK 54 because Expo Go in the App Store was lagging the SDK 56 release at bootstrap time. Bump with `npx expo install expo@latest --fix` once a matching Expo Go is available, then update this link.)
+---
 
-## API base URL
+## Core Principles
 
-Configured via `EXPO_PUBLIC_API_URL` env var. Loaded from `.env` (dev) or `.env.production` (prod builds). Consume via `import { API_BASE_URL } from '@/src/config/api'` — never hardcode URLs in components.
+- Simplicity first. Senior-dev standards. Would a senior RN engineer approve this?
+- **All network I/O goes through `apiRequest` (`src/api/client.ts`).** No raw `fetch` in components, screens, or hooks. The 401-refresh flow, timeout, and error normalisation only work if everything funnels through this one entry point.
+- **Tokens only live in `expo-secure-store`, only read through `src/auth/tokenStorage.ts`.** Never touch SecureStore directly from a component, and never put tokens in `AsyncStorage`, Redux, React state, or a context value.
+- **Decoded JWT claims are a UI hint, not a security boundary.** `src/auth/jwt.ts` reads the access-token payload client-side for things like role-based screen routing. A tampered token still decodes — the backend re-checks every request, and so must you for anything that matters.
+- **Components stay presentational.** Side effects (network, storage, navigation triggers, timers) live in hooks, contexts, or `src/api/`. A screen file should mostly be JSX + a few hook calls.
+- **No browser globals.** TypeScript's DOM lib loads by default and silently lets `DOMException`, `localStorage`, `window`, `document`, `XMLHttpRequest`, `Blob`, etc. typecheck. None of them exist in Hermes — referencing them is a runtime `ReferenceError`. Use `err instanceof Error && err.name === 'AbortError'`, `expo-secure-store`, `expo-file-system`, etc.
 
-Production: `https://api.thefmcghub.com`.
+## Bug Fixing Rules
 
-## Physical device testing (LAN IP gotcha)
+- Reproduce first. If you can't reproduce it, you can't fix it — say so and ask.
+- Read the actual error: stack trace, Metro logs, device console. For network bugs, check `ApiError.status` (transport failures use `NETWORK_ERROR_STATUS = 0`) and `ApiError.payload` before guessing.
+- Trace to root cause. Don't paper over symptoms with a `try/catch` that swallows.
+- Only ask clarifying questions when the cause is genuinely undetermined after looking.
 
-On the iOS Simulator or Android Emulator, `localhost` resolves to your Mac and the local backend works.
+## Task Management Rules
 
-On a physical phone running Expo Go, `localhost` resolves to the phone itself — the backend is unreachable. Workaround: create `.env.local` (gitignored) with your Mac's LAN IP:
+- Write a plan to `tasks/todo.md` before any non-trivial implementation. Mark items done as you go.
+- After a correction from the user, append the lesson to `tasks/lessons.md` (create it if missing). Re-read it at the start of every session.
+- Never start a new task without updating the task file.
 
+## Verification Rules
+
+- Pure-logic changes (api client, auth, jwt, utils): `npx tsc --noEmit` + `npm test` must pass before reporting done.
+- UI changes: typecheck + tests, **and** actually run the app on the iOS simulator (or device via Expo Go) and confirm the change renders + behaves as intended. Screenshot when useful. UI work is not "done" because tests pass — there aren't UI tests yet (see Testing policy).
+- Never mark a task complete without proving it works.
+
+## Commit Rules
+
+- Stage only files directly required by the change: source, tests, types, `app.json`/`package.json`/`package-lock.json` when intentional.
+- Do not commit planning artefacts (`tasks/todo.md`, scratch notes), `.env.local`, or anything under `.expo/`.
+
+---
+
+## What this project is
+
+The React Native (Expo) mobile client for **The FMCG Hub** supply-chain tracker. iOS + Android. Four user roles (Admin, Morocco logistics agent, UK clearing/delivery agent, Customer) consume the same FastAPI backend at `https://api.thefmcghub.com` and read/write the trading workflow (PO → Booking → Container → Delivery → Customer Payment).
+
+Bundle / package: `com.thefmcghub.logistics` (permanent — do not change).
+
+---
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Expo SDK 54 (pinned — see Expo SDK pin note below) |
+| Runtime | React Native 0.81, React 19.1, Hermes |
+| Language | TypeScript ~5.9 (strict; no DOM lib used) |
+| Auth storage | `expo-secure-store` |
+| JWT decode (UI only) | `jwt-decode` |
+| HTTP | native `fetch`, wrapped by `src/api/client.ts` |
+| Tests | jest 29 + ts-jest (node env, pure-logic only) |
+| Navigation | Expo Router (file-based; routes under `app/`, route groups `(auth)` + `(authed)`) |
+| Server state | TanStack Query — `QueryClientProvider` in `app/_layout.tsx`; hooks in `src/api/queries/` |
+| Client state | React Context only (`AuthContext`). No Redux/Zustand until there's a concrete need |
+| Env loading | `expo` reads `.env`, `.env.local`, `.env.production` at bundler start |
+
+---
+
+## Architecture invariants
+
+- **One HTTP client.** `apiRequest<T>(path, options)` in `src/api/client.ts` is the only function that calls `fetch`. It owns: base-URL prefixing, JSON content negotiation, bearer-token injection, 15 s default timeout, uniform `ApiError`, and the 401→refresh→retry-once flow.
+- **Auth-endpoint calls opt out.** Login and refresh itself pass `auth: 'skip'` to `apiRequest` — a 401 there means bad creds / dead refresh token and must propagate, not trigger another refresh.
+- **Single-flight refresh.** N concurrent 401s run exactly one `POST /api/v1/auth/refresh`. Don't add a parallel path.
+- **Session-expired is an event, not a return value.** On refresh failure, `client.ts` calls `clearTokens()` and `emitSessionExpired()` (`src/auth/sessionEvents.ts`). `AuthProvider` listens and flips status → `anonymous`, which re-renders the login screen. Don't try to navigate from inside the API client.
+- **`AuthContext` is the only consumer of token storage.** Screens read `useAuth()` for `{ status, user, signIn, signOut }` — they don't call `getAccessToken()` themselves.
+- **Theme tokens, not inline styles.** Colours, spacing, radii live in `src/theme/tokens.ts` and are consumed via `src/theme/index.ts`. Hard-coded hex/px in a component is a code-smell.
+- **Shared UI primitives in `src/components/ui/`.** `Button`, `Card`, `Input`, `ListItem`, `Pill`, `ScreenContainer`, `Spinner`, `StatusPill`, `Text`. Reach for these before building bespoke views.
+- **One status-pill component.** Any badge that renders a `BookingStatus` or `ContainerLifecycleStatus` goes through `<StatusPill>` (`src/components/ui/StatusPill.tsx`). It maps each enum value to a tone via an exhaustive `Record<...>` — a new backend enum value will fail TS until the mapping in `statusPillMapping.ts` is updated. Don't render raw status strings, and don't reimplement a local tone-picker.
+
+---
+
+## Folder map
+
+| Folder | What lives here | Example |
+|---|---|---|
+| `app/` | Expo Router routes. Route groups `(auth)` (anon-only) + `(authed)` (signed-in). Each folder has a `_layout.tsx` for that group's guard | `app/(authed)/bookings/[id]/index.tsx` |
+| `src/api/` | HTTP client + typed endpoint wrappers + React-hook-shaped queries | `client.ts`, `authedClient.ts`, `queries/useBookings.ts`, `queries/useBooking.ts` |
+| `src/api/types/` | Hand-typed TS mirrors of backend Pydantic schemas. Split per domain | `booking.ts`, `container.ts`, `enums.ts` |
+| `src/auth/` | Auth state machine, token storage, JWT decode, session events | `AuthContext.tsx`, `tokenStorage.ts`, `jwt.ts`, `sessionEvents.ts`, `authApi.ts` |
+| `src/components/` | Cross-cutting components that compose primitives | `AppHeader.tsx` |
+| `src/components/ui/` | Reusable presentational primitives — no network, no storage | `Button.tsx`, `Card.tsx`, `StatusPill.tsx`, `ScreenContainer.tsx` |
+| `src/config/` | Env-derived constants. Single export per concern | `api.ts` (`API_BASE_URL`) |
+| `src/theme/` | Design tokens + theme helpers | `tokens.ts`, `index.ts` |
+| `src/__mocks__/` | Jest manual mocks for native modules that don't run in node | `expo-secure-store.ts` |
+| _(future)_ `src/hooks/` | Cross-screen hooks that aren't tied to a single domain | — |
+
+Tests sit next to the file under test (`client.test.ts` next to `client.ts`), not in a parallel tree.
+
+---
+
+## API client error contract
+
+Every call through `apiRequest` either resolves with the parsed JSON body (typed via the caller's `<T>`) or throws an `ApiError`. There is no third shape.
+
+```ts
+class ApiError extends Error {
+  readonly status: number;       // HTTP status, or 0 for transport-level failure
+  readonly payload: unknown;     // parsed response body (or original error for status === 0)
+  readonly isNetworkError: boolean;  // true iff status === 0
+}
 ```
-EXPO_PUBLIC_API_URL=http://192.168.x.x:8000
-```
 
-Find the IP with `ipconfig getifaddr en0`. Restart `expo start` after creating/changing `.env.local` — env files are read at bundler startup, not hot-reloaded.
+- `status === 0` → DNS, TLS, offline, or our own 15 s timeout. Show "check your connection," offer retry. Never log the user out on this.
+- `status === 401` → only seen at the call site if `auth: 'skip'` or if the post-refresh retry also 401'd. A `'normal'` call that fires session-expired throws a 401 too; `AuthProvider` handles the UX, you just need to bail.
+- `status === 422` → Pydantic validation error. `client.ts` already extracts a readable message via `extractErrorMessage` — surface `err.message` to the user directly.
+- Other 4xx/5xx → `err.message` is the backend `detail` string when present, else `Request failed: <status>`.
 
-## No browser globals
+Do not branch on `err.payload` shapes in screens — if you need structured access to validation errors, add a helper to `src/api/` rather than spreading the knowledge of FastAPI's response envelope.
 
-TypeScript's DOM lib is loaded by default, which silently allows things like `DOMException`, `localStorage`, `window`, `document`, `XMLHttpRequest`, `Blob`, etc. to typecheck. **None of these exist in React Native / Hermes** and referencing them is a runtime ReferenceError. Use `instanceof Error && err.name === 'AbortError'` instead of `instanceof DOMException`, `expo-secure-store` instead of `localStorage`, and so on.
+---
 
-## Auth & secrets
+## Auth flow (401 → refresh → retry)
 
-JWTs go in `expo-secure-store`, NEVER `AsyncStorage`. Tokens are credentials, treat them like passwords.
+1. Authenticated request fires through `apiRequest` (`auth: 'normal'`, default).
+2. On 401, `refreshAccessToken()` runs (single-flighted across concurrent callers) — `POST /api/v1/auth/refresh` with the stored refresh token.
+3. On refresh **success**: new pair persisted via `setTokens()`, original request retried **once** with the new access token. A second 401 surfaces as a 401 — we never loop.
+4. On refresh **failure** (any non-2xx, network error, missing refresh token): `clearTokens()` + `emitSessionExpired()`. `AuthProvider` flips to `anonymous`; UI re-renders to the login screen.
 
-### 401 → refresh → retry flow
-
-Authenticated calls go through `apiRequest` (`src/api/client.ts`). On a 401, it:
-
-1. Calls `POST /api/v1/auth/refresh` with the stored refresh token (single-flighted — N concurrent 401s do exactly one refresh).
-2. On refresh success, persists the new pair via `setTokens()` and retries the original request once with the new access token.
-3. On refresh failure (any non-2xx, network error, missing refresh token), calls `clearTokens()` and emits a `sessionExpired` event via `src/auth/sessionEvents.ts`. `AuthProvider` listens and flips status → `anonymous`, which renders `LoginScreen`.
-
-The retried request is final — a second 401 surfaces as a 401; we never loop. Auth-endpoint calls (login, refresh itself) pass `auth: 'skip'` to opt out of the interceptor — a 401 there means bad creds / dead refresh token and must propagate as-is.
+Auth-endpoint calls (`/auth/login`, `/auth/refresh`) **must** pass `auth: 'skip'`. A 401 on those is a real auth failure and must propagate as-is.
 
 ### Cached user identity
 
-`AuthContext` exposes a `user: { id, role } | null` derived by decoding the access token's payload client-side (`src/auth/jwt.ts`, `jwt-decode`). Signature verification is the backend's job — the client only reads claims for UI.
+`useAuth()` exposes `user: { id, role } | null`, derived by decoding the access token payload (`src/auth/jwt.ts`, `jwt-decode`). **This is a UI hint, not authorisation.** Signature verification is the backend's job — the client only reads claims to decide which tabs/screens to show. Anything sensitive must be enforced server-side and the client must handle the 403 gracefully.
 
-When the backend grows a `/me` endpoint, swap `decodeUserFromToken` for a real fetch and extend the `User` type with `name` + `email`. The cold-start path can also become a real `/me` call at that point (currently lazy — we trust the SecureStore token on boot and let the first authenticated screen self-heal via the 401 flow above).
+When the backend grows a `/me` endpoint (see Deferred fixes), swap `decodeUserFromToken` for a real fetch and extend `User` with `name` + `email`. Cold-start can become a real `/me` call then too — currently we lazily trust the stored token and let the first authenticated request self-heal via the 401 flow.
 
-## CI
+---
 
-A single workflow at `../.github/workflows/ci.yml` (monorepo root) runs two mobile jobs on every push/PR touching this directory:
+## Server state (TanStack Query)
 
-- `mobile-typecheck` — `npm ci` + `npx tsc --noEmit`
-- `mobile-test` — `npm ci` + `npm test` (jest, ts-jest preset, node env; pure-logic tests only)
+All server data flows through TanStack Query. `QueryClientProvider` is wired in `app/_layout.tsx` with `staleTime: 30s`, `retry: 1`, `refetchOnWindowFocus: true`. Every query hook lives in `src/api/queries/` and calls `authedApiRequest<T>(path)` — never `apiRequest` directly, never `fetch`.
 
-No lint yet — add when there's a style we want enforced. Run locally with `npx tsc --noEmit` and `npm test` to catch failures before pushing.
+**Query-key convention:** array starts with the resource name, then a stable-keyed object of filters or an id. Different filters must produce different keys so they don't share a cache slot, and the resource-name first element makes "invalidate everything for this resource" easy:
 
-Caveat: a workflow trigger runs ALL jobs (backend + mobile), so a mobile-only PR still runs the backend pytest job (and vice versa). Inefficient but simpler than per-job path filtering. Acceptable cost at this scale.
-
-## Navigation
-
-File-based routing via **Expo Router** (`app/` directory). The root `app/_layout.tsx` wires the three top-level providers in this order: `QueryClientProvider` → `SafeAreaProvider` → `AuthProvider` → `<Slot/>`.
-
-Two route groups, each with its own redirect-based guard:
-
-- `app/(auth)/` — login + future auth screens. Layout redirects to `/(authed)` when `status === 'authenticated'`.
-- `app/(authed)/` — every screen behind the login wall. Layout redirects to `/(auth)/login` when `status !== 'authenticated'`.
-
-Route groups (`(name)`) don't appear in URLs but scope layouts, so the guard logic lives in one place per group, not on every screen. `status === 'loading'` short-circuits both guards to a `<Spinner centered />` so the cold-start flash doesn't ping-pong.
-
-Navigation: `import { useRouter } from 'expo-router'` and `router.push('/(authed)/bookings/[id]')` — file paths, not screen names.
-
-## Server state
-
-All data fetching goes through **TanStack Query** hooks living in `src/api/queries/`. The `QueryClient` lives in the root layout with `staleTime: 30s`, `retry: 1`, `refetchOnWindowFocus: true`.
-
-Hooks call `authedApiRequest` (`src/api/authedClient.ts`), NOT `apiRequest` directly. The wrapper pulls the access token from SecureStore so the 401-refresh flow in `apiRequest` has something to expire. Use `apiRequest` directly only for auth-skipping calls (login, refresh).
-
-Query-key convention — always an array, resource name first, stable-keyed filters object second:
-
-```ts
-['bookings', { status, date_from, date_to, page }]
-['bookings', id]
-['containers', { booking_id }]
+```
+['bookings', { status, date_from, page }]   // collection
+['booking', id]                              // single
+['containers', { booking_id }]               // collection
 ```
 
-`bookings/index.tsx` is the reference implementation: pull-to-refresh wired to `refetch`, error state with retry button, empty state, list of `<ListItem>` + `<Pill>`.
+Singular vs plural matters — `['booking', id]` and `['bookings', filters]` are siblings, not the same slot.
 
-## UI primitives
+**Mutations and Idempotency-Key** are not in the codebase yet. When the first mutation lands, plumb `Idempotency-Key` through `apiRequest` for POSTs that produce a unique side effect (payments, BL upload, dispute open). The backend already enforces it.
 
-`src/components/ui/` holds the in-repo design system. `src/theme/tokens.ts` is the single source of truth for colors, spacing, typography, and radii. Components: `Text`, `Button`, `Input`, `Card`, `ListItem`, `Pill`, `ScreenContainer`, `Spinner`.
+### Cross-screen data flow
 
-**Extend the tokens, then add a component — don't inline `StyleSheet` in screens.** Screens should only use primitives + token-derived layout values (`spacing.lg`, etc.). When a token isn't enough, the answer is usually a new primitive, not a one-off color literal.
+Container detail (`app/(authed)/bookings/[id]/containers/[cid]/index.tsx`) deliberately has no dedicated endpoint — the backend has no `GET /api/v1/containers/{id}`. Containers live as nested objects under `BookingDetailOut.bill_of_lading.containers` and `BookingDetailOut.delivery_points[].containers`. `useContainer` runs `useBooking(bookingId)` under the hood and walks the result for the matching container, deduping when the same id appears in both lists.
 
-No theme provider yet (single light theme). When dark mode lands, swap `tokens.ts` for a context-driven palette but keep the export names stable.
+This means deep-linking straight to a container URL works (cold cache → loads the parent booking), and tapping through from the booking detail screen is free (warm cache → no extra request). When the backend grows a real `/containers/{id}` endpoint, replace `useContainer`'s body with a direct fetch and drop `findContainerInBooking` — call sites stay the same.
 
-## Peer-dep noise
+### Status pills
 
-`.npmrc` sets `legacy-peer-deps=true` because Expo SDK 54 pins `react@19.1.0` while transitive deps (e.g. `react-dom@19.2.6` from `expo-router`) demand `react@^19.2.6`. The graph still resolves — Expo runs `npm install --legacy-peer-deps` under the hood for `npx expo install`, and CI's `npm ci` inherits the flag from `.npmrc`. Revisit when Expo unpins react.
+`<StatusPill kind="booking" | "lifecycle" status={…}>` is the single way to render a status badge. The tone mappings (`BOOKING_TONES`, `LIFECYCLE_TONES`) live in `statusPillMapping.ts` next to the component, typed as `Record<EnumType, PillTone>` so missing an enum member fails the typecheck. Tests in `StatusPill.test.ts` belt-and-braces this at runtime. Don't render raw status strings; don't add a second tone-picker anywhere.
+
+The two enums map to different state-spaces:
+- `BookingStatus` — coarse booking lifecycle (`draft → … → complete`).
+- `ContainerLifecycleStatus` — per-container end-to-end position (`ordered → at_sea → … → closed`, plus `disputed` as a side-state).
+
+---
+
+## Environment & API base URL
+
+Configured via `EXPO_PUBLIC_API_URL`, consumed only through `import { API_BASE_URL } from '@/src/config/api'`. Never hardcode URLs in components.
+
+| File | Used by | Committed? |
+|---|---|---|
+| `.env` | Local dev defaults | yes |
+| `.env.local` | Per-machine override (LAN IP for physical device) | **no** (gitignored) |
+| `.env.production` | Production build | yes |
+
+Production points at `https://api.thefmcghub.com`.
+
+### Physical device LAN IP gotcha
+
+iOS Simulator / Android Emulator can resolve `localhost` to your Mac. **A physical phone running Expo Go cannot** — `localhost` resolves to the phone itself and the backend is unreachable. Fix:
+
+```bash
+# in parcel-track-mobile/.env.local (gitignored)
+EXPO_PUBLIC_API_URL=http://192.168.x.x:8000
+```
+
+Find the IP with `ipconfig getifaddr en0`. Restart `expo start` after changing any `.env*` file — env files are read at bundler startup, not hot-reloaded.
+
+---
+
+## Expo SDK pin
+
+Pinned to **SDK 54** (`expo ~54.0.0`, `react-native 0.81.5`, `react 19.1.0`) because Expo Go in the App Store lagged the SDK 56 release at bootstrap time.
+
+Always read the exact versioned docs at <https://docs.expo.dev/versions/v54.0.0/> before writing Expo-API code — older Stack Overflow answers and the unversioned docs will mislead you.
+
+Bump when a matching Expo Go ships: `npx expo install expo@latest --fix`, then update the SDK number in this section and the docs link.
+
+---
+
+## Common gotchas
+
+| Mistake | Correct approach |
+|---|---|
+| Raw `fetch(...)` in a screen/hook | Always go through `apiRequest` — bypasses 401 refresh, timeout, error normalisation |
+| `localStorage`, `DOMException`, `window`, `XMLHttpRequest`, `Blob` | None exist in Hermes. Use `expo-secure-store`, `instanceof Error && err.name === 'AbortError'`, etc. |
+| `npm install <expo-package>` | Use `npx expo install <pkg>` for anything Expo-managed — picks the version aligned with your SDK. Plain `npm install` only for non-Expo libs |
+| `npm audit fix --force` | Downgrades `expo` ~10 major versions and breaks the project. Live with the `uuid` advisory (see Known audit noise) |
+| Hardcoded `http://...` URL in a component | Always import `API_BASE_URL` from `src/config/api` |
+| Tokens in `AsyncStorage`, Redux, or React state | `expo-secure-store` only, via `src/auth/tokenStorage.ts` |
+| Trusting `user.role` from JWT for security | UI hint only. Backend re-checks; handle 403 |
+| Editing `.env*` and expecting hot reload | Env files are bundler-startup only. Restart `expo start` |
+| Logging out on `ApiError.isNetworkError` | Transport failure is not an auth failure. Surface "check your connection" instead |
+| Inline `#hex` colours / magic px in a component | Use `src/theme/tokens.ts` |
+| Rendering a status string directly or rolling a local `toneFor` helper | Use `<StatusPill kind="booking" | "lifecycle" …>` — see Status pills |
+| Calling `apiRequest` directly from a screen for authed reads | Use a query hook in `src/api/queries/` via `useQuery` + `authedApiRequest` |
+
+---
+
+## Editor setup
+
+If you open the **monorepo root** (`parcel-tracker/`) in VSCode instead of `parcel-track-mobile/` directly, you'll see phantom red squigglies on every test file: `Cannot find name 'describe'`, `'expect'`, `'jest'`, `'beforeEach'`. Both `npx tsc --noEmit` and CI's `mobile-typecheck` job stay green, so the code is fine — it's the editor's TS server that's misconfigured.
+
+**Why:** VSCode looks for `node_modules/typescript/` at the workspace root to populate "Use Workspace Version." The only TypeScript install in this monorepo lives at `parcel-track-mobile/node_modules/typescript/` (the backend is Python). Without finding a root-level TS, VSCode falls back to its bundled TypeScript, which doesn't auto-include the mobile project's `@types/jest`.
+
+**Fix (already committed at `.vscode/settings.json`):**
+
+```json
+{
+  "typescript.tsdk": "parcel-track-mobile/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}
+```
+
+After this file lands, in VSCode: `Cmd+Shift+P → TypeScript: Restart TS Server`. The picker will now offer "Use Workspace Version" pointing at the mobile TS install, and the phantom errors disappear.
+
+If you prefer multi-root or open the mobile folder directly, those work too — the only failure mode is opening the monorepo root *without* this settings file.
+
+---
+
+## Testing policy
+
+- **Pure-logic + API-client behaviour only**, for now. Anything that doesn't render — JWT decode, error-message extraction, single-flight refresh, token storage helpers — should have a jest test alongside it (`x.test.ts` next to `x.ts`).
+- **No UI tests yet.** No `@testing-library/react-native`. UI changes are verified by running the app on simulator + device (see Verification Rules). Add RNTL when the screen count justifies it.
+- Mocks live in `src/__mocks__/` (jest auto-discovers). Currently mocks `expo-secure-store` so node-env tests don't try to call native modules.
+- Run locally: `npx tsc --noEmit && npm test`. CI runs both on every push touching this directory.
+
+### CI
+
+Single workflow at `../.github/workflows/ci.yml` (monorepo root). Two mobile jobs:
+
+- `mobile-typecheck` — `npm ci` + `npx tsc --noEmit`
+- `mobile-test` — `npm ci` + `npm test`
+
+A workflow run executes both backend and mobile jobs regardless of which files changed — accepted cost at this scale. No mobile lint yet; add when there's a style worth enforcing.
+
+---
+
+## Deferred fixes
+
+Tracked here so they don't rot inside prose elsewhere.
+
+1. **`/me` endpoint.** When the backend grows it, swap `decodeUserFromToken` for a real fetch and extend `User` with `name` + `email`. Cold-start path becomes a real `/me` call at that point too.
+2. **`/containers/{id}` endpoint.** Container detail currently walks the parent booking from cache (see Cross-screen data flow). When the backend grows a dedicated endpoint, replace `useContainer`'s body with a direct fetch and drop `findContainerInBooking`.
+3. **UI tests.** Add `@testing-library/react-native` + a couple of smoke tests once there are screens worth covering.
+4. **Mutation tooling.** Form library + toast/snackbar + `Idempotency-Key` plumbing land with the first mutation in Phase 3.
+5. **EAS Build profile.** Not configured yet — first production build will need `eas.json` + credentials.
+
+---
 
 ## Known `npm audit` noise
 
 `npm audit` reports 10 moderate vulnerabilities, all transitively from `uuid < 11.1.1` ([GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq)). Path: `uuid → xcode → @expo/config-plugins → … → expo`.
 
-**Do not run `npm audit fix --force`** — it downgrades `expo` ~10 major versions and breaks everything. The vulnerable code is build-time only (`xcode` package, used during `expo prebuild`/EAS Build); it does not ship in the app bundle and no attacker-controlled input reaches it. Wait for upstream `xcode`/Expo to bump `uuid`.
+**Do not run `npm audit fix --force`** — it downgrades `expo` by ~10 major versions and breaks everything. The vulnerable code is build-time only (`xcode`, used during `expo prebuild` / EAS Build); it does not ship in the app bundle and no attacker-controlled input reaches it. Wait for upstream `xcode` / Expo to bump `uuid`.

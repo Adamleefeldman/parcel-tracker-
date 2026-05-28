@@ -1,0 +1,17 @@
+// VSCode workspace settings for the parcel-tracker monorepo.
+//
+// The mobile project owns the only TypeScript install in the repo (the
+// backend is Python). When VSCode is opened at the monorepo root, it looks
+// for `node_modules/typescript/` at the workspace root, doesn't find one,
+// and falls back to its bundled TypeScript — which doesn't auto-include
+// parcel-track-mobile/node_modules/@types/jest. That's how you end up with
+// phantom "Cannot find name 'describe'" errors on the mobile test files
+// even though `npx tsc --noEmit` and CI are clean.
+//
+// Pointing tsdk at the mobile TS fixes the type acquisition AND makes
+// `>TypeScript: Select TypeScript Version → Use Workspace Version` work.
+// See parcel-track-mobile/AGENTS.md → Editor setup.
+{
+  "typescript.tsdk": "parcel-track-mobile/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}

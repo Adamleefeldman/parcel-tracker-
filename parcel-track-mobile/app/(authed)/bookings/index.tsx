@@ -4,13 +4,21 @@ import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { ApiError } from '../../../src/api/client';
 import { type Booking, useBookings } from '../../../src/api/queries/useBookings';
+import type { BookingStatus } from '../../../src/api/types/enums';
 import { useAuth } from '../../../src/auth/AuthContext';
-import { Button, ListItem, Pill, type PillTone, ScreenContainer, Spinner, Text } from '../../../src/components/ui';
+import {
+  Button,
+  ListItem,
+  ScreenContainer,
+  Spinner,
+  StatusPill,
+  Text,
+} from '../../../src/components/ui';
 import { spacing } from '../../../src/theme/tokens';
 
 export default function BookingsScreen() {
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const { data, isLoading, isError, error, refetch, isRefetching } = useBookings();
 
   const onItemPress = useCallback(
@@ -35,7 +43,11 @@ export default function BookingsScreen() {
       ) : isError ? (
         <ErrorState error={error} onRetry={() => refetch()} />
       ) : !data || data.items.length === 0 ? (
-        <EmptyState onRefresh={() => refetch()} refreshing={isRefetching} />
+        <EmptyState
+          onRefresh={() => refetch()}
+          refreshing={isRefetching}
+          message={emptyMessageFor(user?.role)}
+        />
       ) : (
         <FlatList
           data={data.items}
@@ -55,7 +67,7 @@ function BookingRow({ booking, onPress }: { booking: Booking; onPress: (id: stri
     <ListItem
       title={booking.booking_number || booking.reference}
       subtitle={formatDate(booking.created_at)}
-      right={<Pill tone={toneFor(booking.status)}>{booking.status}</Pill>}
+      right={<StatusPill kind="booking" status={booking.status as BookingStatus} />}
       onPress={() => onPress(booking.id)}
     />
   );
@@ -78,7 +90,15 @@ function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void })
   );
 }
 
-function EmptyState({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
+function EmptyState({
+  onRefresh,
+  refreshing,
+  message,
+}: {
+  onRefresh: () => void;
+  refreshing: boolean;
+  message: string;
+}) {
   return (
     <FlatList
       data={[]}
@@ -88,19 +108,17 @@ function EmptyState({ onRefresh, refreshing }: { onRefresh: () => void; refreshi
       contentContainerStyle={styles.emptyContainer}
       ListEmptyComponent={
         <Text muted style={styles.centeredText}>
-          No bookings yet
+          {message}
         </Text>
       }
     />
   );
 }
 
-function toneFor(status: string): PillTone {
-  const s = status.toLowerCase();
-  if (s.includes('cancel') || s.includes('reject') || s.includes('fail')) return 'error';
-  if (s.includes('pending') || s.includes('progress') || s.includes('wait')) return 'warning';
-  if (s.includes('complete') || s.includes('deliver') || s.includes('paid')) return 'success';
-  return 'default';
+function emptyMessageFor(role: string | undefined): string {
+  if (role === 'admin') return 'No bookings yet. Create one from the dashboard.';
+  // Most restrictive default — covers customer, agents, and the rare null user.
+  return "You don't have any bookings assigned to you yet.";
 }
 
 function formatDate(iso: string): string {
