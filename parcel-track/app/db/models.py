@@ -71,6 +71,18 @@ def updated_at():
     )
 
 
+def lowercase_enum(enum_cls, **kw):
+    """SAEnum bound by member `.value` instead of `.name`.
+
+    Use for any Python enum whose Postgres labels are lowercase (i.e. match
+    `.value`, not `.name`). SA's default `values_callable` is
+    `[m.name for m in cls]`, which uppercase-binds and breaks against a
+    lowercase-labelled type. Affects: `ukport`, `containerlifecyclestatus`,
+    `customerpaymentmethod`, `deliverytype` (per Alembic history).
+    """
+    return SAEnum(enum_cls, values_callable=lambda e: [m.value for m in e], **kw)
+
+
 # ── Users ─────────────────────────────────────────────────────────────────────
 
 
@@ -343,7 +355,7 @@ class PortTemplate(Base):
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    port: Mapped[UKPort] = mapped_column(SAEnum(UKPort), unique=True, nullable=False)
+    port: Mapped[UKPort] = mapped_column(lowercase_enum(UKPort), unique=True, nullable=False)
     free_days_detention: Mapped[int] = mapped_column(Integer, nullable=False)
     free_days_demurrage: Mapped[int] = mapped_column(Integer, nullable=False)
     detention_rate_gbp_after: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
@@ -514,7 +526,7 @@ class CustomerPayment(Base):
     )
     payment_date: Mapped[date] = mapped_column(Date, nullable=False)
     method: Mapped[CustomerPaymentMethod] = mapped_column(
-        SAEnum(CustomerPaymentMethod), nullable=False
+        lowercase_enum(CustomerPaymentMethod), nullable=False
     )
     amount_received: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     # variance can be negative (short) or positive (over) — Decimal not constrained.
@@ -557,7 +569,7 @@ class BillOfLading(Base):
     port_of_loading: Mapped[str] = mapped_column(String(100), nullable=False)
     # UK port of discharge as a typed enum (P1.3). Each UK port has distinct
     # free-day defaults + fee structures — see PortTemplate.
-    port_of_discharge: Mapped[UKPort] = mapped_column(SAEnum(UKPort), nullable=False)
+    port_of_discharge: Mapped[UKPort] = mapped_column(lowercase_enum(UKPort), nullable=False)
     container_count: Mapped[int] = mapped_column(Integer, nullable=False)
     commodity_description: Mapped[str] = mapped_column(Text, nullable=False)
     gross_weight_kg: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
@@ -739,7 +751,7 @@ class Container(Base):
     # `dispute_reason` / `disputed_at` are populated when lifecycle_status
     # is set to DISPUTED; otherwise both are NULL.
     lifecycle_status: Mapped[ContainerLifecycleStatus] = mapped_column(
-        SAEnum(ContainerLifecycleStatus),
+        lowercase_enum(ContainerLifecycleStatus),
         default=ContainerLifecycleStatus.ORDERED,
         nullable=False,
     )
@@ -757,7 +769,9 @@ class Container(Base):
     )
 
     # ── Sale-side ────────────────────────────────────────────────────────
-    delivery_type: Mapped[DeliveryType | None] = mapped_column(SAEnum(DeliveryType), nullable=True)
+    delivery_type: Mapped[DeliveryType | None] = mapped_column(
+        lowercase_enum(DeliveryType), nullable=True
+    )
     broker_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("brokers.id"), nullable=True, index=True
     )
@@ -910,7 +924,9 @@ class DeliveryPoint(Base):
     )
     # Direct (port → customer) or Via Warehouse (port → W/H → customer(s)).
     # Mirrors the spreadsheet's Delivery Type column; nullable until set.
-    delivery_type: Mapped[DeliveryType | None] = mapped_column(SAEnum(DeliveryType), nullable=True)
+    delivery_type: Mapped[DeliveryType | None] = mapped_column(
+        lowercase_enum(DeliveryType), nullable=True
+    )
     warehouse_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     rebundled_at_warehouse: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Legacy: customer_user_id used to point at a User record. With the
