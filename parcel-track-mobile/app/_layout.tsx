@@ -17,6 +17,7 @@ import React, { useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '../src/auth/AuthContext';
+import { ToastProvider } from '../src/components/ui';
 
 export default function RootLayout() {
   // useState keeps the QueryClient stable across re-renders (no `new` on every render).
@@ -37,8 +38,10 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
         <AuthProvider>
-          <Slot />
-          <StatusBar style="auto" />
+          <ToastProvider>
+            <Slot />
+            <StatusBar style="auto" />
+          </ToastProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </QueryClientProvider>

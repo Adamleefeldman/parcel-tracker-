@@ -1,10 +1,14 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ApiError } from '../../../../../../src/api/client';
+import { useAcknowledgeDispute } from '../../../../../../src/api/mutations/useAcknowledgeDispute';
 import { useContainer } from '../../../../../../src/api/queries/useContainer';
 import type { Container } from '../../../../../../src/api/types/container';
+import { useAuth } from '../../../../../../src/auth/AuthContext';
+import { canManageDisputes, canUpdatePortStatus } from '../../../../../../src/auth/permissions';
+import type { UserRole } from '../../../../../../src/api/types/enums';
 import { AppHeader } from '../../../../../../src/components/AppHeader';
 import {
   Button,
@@ -13,7 +17,9 @@ import {
   Spinner,
   StatusPill,
   Text,
+  useToast,
 } from '../../../../../../src/components/ui';
+import { humanizeStatus } from '../../../../../../src/components/ui/statusPillMapping';
 import { colors, radii, spacing } from '../../../../../../src/theme/tokens';
 
 export default function ContainerDetailScreen() {
@@ -33,7 +39,13 @@ export default function ContainerDetailScreen() {
           onRetry={() => refetch()}
         />
       ) : (
-        <Body container={data} refreshing={isRefetching} onRefresh={() => refetch()} />
+        <Body
+          container={data}
+          bookingId={id}
+          containerId={cid}
+          refreshing={isRefetching}
+          onRefresh={() => refetch()}
+        />
       )}
     </ScreenContainer>
   );
@@ -41,10 +53,14 @@ export default function ContainerDetailScreen() {
 
 function Body({
   container,
+  bookingId,
+  containerId,
   refreshing,
   onRefresh,
 }: {
   container: Container;
+  bookingId: string;
+  containerId: string;
   refreshing: boolean;
   onRefresh: () => void;
 }) {
@@ -66,6 +82,7 @@ function Body({
       </View>
 
       <DisputeBanner container={container} />
+      <ActionsSection container={container} bookingId={bookingId} containerId={containerId} />
       <SaleSection container={container} />
       <PartiesSection container={container} />
       <OperationsSection container={container} />
@@ -94,6 +111,89 @@ function DisputeBanner({ container }: { container: Container }) {
         </Text>
       </Card>
     </View>
+  );
+}
+
+/**
+ * Role-gated actions. Visibility here is cosmetic — the server is the real
+ * gate (dispute endpoints are admin-only and 403 otherwise). See
+ * `src/auth/permissions.ts`. Customers see nothing; the whole section
+ * collapses when no action applies.
+ */
+function ActionsSection({
+  container,
+  bookingId,
+  containerId,
+}: {
+  container: Container;
+  bookingId: string;
+  containerId: string;
+}) {
+  const router = useRouter();
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const acknowledge = useAcknowledgeDispute(bookingId, containerId);
+  const role = user?.role as UserRole | undefined;
+
+  const showPortStatus = canUpdatePortStatus(role);
+  const isAdmin = canManageDisputes(role);
+  const disputed = !!container.dispute_reason;
+  const acknowledged = !!container.dispute_acknowledged_at;
+
+  const showOpenDispute = isAdmin && !disputed;
+  const showAcknowledge = isAdmin && disputed && !acknowledged;
+
+  if (!showPortStatus && !showOpenDispute && !showAcknowledge) {
+    return null;
+  }
+
+  const base = `/bookings/${bookingId}/containers/${containerId}`;
+
+  const onAcknowledge = () => {
+    Alert.alert('Acknowledge dispute', 'Mark this dispute as acknowledged?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Acknowledge',
+        onPress: () =>
+          acknowledge.mutate(undefined, {
+            onSuccess: () => showToast('Dispute acknowledged', 'success'),
+            onError: (err) =>
+              showToast(
+                err instanceof ApiError ? err.message : 'Could not acknowledge dispute',
+                'error',
+              ),
+          }),
+      },
+    ]);
+  };
+
+  return (
+    <Section title="Actions">
+      <View style={styles.actions}>
+        {showPortStatus ? (
+          <Button
+            title="Update port status"
+            variant="secondary"
+            onPress={() => router.push(`${base}/port-status`)}
+          />
+        ) : null}
+        {showOpenDispute ? (
+          <Button
+            title="Open dispute"
+            variant="secondary"
+            onPress={() => router.push(`${base}/dispute`)}
+          />
+        ) : null}
+        {showAcknowledge ? (
+          <Button
+            title="Acknowledge dispute"
+            onPress={onAcknowledge}
+            loading={acknowledge.isPending}
+            disabled={acknowledge.isPending}
+          />
+        ) : null}
+      </View>
+    </Section>
   );
 }
 
@@ -180,8 +280,8 @@ function OperationsSection({ container }: { container: Container }) {
   return (
     <Section title="Operations">
       <View style={styles.grid}>
-        <KV label="Status" value={container.status} />
-        <KV label="Port status" value={container.port_status} />
+        <KV label="Status" value={humanizeStatus(container.status)} />
+        <KV label="Port status" value={humanizeStatus(container.port_status)} />
         <KV label="Destin8 ref" value={container.destin8_ref ?? '—'} />
         <KV label="Delivery type" value={container.delivery_type ?? '—'} />
       </View>
@@ -296,6 +396,9 @@ const styles = StyleSheet.create({
   notesBlock: {
     marginTop: spacing.md,
     gap: spacing.xs,
+  },
+  actions: {
+    gap: spacing.sm,
   },
   partyBlock: {
     gap: spacing.xs,

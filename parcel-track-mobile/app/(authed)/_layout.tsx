@@ -13,5 +13,19 @@ export default function AuthedLayout() {
   if (status !== 'authenticated') {
     return <Redirect href="/(auth)/login" />;
   }
-  return <Stack />;
+  // Most routes register with default push presentation. The two container
+  // form routes opt into modal presentation here (declaring it in the layout
+  // is the reliable place — `presentation` is fixed when the screen mounts).
+  return (
+    <Stack>
+      <Stack.Screen
+        name="bookings/[id]/containers/[cid]/port-status"
+        options={{ presentation: 'modal' }}
+      />
+      <Stack.Screen
+        name="bookings/[id]/containers/[cid]/dispute"
+        options={{ presentation: 'modal' }}
+      />
+    </Stack>
+  );
 }
