@@ -21,5 +21,6 @@ module.exports = {
   // these tests — anything that touches them is mocked at the module level.
   moduleNameMapper: {
     '^expo-secure-store$': '<rootDir>/src/__mocks__/expo-secure-store.ts',
+    '^expo-crypto$': '<rootDir>/src/__mocks__/expo-crypto.ts',
   },
 };
