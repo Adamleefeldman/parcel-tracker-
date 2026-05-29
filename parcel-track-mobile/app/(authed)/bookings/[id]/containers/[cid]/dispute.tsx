@@ -2,9 +2,15 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { ApiError } from '../../../../../../src/api/client';
 import { useOpenDispute } from '../../../../../../src/api/mutations/useOpenDispute';
-import { Button, Input, ScreenContainer, Text, useToast } from '../../../../../../src/components/ui';
+import {
+  Button,
+  FormError,
+  Input,
+  ScreenContainer,
+  Text,
+  useToast,
+} from '../../../../../../src/components/ui';
 import { spacing } from '../../../../../../src/theme/tokens';
 
 export default function DisputeForm() {
@@ -22,11 +28,11 @@ export default function DisputeForm() {
       { reason: trimmed },
       {
         onSuccess: () => {
+          // Success toast shows on the detail screen after the modal closes;
+          // errors render inline via <FormError> (a root toast is hidden
+          // behind the open modal). See FormError.
           showToast('Dispute opened', 'success');
           router.back();
-        },
-        onError: (err) => {
-          showToast(err instanceof ApiError ? err.message : 'Could not open dispute', 'error');
         },
       },
     );
@@ -50,6 +56,7 @@ export default function DisputeForm() {
           style={styles.reason}
           autoFocus
         />
+        <FormError error={mutation.error} fallback="Could not open dispute" />
         <View style={styles.actions}>
           <Button
             title="Open dispute"

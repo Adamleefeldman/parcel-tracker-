@@ -2,11 +2,19 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { ApiError } from '../../../../../../src/api/client';
 import { useUpdatePortStatus } from '../../../../../../src/api/mutations/useUpdatePortStatus';
 import { useContainer } from '../../../../../../src/api/queries/useContainer';
 import type { PortStatus } from '../../../../../../src/api/types/enums';
-import { Button, Input, ScreenContainer, Select, Spinner, Text, useToast } from '../../../../../../src/components/ui';
+import {
+  Button,
+  FormError,
+  Input,
+  ScreenContainer,
+  Select,
+  Spinner,
+  Text,
+  useToast,
+} from '../../../../../../src/components/ui';
 import { humanizeStatus } from '../../../../../../src/components/ui/statusPillMapping';
 import { spacing } from '../../../../../../src/theme/tokens';
 
@@ -53,11 +61,11 @@ export default function PortStatusForm() {
       },
       {
         onSuccess: () => {
+          // Toast on success only — it shows on the detail screen once the
+          // modal dismisses. In-modal errors render inline via <FormError>
+          // (a root toast would be hidden behind the modal). See FormError.
           showToast('Status updated', 'success');
           router.back();
-        },
-        onError: (err) => {
-          showToast(err instanceof ApiError ? err.message : 'Could not update status', 'error');
         },
       },
     );
@@ -93,6 +101,7 @@ export default function PortStatusForm() {
             numberOfLines={4}
             style={styles.notes}
           />
+          <FormError error={mutation.error} fallback="Could not update status" />
           <View style={styles.actions}>
             <Button
               title="Save changes"

@@ -75,7 +75,7 @@ Bundle / package: `com.thefmcghub.logistics` (permanent — do not change).
 - **Session-expired is an event, not a return value.** On refresh failure, `client.ts` calls `clearTokens()` and `emitSessionExpired()` (`src/auth/sessionEvents.ts`). `AuthProvider` listens and flips status → `anonymous`, which re-renders the login screen. Don't try to navigate from inside the API client.
 - **`AuthContext` is the only consumer of token storage.** Screens read `useAuth()` for `{ status, user, signIn, signOut }` — they don't call `getAccessToken()` themselves.
 - **Theme tokens, not inline styles.** Colours, spacing, radii live in `src/theme/tokens.ts` and are consumed via `src/theme/index.ts`. Hard-coded hex/px in a component is a code-smell.
-- **Shared UI primitives in `src/components/ui/`.** `Button`, `Card`, `Input`, `ListItem`, `Pill`, `ScreenContainer`, `Spinner`, `StatusPill`, `Text`. Reach for these before building bespoke views.
+- **Shared UI primitives in `src/components/ui/`.** `Button`, `Card`, `FormError`, `Input`, `ListItem`, `Pill`, `ScreenContainer`, `Select`, `Spinner`, `StatusPill`, `Text`, plus the `ToastProvider`/`useToast` feedback system. Reach for these before building bespoke views.
 - **One status-pill component.** Any badge that renders a `BookingStatus` or `ContainerLifecycleStatus` goes through `<StatusPill>` (`src/components/ui/StatusPill.tsx`). It maps each enum value to a tone via an exhaustive `Record<...>` — a new backend enum value will fail TS until the mapping in `statusPillMapping.ts` is updated. Don't render raw status strings, and don't reimplement a local tone-picker.
 
 ---
@@ -179,13 +179,17 @@ The first write path landed in Phase 3 (container port-status + dispute open/ack
 
 - **Hooks live in `src/api/mutations/`**, one file per endpoint, shaped `useXxx(bookingId, containerId)` returning a TanStack `useMutation`. The `mutationFn` calls `authedApiRequest<T>(path, { method, body })` — same client as queries, so the 401→refresh→retry-once flow comes for free. Never call `apiRequest`/`fetch` directly.
 - **Invalidate-and-refetch on success.** `onSuccess: () => queryClient.invalidateQueries({ queryKey: bookingQueryKey(bookingId) })`. Container state is read out of the booking-detail response (no standalone container endpoint — see Cross-screen data flow), so refetching the booking re-derives the fresh container. A brief refetch spinner is acceptable for an internal tool.
-- **The screen wires `onSuccess`/`onError` per call** (`mutation.mutate(body, { onSuccess, onError })`) for toast + navigation — the hook only owns the request + cache invalidation. Disable the submit button on `mutation.isPending`.
+- **The screen wires `onSuccess` per call** (`mutation.mutate(body, { onSuccess })`) for toast + navigation — the hook only owns the request + cache invalidation. Disable the submit button on `mutation.isPending`. For errors, render `mutation.error` (inline `<FormError>` in modal forms, or an `onError` toast on a non-modal screen — see Toasts).
 - **Future optimisation (not built):** the dispute open/ack endpoints *return* the updated `ContainerOut`, so those two could switch to optimistic updates (`setQueryData` on mutate + rollback on error) if the refetch flicker proves annoying. Port-status returns only `{ message }`, so it stays refetch-based regardless. Left as a deliberate later improvement to keep the first write path uniform.
 - **Tests** (`src/api/mutations/*.test.ts`) mock `useMutation`/`useQueryClient` + `authedApiRequest` and assert the mutationFn's path/method/body and that `onSuccess` invalidates the right key. No RN renderer (consistent with Testing policy).
 
 ### Toasts
 
-`useToast().showToast(message, tone?: 'success' | 'error' | 'info')` is the **single feedback channel** for mutation success/error. `<ToastProvider>` is mounted once at the root (`app/_layout.tsx`, inside `SafeAreaProvider`/`AuthProvider`). It's a hand-rolled `Animated` banner near the bottom (~3s auto-dismiss); calling it again replaces the current toast. Don't add a second snackbar/alert mechanism for routine feedback — `Alert.alert` is reserved for *confirmations* (e.g. acknowledge-dispute), not result messages.
+`useToast().showToast(message, tone?: 'success' | 'error' | 'info')` is the feedback channel for **non-modal** screens. `<ToastProvider>` is mounted once at the root (`app/_layout.tsx`, inside `SafeAreaProvider`/`AuthProvider`). It's a hand-rolled `Animated` banner near the bottom (~3s auto-dismiss); calling it again replaces the current toast. Don't add a second snackbar mechanism for routine feedback — `Alert.alert` is reserved for *confirmations* (e.g. acknowledge-dispute), not result messages.
+
+**Toasts don't show over modal routes.** `presentation: 'modal'` screens are presented in a native layer *above* the root, so a toast fired while a modal is open is drawn behind it. Two consequences for modal **forms** (port-status, dispute):
+- **Success** → call `showToast(...)` then `router.back()`; the toast appears on the detail screen once the modal dismisses. ✓
+- **Error** → the form stays open, so use the inline **`<FormError error={mutation.error} fallback="…" />`** banner instead of a toast. (This was caught in Phase 3 device testing — an error toast on an open modal was invisible.)
 
 ### Permissions (cosmetic role gating)
 
@@ -193,7 +197,7 @@ The first write path landed in Phase 3 (container port-status + dispute open/ack
 
 ### Modal form routes
 
-Form screens use Expo Router **modal presentation**, declared in the route's nearest layout (`app/(authed)/_layout.tsx` registers the two container form routes with `options={{ presentation: 'modal' }}`). Declare presentation in the layout, not via an in-component `<Stack.Screen>` — `presentation` is fixed when the screen mounts. The form reads `id`/`cid` via `useLocalSearchParams`, pre-fills from the relevant query (`useContainer`), submits through a mutation hook, and `router.back()`s on success. Reuse this pattern for future create/edit forms.
+Form screens use Expo Router **modal presentation**, declared in the route's nearest layout (`app/(authed)/_layout.tsx` registers the two container form routes with `options={{ presentation: 'modal' }}`). Declare presentation in the layout, not via an in-component `<Stack.Screen>` — `presentation` is fixed when the screen mounts. The form reads `id`/`cid` via `useLocalSearchParams`, pre-fills from the relevant query (`useContainer`), submits through a mutation hook, `router.back()`s on success (toast lands on the screen behind), and shows `<FormError>` inline on failure (toasts don't paint over modals — see Toasts). Reuse this pattern for future create/edit forms.
 
 ---
 

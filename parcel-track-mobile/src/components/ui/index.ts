@@ -1,6 +1,8 @@
 export { Button } from './Button';
 export type { ButtonProps } from './Button';
 export { Card } from './Card';
+export { FormError } from './FormError';
+export type { FormErrorProps } from './FormError';
 export { Input } from './Input';
 export type { InputProps } from './Input';
 export { ListItem } from './ListItem';
