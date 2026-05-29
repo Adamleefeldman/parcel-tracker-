@@ -7,7 +7,7 @@
  * will copy this pattern, so accidental drift is expensive.
  */
 
-import { bookingsQueryKey } from './useBookings';
+import { bookingsQueryKey, buildPath } from './useBookings';
 
 describe('bookingsQueryKey', () => {
   it('returns ["bookings", filters] with an empty filters object by default', () => {
@@ -24,7 +24,27 @@ describe('bookingsQueryKey', () => {
   });
 
   it('keeps "bookings" as the first element so cache invalidation by resource works', () => {
-    const key = bookingsQueryKey({ status: 'paid', page: 2 });
+    const key = bookingsQueryKey({ status: 'paid', offset: 50, limit: 50 });
     expect(key[0]).toBe('bookings');
+  });
+});
+
+describe('buildPath', () => {
+  it('returns the bare collection path when no filters are given', () => {
+    expect(buildPath({})).toBe('/api/v1/bookings');
+  });
+
+  it('emits limit/offset for pagination — never the (backend-ignored) `page` param', () => {
+    const path = buildPath({ status: 'paid', limit: 50, offset: 50 });
+    expect(path).toBe('/api/v1/bookings?status=paid&limit=50&offset=50');
+    expect(path).not.toContain('page');
+  });
+
+  it('omits absent filters', () => {
+    expect(buildPath({ status: 'pending' })).toBe('/api/v1/bookings?status=pending');
+  });
+
+  it('includes offset=0 (a valid first-page request), since it is defined', () => {
+    expect(buildPath({ offset: 0, limit: 25 })).toBe('/api/v1/bookings?limit=25&offset=0');
   });
 });

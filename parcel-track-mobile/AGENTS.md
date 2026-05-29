@@ -1,6 +1,6 @@
 # AGENTS.md — parcel-track-mobile
 
-_Last reviewed: 2026-05-27. The Expo SDK pin and any "current state" notes below go stale fast — update this date whenever you touch them._
+_Last reviewed: 2026-05-29. The Expo SDK pin and any "current state" notes below go stale fast — update this date whenever you touch them._
 
 The companion backend doc is [`../parcel-track/CLAUDE.md`](../parcel-track/CLAUDE.md). Read it before doing anything that crosses the API boundary (auth shape, status enums, endpoint paths under `/api/v1`, error envelope).
 
@@ -75,7 +75,7 @@ Bundle / package: `com.thefmcghub.logistics` (permanent — do not change).
 - **Session-expired is an event, not a return value.** On refresh failure, `client.ts` calls `clearTokens()` and `emitSessionExpired()` (`src/auth/sessionEvents.ts`). `AuthProvider` listens and flips status → `anonymous`, which re-renders the login screen. Don't try to navigate from inside the API client.
 - **`AuthContext` is the only consumer of token storage.** Screens read `useAuth()` for `{ status, user, signIn, signOut }` — they don't call `getAccessToken()` themselves.
 - **Theme tokens, not inline styles.** Colours, spacing, radii live in `src/theme/tokens.ts` and are consumed via `src/theme/index.ts`. Hard-coded hex/px in a component is a code-smell.
-- **Shared UI primitives in `src/components/ui/`.** `Button`, `Card`, `Input`, `ListItem`, `Pill`, `ScreenContainer`, `Spinner`, `StatusPill`, `Text`. Reach for these before building bespoke views.
+- **Shared UI primitives in `src/components/ui/`.** `Button`, `Card`, `FormError`, `Input`, `ListItem`, `Pill`, `ScreenContainer`, `Select`, `Spinner`, `StatusPill`, `Text`, plus the `ToastProvider`/`useToast` feedback system. Reach for these before building bespoke views.
 - **One status-pill component.** Any badge that renders a `BookingStatus` or `ContainerLifecycleStatus` goes through `<StatusPill>` (`src/components/ui/StatusPill.tsx`). It maps each enum value to a tone via an exhaustive `Record<...>` — a new backend enum value will fail TS until the mapping in `statusPillMapping.ts` is updated. Don't render raw status strings, and don't reimplement a local tone-picker.
 
 ---
@@ -86,8 +86,10 @@ Bundle / package: `com.thefmcghub.logistics` (permanent — do not change).
 |---|---|---|
 | `app/` | Expo Router routes. Route groups `(auth)` (anon-only) + `(authed)` (signed-in). Each folder has a `_layout.tsx` for that group's guard | `app/(authed)/bookings/[id]/index.tsx` |
 | `src/api/` | HTTP client + typed endpoint wrappers + React-hook-shaped queries | `client.ts`, `authedClient.ts`, `queries/useBookings.ts`, `queries/useBooking.ts` |
+| `src/api/queries/` | TanStack Query read hooks | `useBookings.ts`, `useBooking.ts`, `useContainer.ts` |
+| `src/api/mutations/` | TanStack Query write hooks (invalidate-and-refetch) | `useUpdatePortStatus.ts`, `useOpenDispute.ts`, `useAcknowledgeDispute.ts` |
 | `src/api/types/` | Hand-typed TS mirrors of backend Pydantic schemas. Split per domain | `booking.ts`, `container.ts`, `enums.ts` |
-| `src/auth/` | Auth state machine, token storage, JWT decode, session events | `AuthContext.tsx`, `tokenStorage.ts`, `jwt.ts`, `sessionEvents.ts`, `authApi.ts` |
+| `src/auth/` | Auth state machine, token storage, JWT decode, session events, role gating | `AuthContext.tsx`, `tokenStorage.ts`, `jwt.ts`, `sessionEvents.ts`, `authApi.ts`, `permissions.ts` |
 | `src/components/` | Cross-cutting components that compose primitives | `AppHeader.tsx` |
 | `src/components/ui/` | Reusable presentational primitives — no network, no storage | `Button.tsx`, `Card.tsx`, `StatusPill.tsx`, `ScreenContainer.tsx` |
 | `src/config/` | Env-derived constants. Single export per concern | `api.ts` (`API_BASE_URL`) |
@@ -144,14 +146,16 @@ All server data flows through TanStack Query. `QueryClientProvider` is wired in 
 **Query-key convention:** array starts with the resource name, then a stable-keyed object of filters or an id. Different filters must produce different keys so they don't share a cache slot, and the resource-name first element makes "invalidate everything for this resource" easy:
 
 ```
-['bookings', { status, date_from, page }]   // collection
-['booking', id]                              // single
-['containers', { booking_id }]               // collection
+['bookings', { status, date_from, date_to, limit, offset }]   // collection
+['booking', id]                                               // single
+['containers', { booking_id }]                                // collection
 ```
 
 Singular vs plural matters — `['booking', id]` and `['bookings', filters]` are siblings, not the same slot.
 
-**Mutations and Idempotency-Key** are not in the codebase yet. When the first mutation lands, plumb `Idempotency-Key` through `apiRequest` for POSTs that produce a unique side effect (payments, BL upload, dispute open). The backend already enforces it.
+**Pagination uses `limit`/`offset`, not `page`.** The backend's `PaginationParams` (`app/schemas/pagination.py`) takes `limit` + `offset`; a `page` param is silently ignored. `useBookings`' `buildPath` emits `limit`/`offset` and its test asserts the built path — keep that assertion when touching filters.
+
+**Idempotency-Key is still not plumbed.** Phase 3's mutations (port status, dispute open/ack) are all idempotency-free by design — none produce a unique financial side effect. When the first idempotent mutation lands (supplier/customer payment, BL upload), plumb `Idempotency-Key` through `apiRequest` for that POST. The backend already enforces it.
 
 ### Cross-screen data flow
 
@@ -166,6 +170,34 @@ This means deep-linking straight to a container URL works (cold cache → loads 
 The two enums map to different state-spaces:
 - `BookingStatus` — coarse booking lifecycle (`draft → … → complete`).
 - `ContainerLifecycleStatus` — per-container end-to-end position (`ordered → at_sea → … → closed`, plus `disputed` as a side-state).
+
+---
+
+## Mutations (writes)
+
+The first write path landed in Phase 3 (container port-status + dispute open/acknowledge). The pattern every future mutation copies:
+
+- **Hooks live in `src/api/mutations/`**, one file per endpoint, shaped `useXxx(bookingId, containerId)` returning a TanStack `useMutation`. The `mutationFn` calls `authedApiRequest<T>(path, { method, body })` — same client as queries, so the 401→refresh→retry-once flow comes for free. Never call `apiRequest`/`fetch` directly.
+- **Invalidate-and-refetch on success.** `onSuccess: () => queryClient.invalidateQueries({ queryKey: bookingQueryKey(bookingId) })`. Container state is read out of the booking-detail response (no standalone container endpoint — see Cross-screen data flow), so refetching the booking re-derives the fresh container. A brief refetch spinner is acceptable for an internal tool.
+- **The screen wires `onSuccess` per call** (`mutation.mutate(body, { onSuccess })`) for toast + navigation — the hook only owns the request + cache invalidation. Disable the submit button on `mutation.isPending`. For errors, render `mutation.error` (inline `<FormError>` in modal forms, or an `onError` toast on a non-modal screen — see Toasts).
+- **Future optimisation (not built):** the dispute open/ack endpoints *return* the updated `ContainerOut`, so those two could switch to optimistic updates (`setQueryData` on mutate + rollback on error) if the refetch flicker proves annoying. Port-status returns only `{ message }`, so it stays refetch-based regardless. Left as a deliberate later improvement to keep the first write path uniform.
+- **Tests** (`src/api/mutations/*.test.ts`) mock `useMutation`/`useQueryClient` + `authedApiRequest` and assert the mutationFn's path/method/body and that `onSuccess` invalidates the right key. No RN renderer (consistent with Testing policy).
+
+### Toasts
+
+`useToast().showToast(message, tone?: 'success' | 'error' | 'info')` is the feedback channel for **non-modal** screens. `<ToastProvider>` is mounted once at the root (`app/_layout.tsx`, inside `SafeAreaProvider`/`AuthProvider`). It's a hand-rolled `Animated` banner near the bottom (~3s auto-dismiss); calling it again replaces the current toast. Don't add a second snackbar mechanism for routine feedback — `Alert.alert` is reserved for *confirmations* (e.g. acknowledge-dispute), not result messages.
+
+**Toasts don't show over modal routes.** `presentation: 'modal'` screens are presented in a native layer *above* the root, so a toast fired while a modal is open is drawn behind it. Two consequences for modal **forms** (port-status, dispute):
+- **Success** → call `showToast(...)` then `router.back()`; the toast appears on the detail screen once the modal dismisses. ✓
+- **Error** → the form stays open, so use the inline **`<FormError error={mutation.error} fallback="…" />`** banner instead of a toast. (This was caught in Phase 3 device testing — an error toast on an open modal was invisible.)
+
+### Permissions (cosmetic role gating)
+
+`src/auth/permissions.ts` holds pure role-check functions (`canManageDisputes`, `canUpdatePortStatus`) used to decide which action buttons a screen *shows*. **This is cosmetic only.** The server is the real gate — dispute endpoints are `require_admin` and 403 non-admins regardless of what the UI rendered. Never treat a hidden button as a security boundary. Helpers are null-safe: undefined role denies (restrictive default). Role comes from `useAuth().user?.role`, itself a UI hint decoded from the JWT.
+
+### Modal form routes
+
+Form screens use Expo Router **modal presentation**, declared in the route's nearest layout (`app/(authed)/_layout.tsx` registers the two container form routes with `options={{ presentation: 'modal' }}`). Declare presentation in the layout, not via an in-component `<Stack.Screen>` — `presentation` is fixed when the screen mounts. The form reads `id`/`cid` via `useLocalSearchParams`, pre-fills from the relevant query (`useContainer`), submits through a mutation hook, `router.back()`s on success (toast lands on the screen behind), and shows `<FormError>` inline on failure (toasts don't paint over modals — see Toasts). Reuse this pattern for future create/edit forms.
 
 ---
 
@@ -220,6 +252,9 @@ Bump when a matching Expo Go ships: `npx expo install expo@latest --fix`, then u
 | Inline `#hex` colours / magic px in a component | Use `src/theme/tokens.ts` |
 | Rendering a status string directly or rolling a local `toneFor` helper | Use `<StatusPill kind="booking" | "lifecycle" …>` — see Status pills |
 | Calling `apiRequest` directly from a screen for authed reads | Use a query hook in `src/api/queries/` via `useQuery` + `authedApiRequest` |
+| Calling `apiRequest`/`fetch` from a screen for a write | Use a mutation hook in `src/api/mutations/` via `useMutation` + `authedApiRequest`; invalidate the parent `['booking', id]` on success |
+| Hiding an admin button and assuming the action is now safe | Role gating (`src/auth/permissions.ts`) is cosmetic — the server 403s. Handle the error toast, don't rely on the hidden button |
+| `Alert.alert` / a second snackbar for routine success/error | Use `useToast().showToast(msg, tone)` — the single feedback channel. `Alert.alert` is for confirmations only |
 
 ---
 
