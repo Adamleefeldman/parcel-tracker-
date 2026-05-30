@@ -24,8 +24,41 @@ from app.db.models import Container, CustomerPayment, User
 from app.middleware.auth import financial_fields_allowed
 from app.schemas.pagination import PaginationParams, paginate
 from app.schemas.schemas import CustomerPaymentCreate, CustomerPaymentOut
-from app.services.booking_service import BookingService
 from app.services.container_lifecycle_service import ContainerLifecycleService
+
+# Money / bank-detail fields on a customer-payment record that only admins may
+# see. These names are specific to CustomerPaymentOut, so we mask them here
+# rather than in BookingService.mask_financials (whose hardcoded key set is
+# shared with PO / Invoice / supplier-payment serialisation and must not grow
+# field names that could accidentally null unrelated entities).
+CUSTOMER_PAYMENT_FINANCIAL_FIELDS = frozenset(
+    {
+        "amount_received",
+        "variance",
+        "expense_courier",
+        "expense_bank_charge",
+        "banked_total",
+        "sender_bank",
+        "receiver_bank",
+    }
+)
+
+# Aggregate money totals that roll up the per-tranche financial fields above.
+CUSTOMER_PAYMENT_AGGREGATE_FINANCIAL_FIELDS = frozenset(
+    {
+        "total_received",
+        "total_variance",
+        "total_expenses",
+        "total_banked",
+    }
+)
+
+
+def _mask_payment_fields(obj: dict[str, Any], keys: frozenset[str], show: bool) -> dict[str, Any]:
+    """Null the financial ``keys`` in ``obj`` when ``show`` is False (non-admin)."""
+    if show:
+        return obj
+    return {k: (None if k in keys else v) for k, v in obj.items()}
 
 
 class CustomerPaymentService:
@@ -61,11 +94,13 @@ class CustomerPaymentService:
     async def aggregate_for_container(
         db: AsyncSession,
         container_id: uuid.UUID,
+        actor: User,
     ) -> dict[str, Any]:
         """Return totals across all tranches for one container.
 
         Used by the container detail view and any A/R aging logic that wants
-        a clean "is this container paid?" signal.
+        a clean "is this container paid?" signal. The money totals are masked
+        to None for non-admins; ``tranche_count`` stays visible to everyone.
         """
         rows_q = await db.execute(
             select(CustomerPayment)
@@ -85,7 +120,7 @@ class CustomerPaymentService:
         )
         total_received, total_variance, total_expenses, total_banked = sum_q.one()
 
-        return {
+        agg: dict[str, Any] = {
             "total_received": Decimal(total_received),
             "total_variance": Decimal(total_variance),
             "total_expenses": Decimal(total_expenses),
@@ -93,6 +128,9 @@ class CustomerPaymentService:
             "tranche_count": len(tranches),
             "tranches": tranches,
         }
+        return _mask_payment_fields(
+            agg, CUSTOMER_PAYMENT_AGGREGATE_FINANCIAL_FIELDS, financial_fields_allowed(actor)
+        )
 
     @staticmethod
     async def list(
@@ -109,7 +147,11 @@ class CustomerPaymentService:
         page = await paginate(db, q, pagination)
         show = financial_fields_allowed(actor)
         page["items"] = [
-            BookingService.mask_financials(CustomerPaymentOut.model_validate(p).model_dump(), show)
+            _mask_payment_fields(
+                CustomerPaymentOut.model_validate(p).model_dump(),
+                CUSTOMER_PAYMENT_FINANCIAL_FIELDS,
+                show,
+            )
             for p in page["items"]
         ]
         return page
