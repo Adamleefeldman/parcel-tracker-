@@ -53,3 +53,26 @@ export type PortStatus =
  * enum to mirror (`CustomerPaymentCreate.method`, validated server-side).
  */
 export type CustomerPaymentMethod = 'cash' | 'transfer';
+
+/**
+ * In-app notification kind (`NotificationType` in `app/core/enums.py`). 15
+ * values — keep this in sync; `NOTIFICATION_LABELS`/`NOTIFICATION_TONES`
+ * (`src/features/alerts/notificationDisplay.ts`) map each member exhaustively,
+ * so a new backend value fails the typecheck until it's added here too.
+ */
+export type NotificationType =
+  | 'po_submitted'
+  | 'invoice_received'
+  | 'payment_confirmed'
+  | 'bl_uploaded'
+  | 'vessel_departed'
+  | 'vessel_approaching'
+  | 'vessel_delayed'
+  | 'vessel_arrived'
+  | 'container_hold'
+  | 'container_cleared'
+  | 'clearing_docs_urgent'
+  | 'delivery_scheduled'
+  | 'delivery_complete'
+  | 'ar_aging_alert'
+  | 'demurrage_warning';

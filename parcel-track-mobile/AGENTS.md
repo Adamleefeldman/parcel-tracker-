@@ -1,6 +1,6 @@
 # AGENTS.md — parcel-track-mobile
 
-_Last reviewed: 2026-05-29. The Expo SDK pin and any "current state" notes below go stale fast — update this date whenever you touch them._
+_Last reviewed: 2026-05-31. The Expo SDK pin and any "current state" notes below go stale fast — update this date whenever you touch them._
 
 The companion backend doc is [`../parcel-track/CLAUDE.md`](../parcel-track/CLAUDE.md). Read it before doing anything that crosses the API boundary (auth shape, status enums, endpoint paths under `/api/v1`, error envelope).
 
@@ -60,7 +60,7 @@ Bundle / package: `com.thefmcghub.logistics` (permanent — do not change).
 | JWT decode (UI only) | `jwt-decode` |
 | HTTP | native `fetch`, wrapped by `src/api/client.ts` |
 | Tests | jest 29 + ts-jest (node env, pure-logic only) |
-| Navigation | Expo Router (file-based; routes under `app/`, route groups `(auth)` + `(authed)`) |
+| Navigation | Expo Router (file-based; routes under `app/`, route groups `(auth)` + `(authed)`; the signed-in area is a bottom-tab navigator under `(authed)/(tabs)`) |
 | Server state | TanStack Query — `QueryClientProvider` in `app/_layout.tsx`; hooks in `src/api/queries/` |
 | Client state | React Context only (`AuthContext`). No Redux/Zustand until there's a concrete need |
 | Env loading | `expo` reads `.env`, `.env.local`, `.env.production` at bundler start |
@@ -84,7 +84,7 @@ Bundle / package: `com.thefmcghub.logistics` (permanent — do not change).
 
 | Folder | What lives here | Example |
 |---|---|---|
-| `app/` | Expo Router routes. Route groups `(auth)` (anon-only) + `(authed)` (signed-in). Each folder has a `_layout.tsx` for that group's guard | `app/(authed)/bookings/[id]/index.tsx` |
+| `app/` | Expo Router routes. Route groups `(auth)` (anon-only) + `(authed)` (signed-in); the signed-in area is the bottom-tab group `(authed)/(tabs)` (Dashboard / Bookings / Alerts). Each folder has a `_layout.tsx` for its guard/navigator | `app/(authed)/(tabs)/bookings/[id]/index.tsx` |
 | `src/api/` | HTTP client + typed endpoint wrappers + React-hook-shaped queries | `client.ts`, `authedClient.ts`, `queries/useBookings.ts`, `queries/useBooking.ts` |
 | `src/api/queries/` | TanStack Query read hooks | `useBookings.ts`, `useBooking.ts`, `useContainer.ts` |
 | `src/api/mutations/` | TanStack Query write hooks (invalidate-and-refetch) | `useUpdatePortStatus.ts`, `useOpenDispute.ts`, `useCreateCustomerPayment.ts` |
@@ -100,6 +100,52 @@ Bundle / package: `com.thefmcghub.logistics` (permanent — do not change).
 | _(future)_ `src/hooks/` | Cross-screen hooks that aren't tied to a single domain | — |
 
 Tests sit next to the file under test (`client.test.ts` next to `client.ts`), not in a parallel tree.
+
+Two more `src/` areas exist as of Phase 5: `src/features/dashboard/` (role→sections selector + dashboard view components) and `src/features/alerts/` (notification label/tone map). Feature-scoped UI + pure helpers that aren't a reusable primitive live under `src/features/<domain>/`.
+
+---
+
+## Navigation (bottom tabs + nested Bookings stack)
+
+The signed-in area is a **bottom-tab navigator** with three destinations:
+
+```
+app/(authed)/_layout.tsx              # auth guard → Stack (headerShown:false); renders (tabs)
+app/(authed)/(tabs)/_layout.tsx       # <Tabs>: Dashboard | Bookings | Alerts (+ unread badge)
+app/(authed)/(tabs)/index.tsx         # Dashboard (role-aware home — see Dashboards)
+app/(authed)/(tabs)/alerts.tsx        # Alerts feed (see Notifications)
+app/(authed)/(tabs)/bookings/_layout.tsx   # <Stack> for the Bookings tab; registers the 3 modals
+app/(authed)/(tabs)/bookings/**            # list → [id] detail → containers/[cid] → modals
+```
+
+- **Where new screens go.** A new *top-level destination* is a tab (a file/dir under `(tabs)` + a `<Tabs.Screen>`). A new *bookings detail/form screen* goes inside the Bookings-tab stack (`(tabs)/bookings/…`) so it pushes within that tab.
+- **Modals live in the Bookings-tab stack.** `presentation: 'modal'` for port-status / dispute / record-payment is declared in `(authed)/(tabs)/bookings/_layout.tsx` (names relative to it, e.g. `[id]/containers/[cid]/port-status`) — **not** in `(authed)/_layout.tsx` anymore.
+- **Route groups are invisible in the URL.** `(authed)` and `(tabs)` are parenthesised groups, so a booking's URL stays `/bookings/{id}` regardless of nesting — existing `router.push('/bookings/…')` / `/(authed)/bookings/…` hrefs kept working through the restructure untouched. Switch tabs with a plain href (`router.push('/alerts')`).
+- **Cold start lands on the Dashboard tab** (`(tabs)/index.tsx`); the old `(authed)/index.tsx` redirect was deleted.
+
+### Path alias `@/`
+
+`tsconfig.json` maps `@/* → ./*`. **`app/` files use the `@/` alias** (`@/src/...`) — verified to resolve under both `npx tsc --noEmit` and a real `npx expo export` bundle on SDK 54 (Expo's Metro reads tsconfig `paths`; there is no `baseUrl` — that was the Phase 1 footgun). **`src/` files keep relative imports**, because `jest.config.js` has no `@/` moduleNameMapper and the existing tests mock relative paths; keeping `src/` relative means no jest change is needed. (`@expo/vector-icons` is an explicit dependency so tsc can resolve its types — it was previously only transitively present under `expo/node_modules`, which Metro resolves but tsc does not.)
+
+## Dashboards (role-aware home)
+
+`(tabs)/index.tsx` is **one** screen driven by `dashboardConfig(role)` (`src/features/dashboard/dashboardSections.ts`, pure + tested) rather than four near-duplicate role components — the role differences (greeting label, which status count-cards to emphasize, empty copy) are pure data.
+
+- **Greeting is the role label only** — there is no `/me` endpoint and the JWT carries no name.
+- **Status counts are client-side.** The bookings list has no faceted-count endpoint, so the dashboard does one `useBookings({ limit: 200 })` and groups with `countByStatus` (`src/lib/bookingStatusCounts.ts`). Caps at one page; the volume upgrade is N `status=X&limit=1` calls reading `total`.
+- **Booking grain only.** There is no cross-booking container endpoint, so dashboards summarize *bookings* (e.g. the UK agent sees their in-transit / cleared bookings); drill into a booking for its containers.
+- Count cards + the alerts teaser navigate to the Bookings / Alerts tabs (no status filter on the list yet).
+
+## Notifications (alerts feed)
+
+Endpoints (`parcel-track/app/api/routes/notifications.py`):
+
+- `GET /api/v1/notifications?unread_only=&limit=&offset=` → `PaginatedResponse<NotificationOut>` (`useNotifications`, key `['notifications', filters]`).
+- **`PATCH`** `/api/v1/notifications/{id}/read` (no body) → `{ message }` (`useMarkNotificationRead`). It is PATCH, **not** POST.
+- There is **no** `/unread-count` and **no** mark-all-read endpoint. The tab badge derives the count from `GET …?unread_only=true&limit=1` → `.total` (`useUnreadCount`, key `['notifications', 'unread-count']`).
+- **Prefix invalidation:** `useMarkNotificationRead` invalidates the bare `['notifications']` prefix — one call refetches every list query *and* the unread-count badge (both sit under that prefix).
+- **`NotificationOut`** = `{ id, type, title, message, read, booking_id, created_at }` — the field is `message` (not `body`), and the only entity reference is `booking_id` (nullable). So a row **deep-links to `/bookings/{booking_id}` when set**, and is mark-read-only otherwise (no `entity_type`/`entity_id` exist).
+- **`NotificationType`** has 15 values (mirror in `src/api/types/enums.ts`); `NOTIFICATION_LABELS`/`NOTIFICATION_TONES` (`src/features/alerts/notificationDisplay.ts`) map each exhaustively — a new backend value fails the typecheck until added.
 
 ---
 
@@ -170,7 +216,7 @@ The aggregate key is the list key **plus a trailing `'aggregate'`**, so a single
 
 ### Cross-screen data flow
 
-Container detail (`app/(authed)/bookings/[id]/containers/[cid]/index.tsx`) deliberately has no dedicated endpoint — the backend has no `GET /api/v1/containers/{id}`. Containers live as nested objects under `BookingDetailOut.bill_of_lading.containers` and `BookingDetailOut.delivery_points[].containers`. `useContainer` runs `useBooking(bookingId)` under the hood and walks the result for the matching container, deduping when the same id appears in both lists.
+Container detail (`app/(authed)/(tabs)/bookings/[id]/containers/[cid]/index.tsx`) deliberately has no dedicated endpoint — the backend has no `GET /api/v1/containers/{id}`. Containers live as nested objects under `BookingDetailOut.bill_of_lading.containers` and `BookingDetailOut.delivery_points[].containers`. `useContainer` runs `useBooking(bookingId)` under the hood and walks the result for the matching container, deduping when the same id appears in both lists.
 
 This means deep-linking straight to a container URL works (cold cache → loads the parent booking), and tapping through from the booking detail screen is free (warm cache → no extra request). When the backend grows a real `/containers/{id}` endpoint, replace `useContainer`'s body with a direct fetch and drop `findContainerInBooking` — call sites stay the same.
 
@@ -236,7 +282,7 @@ Financial create endpoints **require** an `Idempotency-Key` header (missing → 
 
 ### Modal form routes
 
-Form screens use Expo Router **modal presentation**, declared in the route's nearest layout (`app/(authed)/_layout.tsx` registers the three container form routes — port-status, dispute, record-payment — with `options={{ presentation: 'modal' }}`). Declare presentation in the layout, not via an in-component `<Stack.Screen>` — `presentation` is fixed when the screen mounts. The form reads `id`/`cid` via `useLocalSearchParams`, pre-fills from the relevant query (`useContainer`), submits through a mutation hook, `router.back()`s on success (toast lands on the screen behind), and shows `<FormError>` inline on failure (toasts don't paint over modals — see Toasts). Reuse this pattern for future create/edit forms. Admin-only forms still render a "not permitted" body for a deep-linked non-admin (defense-in-depth; the server is the real gate).
+Form screens use Expo Router **modal presentation**, declared in the route's nearest layout (`app/(authed)/(tabs)/bookings/_layout.tsx` registers the three container form routes — port-status, dispute, record-payment — with `options={{ presentation: 'modal' }}`; names are relative to that layout, e.g. `[id]/containers/[cid]/port-status`). Declare presentation in the layout, not via an in-component `<Stack.Screen>` — `presentation` is fixed when the screen mounts. The form reads `id`/`cid` via `useLocalSearchParams`, pre-fills from the relevant query (`useContainer`), submits through a mutation hook, `router.back()`s on success (toast lands on the screen behind), and shows `<FormError>` inline on failure (toasts don't paint over modals — see Toasts). Reuse this pattern for future create/edit forms. Admin-only forms still render a "not permitted" body for a deep-linked non-admin (defense-in-depth; the server is the real gate).
 
 ---
 
