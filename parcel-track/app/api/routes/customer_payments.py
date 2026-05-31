@@ -61,8 +61,12 @@ async def aggregate_customer_payments(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_booking_member),
 ):
-    """Return totals across all tranches: received, variance, expenses, banked."""
-    agg = await CustomerPaymentService.aggregate_for_container(db, container_id)
+    """Return totals across all tranches: received, variance, expenses, banked.
+
+    Money totals are masked to None for non-admin booking members; tranche_count
+    stays visible.
+    """
+    agg = await CustomerPaymentService.aggregate_for_container(db, container_id, actor)
     # Strip the ORM tranche objects from the response — the list view above
     # returns those. Here we only want the rolled-up totals.
     return {k: v for k, v in agg.items() if k != "tranches"}
