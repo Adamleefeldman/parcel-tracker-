@@ -25,3 +25,11 @@ export const canManageDisputes = (role?: UserRole): boolean => role === 'admin';
  */
 export const canUpdatePortStatus = (role?: UserRole): boolean =>
   role === 'admin' || role === 'morocco_agent' || role === 'uk_agent';
+
+/**
+ * Admin-only: record inbound customer payments. The backend's create endpoint
+ * is `require_admin` and 403s everyone else regardless of what the UI shows.
+ * Non-admin booking members can still *view* the payments section (amounts are
+ * masked server-side) — this gate only governs the "Record payment" action.
+ */
+export const canManageCustomerPayments = (role?: UserRole): boolean => role === 'admin';

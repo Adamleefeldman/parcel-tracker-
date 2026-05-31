@@ -5,14 +5,22 @@ import { Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-nativ
 import { ApiError } from '../../../../../../src/api/client';
 import { useAcknowledgeDispute } from '../../../../../../src/api/mutations/useAcknowledgeDispute';
 import { useContainer } from '../../../../../../src/api/queries/useContainer';
+import { useCustomerPaymentAggregate } from '../../../../../../src/api/queries/useCustomerPaymentAggregate';
+import { useCustomerPayments } from '../../../../../../src/api/queries/useCustomerPayments';
 import type { Container } from '../../../../../../src/api/types/container';
+import type { CustomerPayment } from '../../../../../../src/api/types/payment';
 import { useAuth } from '../../../../../../src/auth/AuthContext';
-import { canManageDisputes, canUpdatePortStatus } from '../../../../../../src/auth/permissions';
+import {
+  canManageCustomerPayments,
+  canManageDisputes,
+  canUpdatePortStatus,
+} from '../../../../../../src/auth/permissions';
 import type { UserRole } from '../../../../../../src/api/types/enums';
 import { AppHeader } from '../../../../../../src/components/AppHeader';
 import {
   Button,
   Card,
+  Pill,
   ScreenContainer,
   Spinner,
   StatusPill,
@@ -20,6 +28,7 @@ import {
   useToast,
 } from '../../../../../../src/components/ui';
 import { humanizeStatus } from '../../../../../../src/components/ui/statusPillMapping';
+import { formatMoney, parseRatio } from '../../../../../../src/lib/money';
 import { colors, radii, spacing } from '../../../../../../src/theme/tokens';
 
 export default function ContainerDetailScreen() {
@@ -84,6 +93,7 @@ function Body({
       <DisputeBanner container={container} />
       <ActionsSection container={container} bookingId={bookingId} containerId={containerId} />
       <SaleSection container={container} />
+      <PaymentsSection container={container} bookingId={bookingId} containerId={containerId} />
       <PartiesSection container={container} />
       <OperationsSection container={container} />
       <MetadataSection container={container} />
@@ -206,26 +216,16 @@ function SaleSection({ container }: { container: Container }) {
   return (
     <Section title="Sale">
       <Text variant="display">
-        {container.sale_price_total
-          ? formatMoney(container.sale_price_total, container.sale_currency)
-          : '—'}
+        {formatMoney(container.sale_price_total, container.sale_currency)}
       </Text>
       <View style={styles.grid}>
         <KV
           label="Per pallet"
-          value={
-            container.sale_price_per_pallet
-              ? formatMoney(container.sale_price_per_pallet, container.sale_currency)
-              : '—'
-          }
+          value={formatMoney(container.sale_price_per_pallet, container.sale_currency)}
         />
         <KV
           label="Per tray"
-          value={
-            container.sale_price_per_tray
-              ? formatMoney(container.sale_price_per_tray, container.sale_currency)
-              : '—'
-          }
+          value={formatMoney(container.sale_price_per_tray, container.sale_currency)}
         />
       </View>
     </Section>
@@ -357,8 +357,130 @@ function formatDateTime(iso: string | null | undefined): string {
   });
 }
 
-function formatMoney(amount: string, currency: string): string {
-  return `${currency} ${amount}`;
+/**
+ * Customer-payments view. All booking members see the aggregate + tranche
+ * list; financial amounts are masked (null → "—") server-side for non-admins,
+ * with a one-line hint. Only admins see "Record payment" (cosmetic — the
+ * create endpoint is `require_admin` and 403s everyone else).
+ *
+ * "Fully banked" is read from `container.lifecycle_status === 'banked'` — the
+ * authoritative server signal — never a client-side Decimal comparison. The
+ * progress bar is the only place a money value is coerced to a number
+ * (`parseRatio`), and only for a cosmetic width.
+ */
+function PaymentsSection({
+  container,
+  bookingId,
+  containerId,
+}: {
+  container: Container;
+  bookingId: string;
+  containerId: string;
+}) {
+  const router = useRouter();
+  const { user } = useAuth();
+  const role = user?.role as UserRole | undefined;
+  const isAdmin = canManageCustomerPayments(role);
+
+  const aggQuery = useCustomerPaymentAggregate(bookingId, containerId);
+  const listQuery = useCustomerPayments(bookingId, containerId);
+
+  const currency = container.sale_currency;
+  const agg = aggQuery.data;
+  const payments = listQuery.data?.items ?? [];
+  const fullyBanked = container.lifecycle_status === 'banked';
+  const ratio = agg ? parseRatio(agg.total_banked, container.sale_price_total) : null;
+
+  // Non-admins get null amounts back; detect masking from the first tranche so
+  // we can show the hint once rather than a column of "—".
+  const amountsMasked =
+    !isAdmin && payments.length > 0 && payments.every((p) => p.amount_received === null);
+
+  return (
+    <Section title="Customer payments">
+      {aggQuery.isError ? (
+        <Text variant="body" muted>
+          Couldn&apos;t load payments.
+        </Text>
+      ) : (
+        <>
+          <View style={styles.bankedRow}>
+            <Text variant="body">
+              {formatMoney(agg?.total_banked, currency)} banked
+              {container.sale_price_total
+                ? ` of ${formatMoney(container.sale_price_total, currency)}`
+                : ''}
+            </Text>
+            {fullyBanked ? <Pill tone="success">Fully banked</Pill> : null}
+          </View>
+
+          {ratio !== null ? (
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${Math.round(ratio * 100)}%` }]} />
+            </View>
+          ) : null}
+
+          <Text variant="small" muted>
+            {agg?.tranche_count ?? payments.length}{' '}
+            {(agg?.tranche_count ?? payments.length) === 1 ? 'tranche' : 'tranches'}
+          </Text>
+        </>
+      )}
+
+      {payments.length > 0 ? (
+        <View style={styles.tranches}>
+          {payments.map((p) => (
+            <TrancheRow key={p.id} payment={p} currency={currency} />
+          ))}
+        </View>
+      ) : !aggQuery.isLoading ? (
+        <Text variant="body" muted style={styles.emptyTranches}>
+          No payments recorded yet.
+        </Text>
+      ) : null}
+
+      {amountsMasked ? (
+        <Text variant="small" muted style={styles.maskHint}>
+          Amounts hidden for your role.
+        </Text>
+      ) : null}
+
+      {isAdmin ? (
+        <Button
+          title="Record payment"
+          variant="secondary"
+          onPress={() =>
+            router.push(`/bookings/${bookingId}/containers/${containerId}/record-payment`)
+          }
+          style={styles.recordButton}
+        />
+      ) : null}
+    </Section>
+  );
+}
+
+function TrancheRow({ payment, currency }: { payment: CustomerPayment; currency: string }) {
+  return (
+    <View style={styles.trancheRow}>
+      <View style={styles.trancheMain}>
+        <Text variant="body">{formatMoney(payment.amount_received, currency)}</Text>
+        <Text variant="small" muted>
+          #{payment.tranche_index} · {humanizeStatus(payment.method)} ·{' '}
+          {formatDate(payment.payment_date)}
+        </Text>
+      </View>
+      <Text variant="small" muted>
+        Banked {formatMoney(payment.banked_total, currency)}
+      </Text>
+    </View>
+  );
+}
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 const styles = StyleSheet.create({
@@ -399,6 +521,49 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: spacing.sm,
+  },
+  bankedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: radii.sm,
+    backgroundColor: colors.border,
+    overflow: 'hidden',
+    marginTop: spacing.sm,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.success,
+  },
+  tranches: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  trancheRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  trancheMain: {
+    gap: spacing.xs,
+    flexShrink: 1,
+  },
+  emptyTranches: {
+    marginTop: spacing.sm,
+  },
+  maskHint: {
+    marginTop: spacing.sm,
+  },
+  recordButton: {
+    marginTop: spacing.md,
   },
   partyBlock: {
     gap: spacing.xs,

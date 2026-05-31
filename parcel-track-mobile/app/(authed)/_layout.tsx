@@ -26,6 +26,10 @@ export default function AuthedLayout() {
         name="bookings/[id]/containers/[cid]/dispute"
         options={{ presentation: 'modal' }}
       />
+      <Stack.Screen
+        name="bookings/[id]/containers/[cid]/record-payment"
+        options={{ presentation: 'modal' }}
+      />
     </Stack>
   );
 }

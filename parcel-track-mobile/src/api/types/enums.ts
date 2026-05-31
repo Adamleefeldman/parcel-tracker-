@@ -46,3 +46,10 @@ export type PortStatus =
   | 'awaiting_customs'
   | 'customs_hold'
   | 'released';
+
+/**
+ * Inbound customer payment method. The backend has no `CustomerPaymentStatus`
+ * enum — a payment row is valid on creation — so this is the only payment
+ * enum to mirror (`CustomerPaymentCreate.method`, validated server-side).
+ */
+export type CustomerPaymentMethod = 'cash' | 'transfer';

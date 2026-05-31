@@ -87,14 +87,16 @@ Bundle / package: `com.thefmcghub.logistics` (permanent — do not change).
 | `app/` | Expo Router routes. Route groups `(auth)` (anon-only) + `(authed)` (signed-in). Each folder has a `_layout.tsx` for that group's guard | `app/(authed)/bookings/[id]/index.tsx` |
 | `src/api/` | HTTP client + typed endpoint wrappers + React-hook-shaped queries | `client.ts`, `authedClient.ts`, `queries/useBookings.ts`, `queries/useBooking.ts` |
 | `src/api/queries/` | TanStack Query read hooks | `useBookings.ts`, `useBooking.ts`, `useContainer.ts` |
-| `src/api/mutations/` | TanStack Query write hooks (invalidate-and-refetch) | `useUpdatePortStatus.ts`, `useOpenDispute.ts`, `useAcknowledgeDispute.ts` |
+| `src/api/mutations/` | TanStack Query write hooks (invalidate-and-refetch) | `useUpdatePortStatus.ts`, `useOpenDispute.ts`, `useCreateCustomerPayment.ts` |
 | `src/api/types/` | Hand-typed TS mirrors of backend Pydantic schemas. Split per domain | `booking.ts`, `container.ts`, `enums.ts` |
 | `src/auth/` | Auth state machine, token storage, JWT decode, session events, role gating | `AuthContext.tsx`, `tokenStorage.ts`, `jwt.ts`, `sessionEvents.ts`, `authApi.ts`, `permissions.ts` |
 | `src/components/` | Cross-cutting components that compose primitives | `AppHeader.tsx` |
 | `src/components/ui/` | Reusable presentational primitives — no network, no storage | `Button.tsx`, `Card.tsx`, `StatusPill.tsx`, `ScreenContainer.tsx` |
 | `src/config/` | Env-derived constants. Single export per concern | `api.ts` (`API_BASE_URL`) |
 | `src/theme/` | Design tokens + theme helpers | `tokens.ts`, `index.ts` |
-| `src/__mocks__/` | Jest manual mocks for native modules that don't run in node | `expo-secure-store.ts` |
+| `src/lib/` | Framework-agnostic pure helpers (no React, no network) | `money.ts`, `idempotency.ts` |
+| `src/forms/` | zod schemas + form→body mappers for non-trivial forms | `customerPaymentSchema.ts` |
+| `src/__mocks__/` | Jest manual mocks for native modules that don't run in node | `expo-secure-store.ts`, `expo-crypto.ts` |
 | _(future)_ `src/hooks/` | Cross-screen hooks that aren't tied to a single domain | — |
 
 Tests sit next to the file under test (`client.test.ts` next to `client.ts`), not in a parallel tree.
@@ -155,7 +157,16 @@ Singular vs plural matters — `['booking', id]` and `['bookings', filters]` are
 
 **Pagination uses `limit`/`offset`, not `page`.** The backend's `PaginationParams` (`app/schemas/pagination.py`) takes `limit` + `offset`; a `page` param is silently ignored. `useBookings`' `buildPath` emits `limit`/`offset` and its test asserts the built path — keep that assertion when touching filters.
 
-**Idempotency-Key is still not plumbed.** Phase 3's mutations (port status, dispute open/ack) are all idempotency-free by design — none produce a unique financial side effect. When the first idempotent mutation lands (supplier/customer payment, BL upload), plumb `Idempotency-Key` through `apiRequest` for that POST. The backend already enforces it.
+**Idempotency-Key is plumbed for financial POSTs (Phase 4).** It rides `apiRequest`'s existing `headers` option — no client change was needed. Phase 3's mutations stay idempotency-free by design (none produce a unique financial side effect). The customer-payment create passes one; future idempotent endpoints (supplier payment, BL upload) follow the same pattern. See the **Idempotency** section below.
+
+**Customer-payment keys + the prefix-invalidation trick.** Two read hooks scope to a container:
+
+```
+['customer-payments', bookingId, containerId]              // tranche list
+['customer-payments', bookingId, containerId, 'aggregate'] // rolled-up totals
+```
+
+The aggregate key is the list key **plus a trailing `'aggregate'`**, so a single `invalidateQueries({ queryKey: ['customer-payments', bookingId, containerId] })` (a prefix match) refetches *both*. `useCreateCustomerPayment` invalidates that prefix **and** `['booking', bookingId]` (a payment recomputes the container `lifecycle_status`, read off the booking-detail response). Keep the key builders (`customerPaymentsQueryKey`, `customerPaymentAggregateQueryKey`) as the single source of these shapes — the query-key test asserts the prefix relationship.
 
 ### Cross-screen data flow
 
@@ -177,11 +188,39 @@ The two enums map to different state-spaces:
 
 The first write path landed in Phase 3 (container port-status + dispute open/acknowledge). The pattern every future mutation copies:
 
-- **Hooks live in `src/api/mutations/`**, one file per endpoint, shaped `useXxx(bookingId, containerId)` returning a TanStack `useMutation`. The `mutationFn` calls `authedApiRequest<T>(path, { method, body })` — same client as queries, so the 401→refresh→retry-once flow comes for free. Never call `apiRequest`/`fetch` directly.
+- **Hooks live in `src/api/mutations/`**, one file per endpoint, shaped `useXxx(bookingId, containerId)` returning a TanStack `useMutation`. The `mutationFn` calls `authedApiRequest<T>(path, { method, body })` — same client as queries, so the 401→refresh→retry-once flow comes for free. Never call `apiRequest`/`fetch` directly. For idempotent financial POSTs, the variables also carry an `idempotencyKey` passed via the `headers` option (see Idempotency).
 - **Invalidate-and-refetch on success.** `onSuccess: () => queryClient.invalidateQueries({ queryKey: bookingQueryKey(bookingId) })`. Container state is read out of the booking-detail response (no standalone container endpoint — see Cross-screen data flow), so refetching the booking re-derives the fresh container. A brief refetch spinner is acceptable for an internal tool.
 - **The screen wires `onSuccess` per call** (`mutation.mutate(body, { onSuccess })`) for toast + navigation — the hook only owns the request + cache invalidation. Disable the submit button on `mutation.isPending`. For errors, render `mutation.error` (inline `<FormError>` in modal forms, or an `onError` toast on a non-modal screen — see Toasts).
 - **Future optimisation (not built):** the dispute open/ack endpoints *return* the updated `ContainerOut`, so those two could switch to optimistic updates (`setQueryData` on mutate + rollback on error) if the refetch flicker proves annoying. Port-status returns only `{ message }`, so it stays refetch-based regardless. Left as a deliberate later improvement to keep the first write path uniform.
 - **Tests** (`src/api/mutations/*.test.ts`) mock `useMutation`/`useQueryClient` + `authedApiRequest` and assert the mutationFn's path/method/body and that `onSuccess` invalidates the right key. No RN renderer (consistent with Testing policy).
+
+### Money (Decimal discipline)
+
+This app handles money; floats silently corrupt it. The rules, enforced from Phase 4 on:
+
+- **Amounts are `string` end-to-end.** Types, form state, and the request body all carry decimal strings (`"1000.50"`) — exactly what the backend's `Decimal` fields (de)serialize as for the create/list (Pydantic) shapes. **Never `parseFloat`/`Number()` a money value for storage or submission.**
+- **The one sanctioned float coercion is `parseRatio` in `src/lib/money.ts`**, and only because a progress-bar width is cosmetic and never round-trips to the server. A reviewer greps for stray `parseFloat` — if you need one elsewhere, you're probably doing it wrong.
+- **Display via `formatMoney(amount, currency)`** (`src/lib/money.ts`): `"£1,000.50"`, `"—"` for null/masked. It groups thousands *lexically* (string split, no float maths) so exact digits survive, and accepts `string | number` — the latter because the payments **aggregate** endpoint is the exception below.
+- **"Is it paid/banked?" comes from the backend, not client math.** Use `container.lifecycle_status === 'banked'` (authoritative — the server recomputes it from banked totals vs `sale_price_total`). Don't compare Decimal sums client-side to decide payment state.
+- **Backend money-serialization gotcha:** model responses (`CustomerPaymentOut`, `ContainerOut`) serialize `Decimal` → JSON **string**. But the customer-payments **aggregate** route returns a *plain dict* (no `response_model`), so FastAPI's `jsonable_encoder` serializes its Decimals → JSON **number**. Hence `CustomerPaymentAggregate` is typed with `number` fields and the money helpers accept `string | number`. Watch for this on any future endpoint that returns a bare dict of Decimals.
+
+### Forms (react-hook-form + zod)
+
+The standard for **non-trivial** forms (Phase 4's record-payment form is the reference). Phase 3's ≤3-field forms (dispute reason, port status) stay hand-rolled with `useState` — the threshold is validation complexity, not dogma.
+
+- **Schema + mapper colocated in `src/forms/`.** A zod object validates the form's **all-string** values (so RHF state is uniform and the defaults are clean), and a `toCreateBody(values)` function maps validated values to the typed request body — trimming, omitting blank optionals, and converting non-money counts (e.g. `tranche_index`) to numbers. Money fields pass through as strings.
+- **`useForm({ resolver: zodResolver(schema), defaultValues, mode: 'onTouched' })`.** Wrap each field (`Input`, `Select`, `DateField`) in a `<Controller>`; surface `fieldState.error?.message` on the field. Disable submit on `mutation.isPending || !formState.isValid`.
+- **Validation mirrors the backend's single-field rules only** — no cross-field validation client-side unless the server has it (the payment endpoint doesn't).
+- **zod gotcha (TS 5.5+):** a `.refine((v) => v === 'a' || v === 'b')` predicate is inferred as a *type guard* and narrows the field's inferred type to the union — which then rejects a `''` default. Use `.refine((v) => ['a','b'].includes(v))` when you want the value to stay `string` (e.g. a Select that starts blank).
+- **Modal errors → `<FormError>`, never a toast** (toasts paint behind modals — see Toasts). Success toast fires right before `router.back()`.
+
+### Idempotency
+
+Financial create endpoints **require** an `Idempotency-Key` header (missing → 400). The backend caches the response 24h, so resubmitting with the same key after a lost response returns the cached result instead of creating a duplicate.
+
+- **Generate one key per form mount**, not per tap: `const [idempotencyKey] = useState(() => newIdempotencyKey());` (`src/lib/idempotency.ts`, backed by `expo-crypto`'s synchronous `randomUUID()` — *not* the non-existent browser `crypto.randomUUID`). Reuse it for every submit of that form session; a fresh open = a fresh key. This is what makes a lost-response retry safe.
+- **Pass it via `authedApiRequest`'s `headers` option** in the mutationFn: `{ method: 'POST', body, headers: { 'Idempotency-Key': key } }`. The mutation hook takes the key as a variable (`{ body, idempotencyKey }`) so the screen owns its lifecycle. The mutation test asserts the header is present.
+- Applies to: customer payments (Phase 4). Future: supplier payments, BL upload. GETs and idempotent-by-nature writes don't need it.
 
 ### Toasts
 
@@ -193,11 +232,11 @@ The first write path landed in Phase 3 (container port-status + dispute open/ack
 
 ### Permissions (cosmetic role gating)
 
-`src/auth/permissions.ts` holds pure role-check functions (`canManageDisputes`, `canUpdatePortStatus`) used to decide which action buttons a screen *shows*. **This is cosmetic only.** The server is the real gate — dispute endpoints are `require_admin` and 403 non-admins regardless of what the UI rendered. Never treat a hidden button as a security boundary. Helpers are null-safe: undefined role denies (restrictive default). Role comes from `useAuth().user?.role`, itself a UI hint decoded from the JWT.
+`src/auth/permissions.ts` holds pure role-check functions (`canManageDisputes`, `canUpdatePortStatus`, `canManageCustomerPayments`) used to decide which action buttons a screen *shows*. **This is cosmetic only.** The server is the real gate — dispute endpoints are `require_admin` and 403 non-admins regardless of what the UI rendered. Never treat a hidden button as a security boundary. Helpers are null-safe: undefined role denies (restrictive default). Role comes from `useAuth().user?.role`, itself a UI hint decoded from the JWT.
 
 ### Modal form routes
 
-Form screens use Expo Router **modal presentation**, declared in the route's nearest layout (`app/(authed)/_layout.tsx` registers the two container form routes with `options={{ presentation: 'modal' }}`). Declare presentation in the layout, not via an in-component `<Stack.Screen>` — `presentation` is fixed when the screen mounts. The form reads `id`/`cid` via `useLocalSearchParams`, pre-fills from the relevant query (`useContainer`), submits through a mutation hook, `router.back()`s on success (toast lands on the screen behind), and shows `<FormError>` inline on failure (toasts don't paint over modals — see Toasts). Reuse this pattern for future create/edit forms.
+Form screens use Expo Router **modal presentation**, declared in the route's nearest layout (`app/(authed)/_layout.tsx` registers the three container form routes — port-status, dispute, record-payment — with `options={{ presentation: 'modal' }}`). Declare presentation in the layout, not via an in-component `<Stack.Screen>` — `presentation` is fixed when the screen mounts. The form reads `id`/`cid` via `useLocalSearchParams`, pre-fills from the relevant query (`useContainer`), submits through a mutation hook, `router.back()`s on success (toast lands on the screen behind), and shows `<FormError>` inline on failure (toasts don't paint over modals — see Toasts). Reuse this pattern for future create/edit forms. Admin-only forms still render a "not permitted" body for a deep-linked non-admin (defense-in-depth; the server is the real gate).
 
 ---
 
@@ -255,6 +294,10 @@ Bump when a matching Expo Go ships: `npx expo install expo@latest --fix`, then u
 | Calling `apiRequest`/`fetch` from a screen for a write | Use a mutation hook in `src/api/mutations/` via `useMutation` + `authedApiRequest`; invalidate the parent `['booking', id]` on success |
 | Hiding an admin button and assuming the action is now safe | Role gating (`src/auth/permissions.ts`) is cosmetic — the server 403s. Handle the error toast, don't rely on the hidden button |
 | `Alert.alert` / a second snackbar for routine success/error | Use `useToast().showToast(msg, tone)` — the single feedback channel. `Alert.alert` is for confirmations only |
+| `parseFloat`/`Number()` on a money value, or storing it as a number | Money is `string` end-to-end (see Money). The only sanctioned coercion is `parseRatio` for the cosmetic progress bar |
+| Deciding "is it banked/paid?" by summing Decimals client-side | Read `container.lifecycle_status === 'banked'` — the backend recomputes it authoritatively |
+| Generating an `Idempotency-Key` per submit/tap, or via browser `crypto.randomUUID` | One key per form mount (`useState(() => newIdempotencyKey())`); `newIdempotencyKey` uses `expo-crypto` |
+| Hand-rolling a complex form with `useState` | react-hook-form + zod schema in `src/forms/` (see Forms). Hand-rolled is fine only for ≤3 simple fields |
 
 ---
 
@@ -304,8 +347,9 @@ Tracked here so they don't rot inside prose elsewhere.
 1. **`/me` endpoint.** When the backend grows it, swap `decodeUserFromToken` for a real fetch and extend `User` with `name` + `email`. Cold-start path becomes a real `/me` call at that point too.
 2. **`/containers/{id}` endpoint.** Container detail currently walks the parent booking from cache (see Cross-screen data flow). When the backend grows a dedicated endpoint, replace `useContainer`'s body with a direct fetch and drop `findContainerInBooking`.
 3. **UI tests.** Add `@testing-library/react-native` + a couple of smoke tests once there are screens worth covering.
-4. **Mutation tooling.** Form library + toast/snackbar + `Idempotency-Key` plumbing land with the first mutation in Phase 3.
+4. **Mutation tooling.** ✅ Landed: toast/snackbar (Phase 3); react-hook-form + zod form library and `Idempotency-Key` plumbing (Phase 4). See Forms / Idempotency / Money.
 5. **EAS Build profile.** Not configured yet — first production build will need `eas.json` + credentials.
+6. **Payments masking UX.** Non-admins get null amounts back; the section shows a single "Amounts hidden for your role" hint. Revisit if a richer masked view is wanted.
 
 ---
 
