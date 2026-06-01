@@ -857,6 +857,24 @@ class DocumentOut(UUIDModel):
     mime_type: str
     file_size_bytes: int | None = None
     download_url: str  # pre-signed GET URL, generated on request
+    uploaded_by: uuid.UUID
+    uploaded_at: datetime
+
+
+class DocumentListItem(UUIDModel):
+    """List-view item — deliberately omits ``download_url``.
+
+    A list call returns N rows; minting a presigned GET URL per row would be N
+    round-trips to storage for URLs most of which are never clicked. Clients
+    call ``GET /documents/{id}/download-url`` on tap instead.
+    """
+
+    entity_type: str
+    entity_id: uuid.UUID
+    file_name: str
+    mime_type: str
+    file_size_bytes: int | None = None
+    uploaded_by: uuid.UUID
     uploaded_at: datetime
 
 
