@@ -248,6 +248,7 @@ This app handles money; floats silently corrupt it. The rules, enforced from Pha
 - **Amounts are `string` end-to-end.** Types, form state, and the request body all carry decimal strings (`"1000.50"`) — exactly what the backend's `Decimal` fields (de)serialize as for the create/list (Pydantic) shapes. **Never `parseFloat`/`Number()` a money value for storage or submission.**
 - **The one sanctioned float coercion is `parseRatio` in `src/lib/money.ts`**, and only because a progress-bar width is cosmetic and never round-trips to the server. A reviewer greps for stray `parseFloat` — if you need one elsewhere, you're probably doing it wrong.
 - **Display via `formatMoney(amount, currency)`** (`src/lib/money.ts`): `"£1,000.50"`, `"—"` for null/masked. It groups thousands *lexically* (string split, no float maths) so exact digits survive, and accepts `string | number` — the latter because the payments **aggregate** endpoint is the exception below.
+- **Total money client-side with `sumDecimalStrings(values)`** (`src/lib/money.ts`), never a `parseFloat` reduce. It sums in integer **cents** (lexical split of each decimal string), skips null/empty entries (masked/absent amounts), and returns a 2-dp decimal string — so `["0.10","0.20"] → "0.30"`, never `0.30000000000000004`. This is the canonical way to roll up a list of amounts (e.g. the supplier-payments per-invoice "Paid X / Y"). The progress-bar ratio still goes through `parseRatio` (the one cosmetic float).
 - **"Is it paid/banked?" comes from the backend, not client math.** Use `container.lifecycle_status === 'banked'` (authoritative — the server recomputes it from banked totals vs `sale_price_total`). Don't compare Decimal sums client-side to decide payment state.
 - **Backend money-serialization gotcha:** model responses (`CustomerPaymentOut`, `ContainerOut`) serialize `Decimal` → JSON **string**. But the customer-payments **aggregate** route returns a *plain dict* (no `response_model`), so FastAPI's `jsonable_encoder` serializes its Decimals → JSON **number**. Hence `CustomerPaymentAggregate` is typed with `number` fields and the money helpers accept `string | number`. Watch for this on any future endpoint that returns a bare dict of Decimals.
 
@@ -267,7 +268,19 @@ Financial create endpoints **require** an `Idempotency-Key` header (missing → 
 
 - **Generate one key per form mount**, not per tap: `const [idempotencyKey] = useState(() => newIdempotencyKey());` (`src/lib/idempotency.ts`, backed by `expo-crypto`'s synchronous `randomUUID()` — *not* the non-existent browser `crypto.randomUUID`). Reuse it for every submit of that form session; a fresh open = a fresh key. This is what makes a lost-response retry safe.
 - **Pass it via `authedApiRequest`'s `headers` option** in the mutationFn: `{ method: 'POST', body, headers: { 'Idempotency-Key': key } }`. The mutation hook takes the key as a variable (`{ body, idempotencyKey }`) so the screen owns its lifecycle. The mutation test asserts the header is present.
-- Applies to: customer payments (Phase 4). Future: supplier payments, BL upload. GETs and idempotent-by-nature writes don't need it.
+- Applies to: customer payments (Phase 4), supplier payments (Phase 7). Future: BL upload. GETs and idempotent-by-nature writes don't need it.
+
+### Supplier payments (admin-only, invoice-scoped)
+
+Phase 7's mirror of customer payments — money **OUT** (outbound USD wires to the supplier) instead of in. The deltas from the customer-payment pattern:
+
+- **Invoice-scoped, not container-scoped.** `POST`/`GET /api/v1/invoices/{invoiceId}/supplier-payments`. The UI hangs off each PO's `invoice` block on the booking detail screen (`SupplierPaymentsSection`), not the container screen. Read hook `useSupplierPayments(invoiceId, { enabled })`, key `['supplier-payments', invoiceId]`; create hook `useCreateSupplierPayment(invoiceId, bookingId)`.
+- **Admin-only on BOTH create and list** (`require_admin`). Unlike customer payments — which let non-admin members *read* masked amounts — non-admins get a **403 even on the list**. So: the whole section renders only when `user.role === 'admin'`, **and** the list query is gated with `enabled: isAdmin` so a non-admin never fires the doomed request. There is **no** masked-read UI here by design.
+- **Status is server-set to `confirmed`** on creation — the client never sends a status and there is **no separate confirm action/endpoint**. One POST is final (contrast the dispute open/ack two-step).
+- **Currency is fixed to `"USD"`** — a static label in the form, not an editable field; `toCreateBody` hard-codes it.
+- **Auto-advance side effect.** Recording payments whose cumulative total clears the invoices auto-advances the booking `INVOICE_RECEIVED → PAYMENT_CONFIRMED` server-side and notifies. The mobile app does nothing for this beyond invalidating `['booking', bookingId]` in the create mutation's `onSuccess` (alongside the `['supplier-payments', invoiceId]` list) so the lifecycle pill reflects it.
+- **Per-invoice progress** = `sumDecimalStrings(payments.map(p => p.amount))` vs the invoice `value` ("Paid X / Y" + `ProgressBar`). No booking-level rollup — the lifecycle pill conveys booking state.
+- The `SupplierPaymentOut` shape is identical to the `SupplierPayment` already embedded in `BookingDetailOut.payments`; `src/api/types/supplierPayment.ts` re-exports that type and adds only `SupplierPaymentCreate`. (Phase 7 also removed the old booking-level "Supplier payments" list section, which had been showing masked rows to non-admins — replaced by this admin-only per-invoice section.)
 
 ### Toasts
 

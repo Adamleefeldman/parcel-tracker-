@@ -1,5 +1,9 @@
 import type { UserRole } from '../api/types/enums';
-import { canManageDisputes, canUpdatePortStatus } from './permissions';
+import {
+  canManageDisputes,
+  canManageSupplierPayments,
+  canUpdatePortStatus,
+} from './permissions';
 
 const ALL_ROLES: UserRole[] = ['admin', 'morocco_agent', 'uk_agent', 'customer'];
 
@@ -26,5 +30,18 @@ describe('canUpdatePortStatus', () => {
 
   it('denies an undefined role (restrictive default)', () => {
     expect(canUpdatePortStatus(undefined)).toBe(false);
+  });
+});
+
+describe('canManageSupplierPayments', () => {
+  it('allows only admin', () => {
+    expect(canManageSupplierPayments('admin')).toBe(true);
+    for (const role of ALL_ROLES.filter((r) => r !== 'admin')) {
+      expect(canManageSupplierPayments(role)).toBe(false);
+    }
+  });
+
+  it('denies an undefined role (restrictive default)', () => {
+    expect(canManageSupplierPayments(undefined)).toBe(false);
   });
 });

@@ -55,6 +55,14 @@ export type PortStatus =
 export type CustomerPaymentMethod = 'cash' | 'transfer';
 
 /**
+ * Outbound supplier payment kind (`SupplierPaymentType` in `app/core/enums.py`).
+ * The backend does NOT validate `SupplierPaymentCreate.payment_type` against
+ * this set — it stores whatever string it's sent — so the client must only ever
+ * send one of these. The record-supplier-payment form's Select enforces it.
+ */
+export type SupplierPaymentType = 'full' | 'partial' | 'deposit';
+
+/**
  * Entity a document attaches to (`DocumentEntityType` in `app/core/enums.py`).
  * A document is scoped to one sub-entity of a booking by `(entity_type,
  * entity_id)`. `DOCUMENT_ENTITY_LABELS` maps each member exhaustively (the

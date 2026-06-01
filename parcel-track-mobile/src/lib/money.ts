@@ -54,6 +54,37 @@ export function formatMoney(
 }
 
 /**
+ * Sum a list of decimal-string money values exactly, returning a decimal
+ * string with two fractional digits (e.g. `["0.10", "0.20"]` → `"0.30"`,
+ * never `0.30000000000000004`). Null/undefined/empty entries are skipped, so
+ * masked or absent amounts don't break the total. An empty (or all-null) list
+ * sums to `"0.00"`.
+ *
+ * The maths is done in integer **cents** — the values are split lexically into
+ * integer + fractional parts (no `parseFloat`), so no float rounding ever
+ * touches a money value. This is the canonical way to total money client-side
+ * (see AGENTS.md → Money); never `reduce` with `parseFloat`. Values up to ~90
+ * trillion sum safely (well within `Number.MAX_SAFE_INTEGER` cents); anything
+ * not matching a plain decimal shape is skipped defensively.
+ */
+export function sumDecimalStrings(values: (string | null | undefined)[]): string {
+  let cents = 0;
+  for (const value of values) {
+    if (value === null || value === undefined || value === '') continue;
+    const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
+    if (!match) continue; // not a clean decimal — skip defensively
+    const [, sign, intPart, fracRaw = ''] = match;
+    const valueCents = Number(intPart) * 100 + Number((fracRaw + '00').slice(0, 2));
+    cents += sign === '-' ? -valueCents : valueCents;
+  }
+  const sign = cents < 0 ? '-' : '';
+  const abs = Math.abs(cents);
+  const intPart = Math.floor(abs / 100);
+  const frac = String(abs % 100).padStart(2, '0');
+  return `${sign}${intPart}.${frac}`;
+}
+
+/**
  * Cosmetic ratio for the banked-progress bar. Returns a clamped 0..1 fraction,
  * or null when the denominator is missing/zero (caller hides the bar). This is
  * the one sanctioned float coercion of a money value — the output drives a bar

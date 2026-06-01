@@ -33,3 +33,12 @@ export const canUpdatePortStatus = (role?: UserRole): boolean =>
  * masked server-side) — this gate only governs the "Record payment" action.
  */
 export const canManageCustomerPayments = (role?: UserRole): boolean => role === 'admin';
+
+/**
+ * Admin-only: record outbound supplier payments AND view the list. The
+ * backend's create *and* list endpoints are both `require_admin` (non-admins
+ * 403 even on read — unlike customer payments, which allow masked reads). The
+ * supplier-payments UI uses this both to render the whole section and to gate
+ * the list query's `enabled`, so non-admins never fire a doomed 403 request.
+ */
+export const canManageSupplierPayments = (role?: UserRole): boolean => role === 'admin';
