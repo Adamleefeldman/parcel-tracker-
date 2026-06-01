@@ -1,6 +1,6 @@
 # AGENTS.md — parcel-track-mobile
 
-_Last reviewed: 2026-05-31. The Expo SDK pin and any "current state" notes below go stale fast — update this date whenever you touch them._
+_Last reviewed: 2026-06-01. The Expo SDK pin and any "current state" notes below go stale fast — update this date whenever you touch them._
 
 The companion backend doc is [`../parcel-track/CLAUDE.md`](../parcel-track/CLAUDE.md). Read it before doing anything that crosses the API boundary (auth shape, status enums, endpoint paths under `/api/v1`, error envelope).
 
@@ -87,10 +87,11 @@ Bundle / package: `com.thefmcghub.logistics` (permanent — do not change).
 | `app/` | Expo Router routes. Route groups `(auth)` (anon-only) + `(authed)` (signed-in); the signed-in area is the bottom-tab group `(authed)/(tabs)` (Dashboard / Bookings / Alerts). Each folder has a `_layout.tsx` for its guard/navigator | `app/(authed)/(tabs)/bookings/[id]/index.tsx` |
 | `src/api/` | HTTP client + typed endpoint wrappers + React-hook-shaped queries | `client.ts`, `authedClient.ts`, `queries/useBookings.ts`, `queries/useBooking.ts` |
 | `src/api/queries/` | TanStack Query read hooks | `useBookings.ts`, `useBooking.ts`, `useContainer.ts` |
-| `src/api/mutations/` | TanStack Query write hooks (invalidate-and-refetch) | `useUpdatePortStatus.ts`, `useOpenDispute.ts`, `useCreateCustomerPayment.ts` |
+| `src/api/mutations/` | TanStack Query write hooks (invalidate-and-refetch) | `useUpdatePortStatus.ts`, `useOpenDispute.ts`, `useCreateCustomerPayment.ts`, `useUploadDocument.ts` |
+| `src/api/documents/` | Imperative (non-cached) document helpers | `getDownloadUrl.ts` |
 | `src/api/types/` | Hand-typed TS mirrors of backend Pydantic schemas. Split per domain | `booking.ts`, `container.ts`, `enums.ts` |
 | `src/auth/` | Auth state machine, token storage, JWT decode, session events, role gating | `AuthContext.tsx`, `tokenStorage.ts`, `jwt.ts`, `sessionEvents.ts`, `authApi.ts`, `permissions.ts` |
-| `src/components/` | Cross-cutting components that compose primitives | `AppHeader.tsx` |
+| `src/components/` | Cross-cutting components that compose primitives | `AppHeader.tsx`, `documents/DocumentsList.tsx` |
 | `src/components/ui/` | Reusable presentational primitives — no network, no storage | `Button.tsx`, `Card.tsx`, `StatusPill.tsx`, `ScreenContainer.tsx` |
 | `src/config/` | Env-derived constants. Single export per concern | `api.ts` (`API_BASE_URL`) |
 | `src/theme/` | Design tokens + theme helpers | `tokens.ts`, `index.ts` |
@@ -282,7 +283,27 @@ Financial create endpoints **require** an `Idempotency-Key` header (missing → 
 
 ### Modal form routes
 
-Form screens use Expo Router **modal presentation**, declared in the route's nearest layout (`app/(authed)/(tabs)/bookings/_layout.tsx` registers the three container form routes — port-status, dispute, record-payment — with `options={{ presentation: 'modal' }}`; names are relative to that layout, e.g. `[id]/containers/[cid]/port-status`). Declare presentation in the layout, not via an in-component `<Stack.Screen>` — `presentation` is fixed when the screen mounts. The form reads `id`/`cid` via `useLocalSearchParams`, pre-fills from the relevant query (`useContainer`), submits through a mutation hook, `router.back()`s on success (toast lands on the screen behind), and shows `<FormError>` inline on failure (toasts don't paint over modals — see Toasts). Reuse this pattern for future create/edit forms. Admin-only forms still render a "not permitted" body for a deep-linked non-admin (defense-in-depth; the server is the real gate).
+Form screens use Expo Router **modal presentation**, declared in the route's nearest layout (`app/(authed)/(tabs)/bookings/_layout.tsx` registers the container form routes — port-status, dispute, record-payment — plus `[id]/add-document` with `options={{ presentation: 'modal' }}`; names are relative to that layout, e.g. `[id]/containers/[cid]/port-status`). Declare presentation in the layout, not via an in-component `<Stack.Screen>` — `presentation` is fixed when the screen mounts. The form reads `id`/`cid` via `useLocalSearchParams`, pre-fills from the relevant query (`useContainer`), submits through a mutation hook, `router.back()`s on success (toast lands on the screen behind), and shows `<FormError>` inline on failure (toasts don't paint over modals — see Toasts). Reuse this pattern for future create/edit forms. Admin-only forms still render a "not permitted" body for a deep-linked non-admin (defense-in-depth; the server is the real gate).
+
+### File uploads (documents)
+
+Documents (PO/invoice/BL/clearing/delivery-schedule/payment attachments) upload via a **presigned-URL flow** — the client never streams bytes through our API. Three steps, all in `useUploadDocument`'s `mutationFn` (`src/api/mutations/useUploadDocument.ts`):
+
+1. **Presign** — `POST /api/v1/documents/upload-url` (body: `entity_type`, `entity_id`, `file_name`, `mime_type`, `file_size_bytes?`) → `{ upload_url, file_key, expires_in_seconds }`.
+2. **PUT** — `putFile` (`src/lib/upload.ts`) PUTs the raw bytes straight to `upload_url`. It's the only module that touches native file I/O — it uses **`expo-file-system/legacy`'s `createUploadTask`** (`FileSystemUploadType.BINARY_CONTENT`), because SDK 54's new `File`/`Directory` API has no binary-PUT-with-progress equivalent.
+3. **Confirm** — `POST /api/v1/documents/confirm?entity_type=…&entity_id=…` → `DocumentOut`.
+
+Hard rules (the server enforces them too; the client mirrors for UX):
+
+- **`Content-Type` MUST equal the presigned `mime_type` exactly** — it's baked into the R2 signature, so a mismatch makes R2 reject the PUT. Thread one `mime_type` string presign → PUT → confirm. This is the #1 failure cause.
+- **`entity_type`/`entity_id` ride the QUERY STRING on confirm**, never the body. The confirm body is only `file_key`/`file_name`/`mime_type`/`file_size_bytes`.
+- **NO `Idempotency-Key`** on any document endpoint — unlike the financial create endpoints (`src/lib/idempotency.ts` is *not* used here). Don't add one.
+- **Limits mirror the backend** (`src/lib/files.ts`): 50 MB cap, MIME allowlist (`application/pdf`, `image/jpeg`, `image/png`, `image/webp`, xlsx, `application/vnd.ms-excel`). `validateFile` blocks bad picks client-side before a wasted presign; the server re-checks the object it HEADs in R2 (the source of truth) and 400s/413s regardless.
+- **Auth is booking-scoped server-side** — any member of the parent booking can upload/list/view; a non-member gets 403. The client surfaces that gracefully (toast / `<FormError>`); it is not a client gate.
+
+Viewing: `getDownloadUrl(id)` (`src/api/documents/getDownloadUrl.ts`) mints a fresh presigned GET URL on tap (NOT cached — short-lived), opened in the system browser via **lazily-imported `expo-web-browser`**. There's no in-app PDF renderer and no delete endpoint (create + view only).
+
+UI: one reusable **`<DocumentsList entityType entityId label>`** (`src/components/documents/DocumentsList.tsx`) is wired into every sub-entity section on the booking + container detail screens (collapsible "Documents (N)" + Add). It reads the booking `id` from the route (`/bookings/[id]/…`) for navigation, so callers pass only the entity-scoping props. The add-document modal (`app/(authed)/(tabs)/bookings/[id]/add-document.tsx`) **lazily imports `expo-document-picker`/`expo-image-picker` in the pick handlers** (bundle hygiene); the image picker may omit name/mime, so it derives a filename + defaults to `image/jpeg`.
 
 ---
 
@@ -344,6 +365,10 @@ Bump when a matching Expo Go ships: `npx expo install expo@latest --fix`, then u
 | Deciding "is it banked/paid?" by summing Decimals client-side | Read `container.lifecycle_status === 'banked'` — the backend recomputes it authoritatively |
 | Generating an `Idempotency-Key` per submit/tap, or via browser `crypto.randomUUID` | One key per form mount (`useState(() => newIdempotencyKey())`); `newIdempotencyKey` uses `expo-crypto` |
 | Hand-rolling a complex form with `useState` | react-hook-form + zod schema in `src/forms/` (see Forms). Hand-rolled is fine only for ≤3 simple fields |
+| Uploading a document with a `Content-Type` that differs from the presigned `mime_type` | Thread one `mime_type` string presign → PUT → confirm; R2 signs the type, so a mismatch is rejected (see File uploads) |
+| Putting `entity_type`/`entity_id` in the confirm **body**, or adding an `Idempotency-Key` to a document endpoint | Confirm takes them as **query params**; document endpoints take **no** Idempotency-Key (unlike payments) |
+| Importing `expo-document-picker`/`expo-image-picker`/`expo-web-browser` at module top-level | Lazy-`import()` them inside the handler that uses them (bundle hygiene — see File uploads) |
+| Reaching for the new `expo-file-system` `File`/`Directory` API for an upload | Use `expo-file-system/legacy`'s `createUploadTask` — the new API has no binary-PUT-with-progress (see `src/lib/upload.ts`) |
 
 ---
 

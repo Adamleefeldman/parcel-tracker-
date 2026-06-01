@@ -27,7 +27,15 @@
     "plugins": [
       "expo-secure-store",
       "expo-router",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FMCG Hub accesses your photos so you can attach documents to a booking.",
+          "cameraPermission": "FMCG Hub uses the camera so you can photograph documents to attach to a booking."
+        }
+      ]
     ]
   }
 }
