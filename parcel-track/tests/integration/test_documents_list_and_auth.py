@@ -65,9 +65,7 @@ async def _insert_docs(entity_type: DocumentEntityType, entity_id: str, uploaded
 
 
 class TestDocumentList:
-    async def test_returns_entity_docs_newest_first(
-        self, client: AsyncClient, admin_token: str
-    ):
+    async def test_returns_entity_docs_newest_first(self, client: AsyncClient, admin_token: str):
         h = _auth(admin_token)
         bid, _ = await advance_to(client, h, "bl_issued", ref="DOC-LIST-ORDER")
         bl = (await client.get(f"/api/v1/bookings/{bid}/bl", headers=h)).json()
@@ -220,9 +218,7 @@ async def _assert_gating(
     ).status_code == 403
 
     # 3. confirm — non-member blocked before any write; member creates a doc.
-    assert (
-        await _confirm_doc(client, nonmember_h, entity_type, entity_id)
-    ).status_code == 403
+    assert (await _confirm_doc(client, nonmember_h, entity_type, entity_id)).status_code == 403
     confirmed = await _confirm_doc(client, member_h, entity_type, entity_id)
     assert confirmed.status_code == 200, confirmed.json()
     doc_id = confirmed.json()["id"]
