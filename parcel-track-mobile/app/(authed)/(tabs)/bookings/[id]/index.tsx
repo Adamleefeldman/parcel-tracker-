@@ -4,6 +4,7 @@ import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ApiError } from '@/src/api/client';
 import { useBooking } from '@/src/api/queries/useBooking';
+import { useSupplierPayments } from '@/src/api/queries/useSupplierPayments';
 import type {
   BillOfLading,
   BookingDetail,
@@ -11,20 +12,24 @@ import type {
   DeliveryPoint,
   PurchaseOrder,
   ShipmentLeg,
-  SupplierPayment,
 } from '@/src/api/types/booking';
 import type { Container } from '@/src/api/types/container';
+import type { UserRole } from '@/src/api/types/enums';
+import { useAuth } from '@/src/auth/AuthContext';
+import { canManageSupplierPayments } from '@/src/auth/permissions';
 import { AppHeader } from '@/src/components/AppHeader';
 import { DocumentsList } from '@/src/components/documents/DocumentsList';
 import {
   Button,
   Card,
   ListItem,
+  ProgressBar,
   ScreenContainer,
   Spinner,
   StatusPill,
   Text,
 } from '@/src/components/ui';
+import { formatMoney, parseRatio, sumDecimalStrings } from '@/src/lib/money';
 import { spacing } from '@/src/theme/tokens';
 
 export default function BookingDetailScreen() {
@@ -73,8 +78,7 @@ function Body({
       <VesselAndBL bl={booking.bill_of_lading} />
       <ContainersSection bl={booking.bill_of_lading} onContainerPress={onContainerPress} />
       <LegsSection legs={booking.legs} />
-      <POsSection pos={booking.purchase_orders} />
-      <PaymentsSection payments={booking.payments} />
+      <POsSection pos={booking.purchase_orders} bookingId={booking.id} />
       <ClearingDocsSection docs={booking.clearing_docs} />
       <DeliverySection points={booking.delivery_points} />
     </ScrollView>
@@ -243,7 +247,7 @@ function LegsSection({ legs }: { legs: ShipmentLeg[] }) {
   );
 }
 
-function POsSection({ pos }: { pos: PurchaseOrder[] }) {
+function POsSection({ pos, bookingId }: { pos: PurchaseOrder[]; bookingId: string }) {
   if (pos.length === 0) return null;
   return (
     <Section title={`Purchase orders (${pos.length})`}>
@@ -272,14 +276,20 @@ function POsSection({ pos }: { pos: PurchaseOrder[] }) {
             entityId={po.id}
             label={`PO ${po.po_number}`}
           />
-          {po.invoice ? <InvoiceBlock invoice={po.invoice} /> : null}
+          {po.invoice ? <InvoiceBlock invoice={po.invoice} bookingId={bookingId} /> : null}
         </View>
       ))}
     </Section>
   );
 }
 
-function InvoiceBlock({ invoice }: { invoice: NonNullable<PurchaseOrder['invoice']> }) {
+function InvoiceBlock({
+  invoice,
+  bookingId,
+}: {
+  invoice: NonNullable<PurchaseOrder['invoice']>;
+  bookingId: string;
+}) {
   return (
     <View style={styles.invoiceBlock}>
       <View style={styles.poHeaderRow}>
@@ -305,37 +315,110 @@ function InvoiceBlock({ invoice }: { invoice: NonNullable<PurchaseOrder['invoice
         entityId={invoice.id}
         label={`Invoice ${invoice.invoice_number}`}
       />
+      <SupplierPaymentsSection
+        invoiceId={invoice.id}
+        invoiceValue={invoice.value}
+        currency={invoice.currency}
+        bookingId={bookingId}
+      />
     </View>
   );
 }
 
-function PaymentsSection({ payments }: { payments: SupplierPayment[] }) {
-  if (payments.length === 0) return null;
+/**
+ * Supplier payments for one invoice — money OUT (outbound USD wires). Entirely
+ * **admin-only**: the create AND list endpoints are `require_admin`, so a
+ * non-admin sees nothing here and the list query is gated with
+ * `enabled: isAdmin` so it never fires a doomed 403. There is deliberately no
+ * masked read for non-admins (unlike customer payments).
+ *
+ * Per-invoice progress only: "Paid X of Y" sums this invoice's confirmed
+ * payments (Decimal-safe `sumDecimalStrings`, never a float reduce) against the
+ * invoice `value`. The booking lifecycle pill conveys the booking-level state —
+ * recording enough to clear the invoices auto-advances it to `payment_confirmed`
+ * server-side, surfaced by the booking invalidation in the create mutation.
+ */
+function SupplierPaymentsSection({
+  invoiceId,
+  invoiceValue,
+  currency,
+  bookingId,
+}: {
+  invoiceId: string;
+  invoiceValue: string | null;
+  currency: string;
+  bookingId: string;
+}) {
+  const router = useRouter();
+  const { user } = useAuth();
+  const isAdmin = canManageSupplierPayments(user?.role as UserRole | undefined);
+
+  const { data, isLoading, isError } = useSupplierPayments(invoiceId, { enabled: isAdmin });
+
+  if (!isAdmin) return null;
+
+  const payments = data?.items ?? [];
+  const totalPaid = sumDecimalStrings(payments.map((p) => p.amount));
+  const ratio = parseRatio(totalPaid, invoiceValue);
+
   return (
-    <Section title={`Supplier payments (${payments.length})`}>
-      {payments.map((p, i) => (
-        <View
-          key={p.id}
-          style={[styles.paymentBlock, i < payments.length - 1 && styles.dividerBottom]}
-        >
-          <View style={styles.poHeaderRow}>
-            <Text variant="body">
-              {p.amount ? `${p.currency} ${p.amount}` : `${p.currency} —`}
+    <View style={styles.supplierPaymentsBlock}>
+      <Text variant="small" muted>
+        Supplier payments
+      </Text>
+
+      {isError ? (
+        <Text variant="body" muted>
+          Couldn&apos;t load payments.
+        </Text>
+      ) : (
+        <>
+          <Text variant="body">
+            Paid {formatMoney(totalPaid, currency)}
+            {invoiceValue ? ` of ${formatMoney(invoiceValue, currency)}` : ''}
+          </Text>
+          {ratio !== null ? <ProgressBar progress={ratio} /> : null}
+
+          {payments.length > 0 ? (
+            <View style={styles.supplierPaymentList}>
+              {payments.map((p) => (
+                <View key={p.id} style={styles.supplierPaymentItem}>
+                  <View style={styles.poHeaderRow}>
+                    <Text variant="body">{formatMoney(p.amount, p.currency)}</Text>
+                    <Text variant="small" muted>
+                      {capitalize(p.payment_type)}
+                    </Text>
+                  </View>
+                  <Text variant="small" muted>
+                    {formatDate(p.payment_date)}
+                    {p.swift_ref ? ` · ${p.swift_ref}` : ''}
+                  </Text>
+                  <DocumentsList entityType="payment" entityId={p.id} label="Supplier payment" />
+                </View>
+              ))}
+            </View>
+          ) : !isLoading ? (
+            <Text variant="body" muted>
+              No payments recorded.
             </Text>
-            <Text variant="small" muted>
-              {p.status}
-            </Text>
-          </View>
-          <Grid>
-            <KV label="Payment date" value={formatDate(p.payment_date)} />
-            <KV label="Type" value={p.payment_type} />
-            <KV label="SWIFT ref" value={fmt(p.swift_ref)} />
-          </Grid>
-          <DocumentsList entityType="payment" entityId={p.id} label="Supplier payment" />
-        </View>
-      ))}
-    </Section>
+          ) : null}
+        </>
+      )}
+
+      <Button
+        title="Record payment"
+        variant="secondary"
+        onPress={() =>
+          router.push(`/bookings/${bookingId}/invoices/${invoiceId}/record-supplier-payment`)
+        }
+        style={styles.recordButton}
+      />
+    </View>
   );
+}
+
+function capitalize(s: string): string {
+  return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
 }
 
 function ClearingDocsSection({ docs }: { docs: ClearingDocs | null }) {
@@ -608,9 +691,21 @@ const styles = StyleSheet.create({
     borderTopColor: '#ddd',
     gap: spacing.sm,
   },
-  paymentBlock: {
-    paddingVertical: spacing.sm,
+  supplierPaymentsBlock: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#ddd',
     gap: spacing.sm,
+  },
+  supplierPaymentList: {
+    gap: spacing.sm,
+  },
+  supplierPaymentItem: {
+    gap: spacing.xs,
+  },
+  recordButton: {
+    marginTop: spacing.xs,
   },
   deliveryBlock: {
     paddingVertical: spacing.sm,
