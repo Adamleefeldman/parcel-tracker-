@@ -71,7 +71,7 @@ async def get_upload_url(
 
 @doc_router.post("/confirm", response_model=DocumentOut)
 async def confirm_upload(
-    entity_type: str,
+    entity_type: DocumentEntityType,
     entity_id: uuid.UUID,
     body: ConfirmUploadRequest,
     db: AsyncSession = Depends(get_db),
@@ -100,7 +100,7 @@ async def confirm_upload(
 
     doc = Document(
         uploaded_by=actor.id,
-        entity_type=DocumentEntityType(entity_type),
+        entity_type=entity_type,
         entity_id=entity_id,
         file_key=body.file_key,
         file_name=body.file_name,

@@ -159,6 +159,18 @@ class TestDocumentList:
         assert r.status_code == 403, r.json()
 
 
+# ── confirm entity_type validation ────────────────────────────────────────────
+
+
+class TestConfirmEntityTypeValidation:
+    async def test_invalid_entity_type_422(self, client: AsyncClient, admin_token: str):
+        h = _auth(admin_token)
+        # entity_type is a DocumentEntityType enum query param — a bad value is
+        # rejected at the FastAPI boundary with 422, before any service call.
+        r = await _confirm_doc(client, h, "booking", str(uuid.uuid4()))
+        assert r.status_code == 422, r.json()
+
+
 # ── uploaded_by exposure ──────────────────────────────────────────────────────
 
 
