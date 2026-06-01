@@ -7,6 +7,7 @@ import { getDownloadUrl } from '../../api/documents/getDownloadUrl';
 import { useDocuments } from '../../api/queries/useDocuments';
 import type { DocumentEntityType } from '../../api/types/enums';
 import type { DocumentListItem } from '../../api/types/document';
+import { formatDate } from '../../lib/date';
 import { formatBytes } from '../../lib/files';
 import { colors, radii, spacing } from '../../theme/tokens';
 import { Spinner, Text, useToast } from '../ui';
@@ -105,6 +106,11 @@ export function DocumentsList({ entityType, entityId, label }: DocumentsListProp
                 onPress={() => onOpen(doc.id)}
               />
             ))}
+            {count > documents.length ? (
+              <Text variant="small" muted style={styles.body}>
+                Showing {documents.length} of {count}.
+              </Text>
+            ) : null}
           </View>
         )
       ) : null}
@@ -140,12 +146,6 @@ function DocumentRow({
       {opening ? <ActivityIndicator color={colors.primary} /> : <Text variant="body" muted>↗</Text>}
     </TouchableOpacity>
   );
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 const styles = StyleSheet.create({

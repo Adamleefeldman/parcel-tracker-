@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Controller, useForm, type Control } from 'react-hook-form';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { useCreateSupplierPayment } from '@/src/api/mutations/useCreateSupplierPayment';
 import type { UserRole } from '@/src/api/types/enums';
@@ -84,7 +84,15 @@ export default function RecordSupplierPaymentForm() {
   return (
     <ScreenContainer>
       <Stack.Screen options={{ title: 'Record supplier payment' }} />
-      <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.flex}
+      >
+        <ScrollView
+          contentContainerStyle={styles.form}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+        >
         <TextField control={control} name="swift_ref" label="SWIFT reference" />
 
         <Controller
@@ -159,7 +167,8 @@ export default function RecordSupplierPaymentForm() {
           />
           <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
         </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
@@ -195,6 +204,9 @@ function TextField({
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   form: {
     paddingTop: spacing.md,
     paddingBottom: spacing.xxl,

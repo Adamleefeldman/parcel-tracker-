@@ -21,6 +21,7 @@ import { DocumentsList } from '@/src/components/documents/DocumentsList';
 import {
   Button,
   Card,
+  ErrorState,
   Pill,
   ScreenContainer,
   Spinner,
@@ -29,6 +30,7 @@ import {
   useToast,
 } from '@/src/components/ui';
 import { humanizeStatus } from '@/src/components/ui/statusPillMapping';
+import { formatDate, formatDateTime } from '@/src/lib/date';
 import { formatMoney, parseRatio } from '@/src/lib/money';
 import { colors, radii, spacing } from '@/src/theme/tokens';
 
@@ -328,36 +330,6 @@ function KV({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const message =
-    error instanceof ApiError
-      ? error.message
-      : error instanceof Error
-        ? error.message
-        : 'Something went wrong.';
-  return (
-    <View style={styles.centered}>
-      <Text muted style={styles.centeredText}>
-        {message}
-      </Text>
-      <Button title="Retry" variant="ghost" onPress={onRetry} />
-    </View>
-  );
-}
-
-function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 /**
  * Customer-payments view. All booking members see the aggregate + tranche
  * list; financial amounts are masked (null → "—") server-side for non-admins,
@@ -484,13 +456,6 @@ function TrancheRow({ payment, currency }: { payment: CustomerPayment; currency:
   );
 }
 
-function formatDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(`${iso}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
 const styles = StyleSheet.create({
   scroll: {
     paddingBottom: spacing.xxl,
@@ -578,7 +543,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   disputeCard: {
-    backgroundColor: '#fde6e6',
+    backgroundColor: colors.errorSurface,
     borderColor: colors.error,
     borderRadius: radii.md,
     gap: spacing.sm,
@@ -591,15 +556,5 @@ const styles = StyleSheet.create({
   },
   disputeMeta: {
     color: colors.error,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
-  },
-  centeredText: {
-    textAlign: 'center',
   },
 });

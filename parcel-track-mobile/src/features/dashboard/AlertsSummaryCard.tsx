@@ -2,18 +2,51 @@ import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import type { NotificationOut } from '../../api/types/notification';
-import { Card, Pill, Text } from '../../components/ui';
+import { Button, Card, Pill, Text } from '../../components/ui';
 import { formatRelativeTime } from '../../lib/relativeTime';
 import { spacing } from '../../theme/tokens';
 
 export interface AlertsSummaryCardProps {
   unreadCount: number;
   recent: NotificationOut[];
+  /** True when the unread-count or recent-notifications query failed. */
+  isError?: boolean;
+  /** Retry the failed notification queries (only relevant when `isError`). */
+  onRetry?: () => void;
   onPress: () => void;
 }
 
-/** Dashboard alerts teaser — unread count + the two most recent titles. */
-export function AlertsSummaryCard({ unreadCount, recent, onPress }: AlertsSummaryCardProps) {
+/**
+ * Dashboard alerts teaser — unread count + the two most recent titles.
+ *
+ * On a notifications fetch failure it shows an explicit error + Retry rather
+ * than a "0 unread / no recent alerts" state, which is indistinguishable from a
+ * genuinely-empty inbox and would quietly hide that something broke.
+ */
+export function AlertsSummaryCard({
+  unreadCount,
+  recent,
+  isError = false,
+  onRetry,
+  onPress,
+}: AlertsSummaryCardProps) {
+  if (isError) {
+    // Not wrapped in the navigate-on-tap TouchableOpacity: the alerts list is
+    // likely failing too, so keep the user here and offer a direct retry.
+    return (
+      <Card style={styles.card}>
+        <View style={styles.header}>
+          <Text variant="heading">Alerts</Text>
+          <Pill tone="error">Error</Pill>
+        </View>
+        <Text variant="small" muted>
+          Couldn&apos;t load alerts.
+        </Text>
+        {onRetry ? <Button title="Retry" variant="ghost" onPress={onRetry} /> : null}
+      </Card>
+    );
+  }
+
   return (
     <TouchableOpacity activeOpacity={0.7} onPress={onPress}>
       <Card style={styles.card}>

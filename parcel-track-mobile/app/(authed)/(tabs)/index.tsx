@@ -2,13 +2,20 @@ import { useRouter } from 'expo-router';
 import React, { useCallback, useMemo } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
-import { ApiError } from '@/src/api/client';
 import { useBookings } from '@/src/api/queries/useBookings';
 import { useNotifications } from '@/src/api/queries/useNotifications';
 import { useUnreadCount } from '@/src/api/queries/useUnreadCount';
 import type { UserRole } from '@/src/api/types/enums';
 import { useAuth } from '@/src/auth/AuthContext';
-import { Button, Card, Pill, ScreenContainer, Spinner, Text } from '@/src/components/ui';
+import {
+  Button,
+  Card,
+  ErrorState,
+  Pill,
+  ScreenContainer,
+  Spinner,
+  Text,
+} from '@/src/components/ui';
 import { AlertsSummaryCard } from '@/src/features/dashboard/AlertsSummaryCard';
 import { StatusCountGrid } from '@/src/features/dashboard/StatusCountGrid';
 import { dashboardConfig } from '@/src/features/dashboard/dashboardSections';
@@ -42,6 +49,11 @@ export default function DashboardScreen() {
     [bookingsQuery.data],
   );
   const total = totalCount(counts);
+  // Counts are derived from a single capped page (no faceted-count endpoint).
+  // If the server reports more bookings than we fetched, the per-status counts
+  // are a lower bound — label them approximate rather than imply exactness.
+  const serverTotal = bookingsQuery.data?.total ?? total;
+  const countsAreApproximate = serverTotal > (bookingsQuery.data?.items.length ?? 0);
 
   const onRefresh = useCallback(() => {
     bookingsQuery.refetch();
@@ -70,6 +82,13 @@ export default function DashboardScreen() {
           <AlertsSummaryCard
             unreadCount={unreadQuery.data ?? 0}
             recent={recentQuery.data?.items ?? []}
+            // Surface a notifications failure instead of showing a misleading
+            // "0 unread / no recent alerts" that looks like a real empty state.
+            isError={unreadQuery.isError || recentQuery.isError}
+            onRetry={() => {
+              unreadQuery.refetch();
+              recentQuery.refetch();
+            }}
             onPress={() => router.push('/alerts')}
           />
         </View>
@@ -91,7 +110,7 @@ export default function DashboardScreen() {
             <View style={styles.sectionHeaderRow}>
               <Text variant="heading">{config.sectionTitle}</Text>
               <Text variant="small" muted>
-                {total} total
+                {countsAreApproximate ? `${total}+ of ${serverTotal}` : `${total} total`}
               </Text>
             </View>
             <StatusCountGrid
@@ -109,23 +128,6 @@ export default function DashboardScreen() {
         )}
       </ScrollView>
     </ScreenContainer>
-  );
-}
-
-function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const message =
-    error instanceof ApiError
-      ? error.message
-      : error instanceof Error
-        ? error.message
-        : 'Something went wrong.';
-  return (
-    <View style={styles.centered}>
-      <Text muted style={styles.centeredText}>
-        {message}
-      </Text>
-      <Button title="Retry" variant="ghost" onPress={onRetry} />
-    </View>
   );
 }
 
@@ -156,15 +158,5 @@ const styles = StyleSheet.create({
   },
   viewAll: {
     marginTop: spacing.sm,
-  },
-  centered: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
-    gap: spacing.md,
-  },
-  centeredText: {
-    textAlign: 'center',
   },
 });

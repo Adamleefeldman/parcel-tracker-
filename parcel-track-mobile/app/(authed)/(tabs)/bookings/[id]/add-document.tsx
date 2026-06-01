@@ -2,11 +2,19 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useUploadDocument } from '@/src/api/mutations/useUploadDocument';
+import { useUploadDocument, type UploadPhase } from '@/src/api/mutations/useUploadDocument';
 import type { DocumentEntityType } from '@/src/api/types/enums';
-import { Button, FormError, ProgressBar, ScreenContainer, Text, useToast } from '@/src/components/ui';
+import {
+  Button,
+  FormError,
+  ProgressBar,
+  ScreenContainer,
+  Spinner,
+  Text,
+  useToast,
+} from '@/src/components/ui';
 import { formatBytes, validateFile } from '@/src/lib/files';
-import { colors, spacing } from '@/src/theme/tokens';
+import { colors, radii, spacing } from '@/src/theme/tokens';
 
 /**
  * Add-document modal. Reached from any `<DocumentsList>` "Add" button with the
@@ -40,11 +48,19 @@ export default function AddDocumentScreen() {
   const [selected, setSelected] = useState<SelectedFile | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [phase, setPhase] = useState<UploadPhase | null>(null);
+  // Some Android providers report no total byte count, so the PUT never emits a
+  // progress event and the bar would sit at 0. Track whether any event arrived;
+  // until one does (and during the no-progress confirm step) we show an
+  // indeterminate spinner instead of a stuck bar.
+  const [progressSeen, setProgressSeen] = useState(false);
 
   const applySelection = (file: SelectedFile) => {
     setValidationError(validateFile({ size: file.fileSize, contentType: file.contentType }));
     setSelected(file);
     setProgress(0);
+    setPhase(null);
+    setProgressSeen(false);
     mutation.reset();
   };
 
@@ -91,13 +107,20 @@ export default function AddDocumentScreen() {
 
   const onUpload = () => {
     if (!selected || validationError) return;
+    setProgress(0);
+    setPhase(null);
+    setProgressSeen(false);
     mutation.mutate(
       {
         fileUri: selected.fileUri,
         fileName: selected.fileName,
         contentType: selected.contentType,
         fileSize: selected.fileSize,
-        onProgress: setProgress,
+        onProgress: (fraction) => {
+          setProgressSeen(true);
+          setProgress(fraction);
+        },
+        onPhase: setPhase,
       },
       {
         onSuccess: () => {
@@ -164,10 +187,32 @@ export default function AddDocumentScreen() {
 
         {uploading ? (
           <View style={styles.progressBlock}>
-            <ProgressBar progress={progress} />
-            <Text variant="small" muted>
-              Uploading… {Math.round(progress * 100)}%
-            </Text>
+            {phase === 'finalising' ? (
+              // Confirm step reports no progress — spinner + clear label rather
+              // than a bar pinned at 100%.
+              <View style={styles.indeterminateRow}>
+                <Spinner size="small" />
+                <Text variant="small" muted>
+                  Finalising…
+                </Text>
+              </View>
+            ) : progressSeen ? (
+              <>
+                <ProgressBar progress={progress} />
+                <Text variant="small" muted>
+                  Uploading… {Math.round(progress * 100)}%
+                </Text>
+              </>
+            ) : (
+              // No byte-progress reported yet (or ever, on some Android
+              // providers) — indeterminate spinner instead of a stuck bar.
+              <View style={styles.indeterminateRow}>
+                <Spinner size="small" />
+                <Text variant="small" muted>
+                  Uploading…
+                </Text>
+              </View>
+            )}
           </View>
         ) : null}
 
@@ -209,15 +254,20 @@ const styles = StyleSheet.create({
   progressBlock: {
     gap: spacing.sm,
   },
+  indeterminateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   actions: {
     gap: spacing.sm,
     marginTop: spacing.md,
   },
   banner: {
-    backgroundColor: '#fde6e6',
+    backgroundColor: colors.errorSurface,
     borderWidth: 1,
     borderColor: colors.error,
-    borderRadius: 8,
+    borderRadius: radii.md,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
   },
