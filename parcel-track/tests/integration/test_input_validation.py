@@ -334,15 +334,31 @@ class TestUploadValidation:
         )
         assert r.status_code == 422
 
-    async def test_upload_allowed_mime_accepted(
-        self, client: AsyncClient, admin_token: str, shipment: str
-    ):
+    async def test_upload_allowed_mime_accepted(self, client: AsyncClient, admin_token: str):
         h = {"Authorization": f"Bearer {admin_token}"}
+        # upload-url is now booking-scoped, so the entity must exist and be
+        # accessible. Create a real PO (admin always passes the access gate).
+        r = await client.post(
+            "/api/v1/purchase-orders",
+            json={
+                "po_number": "PO-MIME-OK",
+                "po_date": "2026-01-10",
+                "product_description": "Tiles",
+                "quantity": "100",
+                "quantity_unit": "boxes",
+                "total_value": "10000.00",
+                "currency": "USD",
+            },
+            headers=h,
+        )
+        assert r.status_code == 200, r.json()
+        po_id = r.json()["id"]
+
         r = await client.post(
             "/api/v1/documents/upload-url",
             json={
-                "entity_type": "shipment",
-                "entity_id": shipment,
+                "entity_type": "purchase_order",
+                "entity_id": po_id,
                 "file_name": "doc.pdf",
                 "mime_type": "application/pdf",
             },
