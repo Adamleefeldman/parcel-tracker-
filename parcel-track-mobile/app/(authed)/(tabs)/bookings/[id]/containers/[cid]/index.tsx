@@ -17,6 +17,7 @@ import {
 } from '@/src/auth/permissions';
 import type { UserRole } from '@/src/api/types/enums';
 import { AppHeader } from '@/src/components/AppHeader';
+import { DocumentsList } from '@/src/components/documents/DocumentsList';
 import {
   Button,
   Card,
@@ -430,7 +431,14 @@ function PaymentsSection({
       {payments.length > 0 ? (
         <View style={styles.tranches}>
           {payments.map((p) => (
-            <TrancheRow key={p.id} payment={p} currency={currency} />
+            <View key={p.id}>
+              <TrancheRow payment={p} currency={currency} />
+              <DocumentsList
+                entityType="payment"
+                entityId={p.id}
+                label={`Payment #${p.tranche_index}`}
+              />
+            </View>
           ))}
         </View>
       ) : !aggQuery.isLoading ? (

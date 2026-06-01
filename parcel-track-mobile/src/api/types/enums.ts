@@ -55,6 +55,30 @@ export type PortStatus =
 export type CustomerPaymentMethod = 'cash' | 'transfer';
 
 /**
+ * Entity a document attaches to (`DocumentEntityType` in `app/core/enums.py`).
+ * A document is scoped to one sub-entity of a booking by `(entity_type,
+ * entity_id)`. `DOCUMENT_ENTITY_LABELS` maps each member exhaustively (the
+ * `Record<DocumentEntityType, …>` fails the typecheck if the backend adds a
+ * value without a label here) — keep both in sync.
+ */
+export type DocumentEntityType =
+  | 'purchase_order'
+  | 'invoice'
+  | 'payment'
+  | 'bill_of_lading'
+  | 'clearing_docs'
+  | 'delivery_schedule';
+
+export const DOCUMENT_ENTITY_LABELS: Record<DocumentEntityType, string> = {
+  purchase_order: 'Purchase order',
+  invoice: 'Invoice',
+  payment: 'Payment',
+  bill_of_lading: 'Bill of lading',
+  clearing_docs: 'Clearing docs',
+  delivery_schedule: 'Delivery schedule',
+};
+
+/**
  * In-app notification kind (`NotificationType` in `app/core/enums.py`). 15
  * values — keep this in sync; `NOTIFICATION_LABELS`/`NOTIFICATION_TONES`
  * (`src/features/alerts/notificationDisplay.ts`) map each member exhaustively,

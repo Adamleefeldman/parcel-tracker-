@@ -11,6 +11,8 @@ export { ListItem } from './ListItem';
 export type { ListItemProps } from './ListItem';
 export { Pill } from './Pill';
 export type { PillProps, PillTone } from './Pill';
+export { ProgressBar } from './ProgressBar';
+export type { ProgressBarProps } from './ProgressBar';
 export { ScreenContainer } from './ScreenContainer';
 export type { ScreenContainerProps } from './ScreenContainer';
 export { Select } from './Select';

@@ -15,6 +15,7 @@ import type {
 } from '@/src/api/types/booking';
 import type { Container } from '@/src/api/types/container';
 import { AppHeader } from '@/src/components/AppHeader';
+import { DocumentsList } from '@/src/components/documents/DocumentsList';
 import {
   Button,
   Card,
@@ -165,6 +166,7 @@ function VesselAndBL({ bl }: { bl: BillOfLading | null }) {
           </Grid>
         </View>
       ) : null}
+      <DocumentsList entityType="bill_of_lading" entityId={bl.id} label="Bill of lading" />
     </Section>
   );
 }
@@ -265,6 +267,11 @@ function POsSection({ pos }: { pos: PurchaseOrder[] }) {
             />
             <KV label="Notes" value={fmt(po.notes)} />
           </Grid>
+          <DocumentsList
+            entityType="purchase_order"
+            entityId={po.id}
+            label={`PO ${po.po_number}`}
+          />
           {po.invoice ? <InvoiceBlock invoice={po.invoice} /> : null}
         </View>
       ))}
@@ -293,6 +300,11 @@ function InvoiceBlock({ invoice }: { invoice: NonNullable<PurchaseOrder['invoice
         <KV label="Terms" value={fmt(invoice.payment_terms)} />
         <KV label="Due" value={formatDate(invoice.due_date)} />
       </Grid>
+      <DocumentsList
+        entityType="invoice"
+        entityId={invoice.id}
+        label={`Invoice ${invoice.invoice_number}`}
+      />
     </View>
   );
 }
@@ -319,6 +331,7 @@ function PaymentsSection({ payments }: { payments: SupplierPayment[] }) {
             <KV label="Type" value={p.payment_type} />
             <KV label="SWIFT ref" value={fmt(p.swift_ref)} />
           </Grid>
+          <DocumentsList entityType="payment" entityId={p.id} label="Supplier payment" />
         </View>
       ))}
     </Section>
@@ -345,6 +358,7 @@ function ClearingDocsSection({ docs }: { docs: ClearingDocs | null }) {
         <Check label="Cert. of origin" on={docs.has_certificate_of_origin} />
         <Check label="Health cert" on={docs.has_health_cert} />
       </View>
+      <DocumentsList entityType="clearing_docs" entityId={docs.id} label="Clearing docs" />
     </Section>
   );
 }
@@ -435,6 +449,11 @@ function ScheduleBlock({ schedule }: { schedule: NonNullable<DeliveryPoint['sche
           <Text variant="body">{schedule.notes_to_recipient}</Text>
         </View>
       ) : null}
+      <DocumentsList
+        entityType="delivery_schedule"
+        entityId={schedule.id}
+        label="Delivery schedule"
+      />
     </View>
   );
 }

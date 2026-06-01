@@ -21,6 +21,7 @@ export default function BookingsStackLayout() {
         name="[id]/containers/[cid]/record-payment"
         options={{ presentation: 'modal' }}
       />
+      <Stack.Screen name="[id]/add-document" options={{ presentation: 'modal' }} />
     </Stack>
   );
 }
