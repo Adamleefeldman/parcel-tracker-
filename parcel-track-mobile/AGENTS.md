@@ -415,12 +415,25 @@ If you prefer multi-root or open the mobile folder directly, those work too — 
 
 ### CI
 
-Single workflow at `../.github/workflows/ci.yml` (monorepo root). Two mobile jobs:
+Single workflow at `../.github/workflows/ci.yml` (monorepo root). Three mobile jobs:
 
 - `mobile-typecheck` — `npm ci` + `npx tsc --noEmit`
 - `mobile-test` — `npm ci` + `npm test`
+- `mobile-lint` — `npm ci` + `npm run lint` + `npm run format:check`. **Report-only** (`continue-on-error: true`) — see Linting below.
 
-A workflow run executes both backend and mobile jobs regardless of which files changed — accepted cost at this scale. No mobile lint yet; add when there's a style worth enforcing.
+A workflow run executes both backend and mobile jobs regardless of which files changed — accepted cost at this scale.
+
+---
+
+## Linting
+
+ESLint + Prettier, both pinned to the Expo SDK 54 line:
+
+- **ESLint** — flat config (`eslint.config.js`) extending **`eslint-config-expo`** (`~10.0.0`, the SDK-aligned preset; it bundles the react-hooks, react, import and typescript-eslint plugins) with **`eslint-config-prettier`** layered last to disable formatting rules. ESLint owns code quality; Prettier owns formatting.
+- **Prettier** — `.prettierrc` captures the de-facto style already in the tree: single quotes, semicolons, trailing commas (`all`), 2-space indent, 100-char print width.
+- Run locally: `npm run lint` (and `npm run format:check`). Highest-value signals are `react-hooks/rules-of-hooks` + `exhaustive-deps` in this react-query app.
+
+**Report-only for now.** The `mobile-lint` CI job is **non-blocking** (`continue-on-error: true`) because the existing tree predates linting and still reports pre-existing nits — a hard failure would be noise. **Do not run `prettier --write` / `eslint --fix` across the tree as a drive-by** — it rewrites source and collides with in-flight feature work. A dedicated cleanup pass will fix the tree, then drop `continue-on-error` from the job to make lint blocking (mirrors how the backend's mypy job started non-blocking).
 
 ---
 
@@ -434,11 +447,12 @@ Tracked here so they don't rot inside prose elsewhere.
 4. **Mutation tooling.** ✅ Landed: toast/snackbar (Phase 3); react-hook-form + zod form library and `Idempotency-Key` plumbing (Phase 4). See Forms / Idempotency / Money.
 5. **EAS Build profile.** Not configured yet — first production build will need `eas.json` + credentials.
 6. **Payments masking UX.** Non-admins get null amounts back; the section shows a single "Amounts hidden for your role" hint. Revisit if a richer masked view is wanted.
+7. **Make lint blocking.** A cleanup pass to fix the pre-existing ESLint/Prettier findings, then drop `continue-on-error` from the `mobile-lint` CI job. See Linting.
 
 ---
 
 ## Known `npm audit` noise
 
-`npm audit` reports 10 moderate vulnerabilities, all transitively from `uuid < 11.1.1` ([GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq)). Path: `uuid → xcode → @expo/config-plugins → … → expo`.
+`npm audit` reports 12 moderate vulnerabilities, all transitively from `uuid < 11.1.1` ([GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq)). Path: `uuid → xcode → @expo/config-plugins → … → expo`.
 
 **Do not run `npm audit fix --force`** — it downgrades `expo` by ~10 major versions and breaks everything. The vulnerable code is build-time only (`xcode`, used during `expo prebuild` / EAS Build); it does not ship in the app bundle and no attacker-controlled input reaches it. Wait for upstream `xcode` / Expo to bump `uuid`.
