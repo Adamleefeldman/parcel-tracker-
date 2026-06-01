@@ -2,8 +2,8 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
-import { ApiError } from '../../../../src/api/client';
-import { useBooking } from '../../../../src/api/queries/useBooking';
+import { ApiError } from '@/src/api/client';
+import { useBooking } from '@/src/api/queries/useBooking';
 import type {
   BillOfLading,
   BookingDetail,
@@ -12,9 +12,9 @@ import type {
   PurchaseOrder,
   ShipmentLeg,
   SupplierPayment,
-} from '../../../../src/api/types/booking';
-import type { Container } from '../../../../src/api/types/container';
-import { AppHeader } from '../../../../src/components/AppHeader';
+} from '@/src/api/types/booking';
+import type { Container } from '@/src/api/types/container';
+import { AppHeader } from '@/src/components/AppHeader';
 import {
   Button,
   Card,
@@ -23,8 +23,8 @@ import {
   Spinner,
   StatusPill,
   Text,
-} from '../../../../src/components/ui';
-import { spacing } from '../../../../src/theme/tokens';
+} from '@/src/components/ui';
+import { spacing } from '@/src/theme/tokens';
 
 export default function BookingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

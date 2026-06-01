@@ -2,9 +2,9 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { useUpdatePortStatus } from '../../../../../../src/api/mutations/useUpdatePortStatus';
-import { useContainer } from '../../../../../../src/api/queries/useContainer';
-import type { PortStatus } from '../../../../../../src/api/types/enums';
+import { useUpdatePortStatus } from '@/src/api/mutations/useUpdatePortStatus';
+import { useContainer } from '@/src/api/queries/useContainer';
+import type { PortStatus } from '@/src/api/types/enums';
 import {
   Button,
   FormError,
@@ -14,9 +14,9 @@ import {
   Spinner,
   Text,
   useToast,
-} from '../../../../../../src/components/ui';
-import { humanizeStatus } from '../../../../../../src/components/ui/statusPillMapping';
-import { spacing } from '../../../../../../src/theme/tokens';
+} from '@/src/components/ui';
+import { humanizeStatus } from '@/src/components/ui/statusPillMapping';
+import { spacing } from '@/src/theme/tokens';
 
 // Exhaustive label map — `Record<PortStatus, string>` fails the typecheck if
 // the backend grows a new PortStatus value (mirror in `enums.ts`), so the

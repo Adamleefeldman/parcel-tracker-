@@ -2,21 +2,21 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
-import { ApiError } from '../../../../../../src/api/client';
-import { useAcknowledgeDispute } from '../../../../../../src/api/mutations/useAcknowledgeDispute';
-import { useContainer } from '../../../../../../src/api/queries/useContainer';
-import { useCustomerPaymentAggregate } from '../../../../../../src/api/queries/useCustomerPaymentAggregate';
-import { useCustomerPayments } from '../../../../../../src/api/queries/useCustomerPayments';
-import type { Container } from '../../../../../../src/api/types/container';
-import type { CustomerPayment } from '../../../../../../src/api/types/payment';
-import { useAuth } from '../../../../../../src/auth/AuthContext';
+import { ApiError } from '@/src/api/client';
+import { useAcknowledgeDispute } from '@/src/api/mutations/useAcknowledgeDispute';
+import { useContainer } from '@/src/api/queries/useContainer';
+import { useCustomerPaymentAggregate } from '@/src/api/queries/useCustomerPaymentAggregate';
+import { useCustomerPayments } from '@/src/api/queries/useCustomerPayments';
+import type { Container } from '@/src/api/types/container';
+import type { CustomerPayment } from '@/src/api/types/payment';
+import { useAuth } from '@/src/auth/AuthContext';
 import {
   canManageCustomerPayments,
   canManageDisputes,
   canUpdatePortStatus,
-} from '../../../../../../src/auth/permissions';
-import type { UserRole } from '../../../../../../src/api/types/enums';
-import { AppHeader } from '../../../../../../src/components/AppHeader';
+} from '@/src/auth/permissions';
+import type { UserRole } from '@/src/api/types/enums';
+import { AppHeader } from '@/src/components/AppHeader';
 import {
   Button,
   Card,
@@ -26,10 +26,10 @@ import {
   StatusPill,
   Text,
   useToast,
-} from '../../../../../../src/components/ui';
-import { humanizeStatus } from '../../../../../../src/components/ui/statusPillMapping';
-import { formatMoney, parseRatio } from '../../../../../../src/lib/money';
-import { colors, radii, spacing } from '../../../../../../src/theme/tokens';
+} from '@/src/components/ui';
+import { humanizeStatus } from '@/src/components/ui/statusPillMapping';
+import { formatMoney, parseRatio } from '@/src/lib/money';
+import { colors, radii, spacing } from '@/src/theme/tokens';
 
 export default function ContainerDetailScreen() {
   const { id, cid } = useLocalSearchParams<{ id: string; cid: string }>();

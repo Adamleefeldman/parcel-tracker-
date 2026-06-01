@@ -2,7 +2,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { useOpenDispute } from '../../../../../../src/api/mutations/useOpenDispute';
+import { useOpenDispute } from '@/src/api/mutations/useOpenDispute';
 import {
   Button,
   FormError,
@@ -10,8 +10,8 @@ import {
   ScreenContainer,
   Text,
   useToast,
-} from '../../../../../../src/components/ui';
-import { spacing } from '../../../../../../src/theme/tokens';
+} from '@/src/components/ui';
+import { spacing } from '@/src/theme/tokens';
 
 export default function DisputeForm() {
   const { id, cid } = useLocalSearchParams<{ id: string; cid: string }>();

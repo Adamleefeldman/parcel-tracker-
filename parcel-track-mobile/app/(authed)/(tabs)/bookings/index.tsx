@@ -2,10 +2,10 @@ import { Stack, useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 
-import { ApiError } from '../../../src/api/client';
-import { type Booking, useBookings } from '../../../src/api/queries/useBookings';
-import type { BookingStatus } from '../../../src/api/types/enums';
-import { useAuth } from '../../../src/auth/AuthContext';
+import { ApiError } from '@/src/api/client';
+import { type Booking, useBookings } from '@/src/api/queries/useBookings';
+import type { BookingStatus } from '@/src/api/types/enums';
+import { useAuth } from '@/src/auth/AuthContext';
 import {
   Button,
   ListItem,
@@ -13,8 +13,8 @@ import {
   Spinner,
   StatusPill,
   Text,
-} from '../../../src/components/ui';
-import { spacing } from '../../../src/theme/tokens';
+} from '@/src/components/ui';
+import { spacing } from '@/src/theme/tokens';
 
 export default function BookingsScreen() {
   const router = useRouter();

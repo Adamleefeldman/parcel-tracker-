@@ -4,10 +4,10 @@ import React, { useState } from 'react';
 import { Controller, useForm, type Control } from 'react-hook-form';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { useCreateCustomerPayment } from '../../../../../../src/api/mutations/useCreateCustomerPayment';
-import type { UserRole } from '../../../../../../src/api/types/enums';
-import { useAuth } from '../../../../../../src/auth/AuthContext';
-import { canManageCustomerPayments } from '../../../../../../src/auth/permissions';
+import { useCreateCustomerPayment } from '@/src/api/mutations/useCreateCustomerPayment';
+import type { UserRole } from '@/src/api/types/enums';
+import { useAuth } from '@/src/auth/AuthContext';
+import { canManageCustomerPayments } from '@/src/auth/permissions';
 import {
   Button,
   DateField,
@@ -17,15 +17,15 @@ import {
   Select,
   Text,
   useToast,
-} from '../../../../../../src/components/ui';
+} from '@/src/components/ui';
 import {
   customerPaymentSchema,
   defaultPaymentFormValues,
   toCreateBody,
   type CustomerPaymentFormValues,
-} from '../../../../../../src/forms/customerPaymentSchema';
-import { newIdempotencyKey } from '../../../../../../src/lib/idempotency';
-import { colors, spacing } from '../../../../../../src/theme/tokens';
+} from '@/src/forms/customerPaymentSchema';
+import { newIdempotencyKey } from '@/src/lib/idempotency';
+import { colors, spacing } from '@/src/theme/tokens';
 
 const METHOD_OPTIONS = [
   { value: 'transfer', label: 'Bank transfer' },

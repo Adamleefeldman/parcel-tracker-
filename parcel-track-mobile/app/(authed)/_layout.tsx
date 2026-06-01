@@ -1,9 +1,15 @@
 import { Redirect, Stack } from 'expo-router';
 import React from 'react';
 
-import { useAuth } from '../../src/auth/AuthContext';
-import { Spinner } from '../../src/components/ui';
+import { useAuth } from '@/src/auth/AuthContext';
+import { Spinner } from '@/src/components/ui';
 
+// Authed-area guard. The signed-in experience is a bottom-tab navigator
+// (`(tabs)`): Dashboard | Bookings | Alerts. Modal routes (port-status,
+// dispute, record-payment) are registered inside the Bookings tab's own stack
+// (`(tabs)/bookings/_layout.tsx`), not here. This Stack only needs the guard;
+// `headerShown: false` because the Tabs navigator and the per-tab stacks own
+// their own headers.
 export default function AuthedLayout() {
   const { status } = useAuth();
 
@@ -13,23 +19,5 @@ export default function AuthedLayout() {
   if (status !== 'authenticated') {
     return <Redirect href="/(auth)/login" />;
   }
-  // Most routes register with default push presentation. The two container
-  // form routes opt into modal presentation here (declaring it in the layout
-  // is the reliable place — `presentation` is fixed when the screen mounts).
-  return (
-    <Stack>
-      <Stack.Screen
-        name="bookings/[id]/containers/[cid]/port-status"
-        options={{ presentation: 'modal' }}
-      />
-      <Stack.Screen
-        name="bookings/[id]/containers/[cid]/dispute"
-        options={{ presentation: 'modal' }}
-      />
-      <Stack.Screen
-        name="bookings/[id]/containers/[cid]/record-payment"
-        options={{ presentation: 'modal' }}
-      />
-    </Stack>
-  );
+  return <Stack screenOptions={{ headerShown: false }} />;
 }
