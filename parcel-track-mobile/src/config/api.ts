@@ -16,7 +16,6 @@ const envUrl = process.env.EXPO_PUBLIC_API_URL;
 
 if (!envUrl && __DEV__) {
   // Warn loudly in dev if the env file wasn't picked up; in prod we silently fall back.
-  // eslint-disable-next-line no-console
   console.warn(
     '[config/api] EXPO_PUBLIC_API_URL is not set — falling back to ' +
       `${FALLBACK_API_URL}. Check your .env files.`,

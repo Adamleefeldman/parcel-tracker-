@@ -59,7 +59,7 @@ export default function RecordSupplierPaymentForm() {
       <ScreenContainer>
         <Stack.Screen options={{ title: 'Record payment' }} />
         <Text variant="body" muted style={styles.notPermitted}>
-          You don't have permission to record supplier payments.
+          You don&apos;t have permission to record supplier payments.
         </Text>
         <Button title="Close" variant="ghost" onPress={() => router.back()} />
       </ScreenContainer>

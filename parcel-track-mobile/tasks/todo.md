@@ -1,49 +1,30 @@
-# Phase 1 — mobile foundation + bookings list
+# Hardening PR A — crash safety, correctness & screen code-quality
 
-Branch: `mobile-phase1-foundation`. Plan: `/Users/adamfeldman/.claude/plans/lets-construct-a-plan-synthetic-moon.md`.
+Branch: `mobile-harden-crash-safety`. Diff stays under `app/` + `src/`. No new deps.
 
-## Step 1 — Expo Router migration
-- [x] `npx expo install expo-router react-native-safe-area-context react-native-screens`
-- [x] `package.json` → `"main": "expo-router/entry"`
-- [x] `app.json` → add `expo.scheme: "fmcghub"` + `expo-router` plugin
-- [x] `tsconfig.json` → `baseUrl` + `@/*` paths
-- [x] Delete `App.tsx`, `index.ts`
-- [x] Create `app/_layout.tsx` (providers)
-- [x] `app/(auth)/_layout.tsx` (redirect when authed)
-- [x] `app/(auth)/login.tsx` (port `LoginScreen`)
-- [x] `app/(authed)/_layout.tsx` (redirect when anon)
-- [x] `app/(authed)/index.tsx` (redirect to /bookings)
-- [x] `app/(authed)/bookings/index.tsx`
-- [x] `app/(authed)/bookings/[id].tsx`
-- [x] Delete `src/screens/`
-- [x] `npx tsc --noEmit` clean
+## High (must-haves)
+- [x] #1 Root error boundary — `export function ErrorBoundary` in `app/_layout.tsx` (fallback + retry).
+- [x] #2 Null-guard top-level arrays in booking detail (`legs`, `purchase_orders`, `delivery_points`) — `?? []`.
+- [x] #3 Pagination correctness
+  - [x] Supplier payments per-invoice sum: high limit (500) + "(partial)" / "showing N of total" marker.
+  - [x] Bookings list / alerts: "first N of {total}" truncation footer.
+  - [x] Documents: list already shows total via header "Documents (N)"; no truncation in practice (left as-is, count surfaced).
+  - [x] Dashboard status counts: "{n}+ of {total}" approximate label when total > fetched page.
 
-## Step 2 — Design primitives
-- [x] `src/theme/tokens.ts` + `index.ts`
-- [x] 8 UI primitives in `src/components/ui/`
-- [x] `src/components/ui/index.ts` barrel
-- [x] Refactor `login.tsx` to use them
-- [x] `npx tsc --noEmit` clean
+## Medium
+- [x] #4 Dashboard surfaces notification errors in `AlertsSummaryCard` (error pill + Retry).
+- [x] #5 KeyboardAvoidingView on modal forms: record-payment, record-supplier-payment, dispute, port-status. (add-document has no text inputs — KAV not needed.)
+- [x] #6 Upload "Finalising…" phase + indeterminate spinner fallback when total bytes unknown.
 
-## Step 3 — TanStack Query
-- [x] `npm install @tanstack/react-query` (via `--legacy-peer-deps`; `.npmrc` pins it for CI)
-- [x] `QueryClientProvider` in `app/_layout.tsx`
-- [x] `src/api/authedClient.ts` wrapper
-- [x] `src/api/queries/useBookings.ts`
-- [x] `npx tsc --noEmit` clean
+## Code-quality
+- [x] #7 `src/lib/date.ts` (noon-parse) + `date.test.ts` (no-day-shift). Replaced 4 inline copies.
+- [x] #8 Route booking-detail money through `formatMoney`.
+- [x] #9 Extracted `src/components/ui/ErrorState.tsx`; replaced 5 copies.
+- [x] #10 Booking-detail tokens; added `colors.errorSurface`; used in dispute card, add-document, FormError, Pill.
 
-## Step 4 — Bookings list
-- [x] Build `bookings/index.tsx` (FlatList, refresh, error, empty)
-- [x] `bookings/[id].tsx` detail placeholder
-- [x] `npx tsc --noEmit` clean
+## Reuse / cleanup
+- [x] Fixed the 2 prefixed router hrefs (`/(authed)/bookings/...` → `/bookings/...`).
 
-## Step 5 — Tests + docs
-- [x] `src/api/authedClient.test.ts`
-- [x] `src/api/queries/useBookings.test.ts`
-- [x] `npm test` clean (4 suites / 16 tests)
-- [x] Update `AGENTS.md` (Navigation / Server state / UI primitives / drop "Nav library" / `.npmrc` note)
-
-## Ship
-- [ ] Commit + push branch
-- [ ] `gh pr create`
-- [ ] Wait for CI green
+## Verify
+- [x] `npx tsc --noEmit` clean; `npm test` green (190 tests, +9 date).
+- [ ] PR body: device checklist (verbatim), payment-sum check emphasized, sibling PR B note.
