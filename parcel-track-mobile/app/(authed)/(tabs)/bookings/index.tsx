@@ -2,18 +2,19 @@ import { Stack, useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 
-import { ApiError } from '@/src/api/client';
 import { type Booking, useBookings } from '@/src/api/queries/useBookings';
 import type { BookingStatus } from '@/src/api/types/enums';
 import { useAuth } from '@/src/auth/AuthContext';
 import {
   Button,
+  ErrorState,
   ListItem,
   ScreenContainer,
   Spinner,
   StatusPill,
   Text,
 } from '@/src/components/ui';
+import { formatDate } from '@/src/lib/date';
 import { spacing } from '@/src/theme/tokens';
 
 export default function BookingsScreen() {
@@ -22,7 +23,7 @@ export default function BookingsScreen() {
   const { data, isLoading, isError, error, refetch, isRefetching } = useBookings();
 
   const onItemPress = useCallback(
-    (id: string) => router.push(`/(authed)/bookings/${id}`),
+    (id: string) => router.push(`/bookings/${id}`),
     [router],
   );
 
@@ -56,6 +57,11 @@ export default function BookingsScreen() {
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />
           }
+          ListFooterComponent={
+            data.total > data.items.length ? (
+              <TruncationNotice shown={data.items.length} total={data.total} />
+            ) : null
+          }
         />
       )}
     </ScreenContainer>
@@ -73,19 +79,17 @@ function BookingRow({ booking, onPress }: { booking: Booking; onPress: (id: stri
   );
 }
 
-function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const message =
-    error instanceof ApiError
-      ? error.message
-      : error instanceof Error
-        ? error.message
-        : 'Something went wrong.';
+/**
+ * Footer shown when the list is truncated to one page. The list isn't yet
+ * paginated past the backend's default page, so make it explicit that more
+ * bookings exist beyond what's shown rather than implying this is everything.
+ */
+function TruncationNotice({ shown, total }: { shown: number; total: number }) {
   return (
-    <View style={styles.centered}>
-      <Text muted style={styles.centeredText}>
-        {message}
+    <View style={styles.footer}>
+      <Text variant="small" muted style={styles.centeredText}>
+        Showing the first {shown} of {total} bookings.
       </Text>
-      <Button title="Retry" variant="ghost" onPress={onRetry} />
     </View>
   );
 }
@@ -121,24 +125,15 @@ function emptyMessageFor(role: string | undefined): string {
   return "You don't have any bookings assigned to you yet.";
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
   },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  footer: {
+    paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
-    gap: spacing.md,
   },
   centeredText: {
     textAlign: 'center',

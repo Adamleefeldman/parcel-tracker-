@@ -26,7 +26,7 @@ const palettes: Record<PillTone, { bg: string; border: string; text: string }> =
   default: { bg: colors.surface, border: colors.border, text: colors.text },
   success: { bg: '#e6f7ef', border: colors.success, text: colors.success },
   warning: { bg: '#fff4e0', border: colors.warning, text: colors.warning },
-  error: { bg: '#fde6e6', border: colors.error, text: colors.error },
+  error: { bg: colors.errorSurface, border: colors.error, text: colors.error },
 };
 
 const styles = StyleSheet.create({

@@ -38,7 +38,7 @@ export function FormError({ error, fallback }: FormErrorProps) {
 
 const styles = StyleSheet.create({
   banner: {
-    backgroundColor: '#fde6e6',
+    backgroundColor: colors.errorSurface,
     borderWidth: 1,
     borderColor: colors.error,
     borderRadius: radii.md,

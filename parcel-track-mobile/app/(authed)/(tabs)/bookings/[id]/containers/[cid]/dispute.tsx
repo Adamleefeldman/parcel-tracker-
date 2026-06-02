@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { useOpenDispute } from '@/src/api/mutations/useOpenDispute';
 import {
@@ -41,7 +41,15 @@ export default function DisputeForm() {
   return (
     <ScreenContainer>
       <Stack.Screen options={{ title: 'Open dispute' }} />
-      <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.flex}
+      >
+        <ScrollView
+          contentContainerStyle={styles.form}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+        >
         <Text variant="body" muted style={styles.intro}>
           Opening a dispute marks this container as disputed and blocks the booking from
           completing until an admin acknowledges it.
@@ -66,12 +74,16 @@ export default function DisputeForm() {
           />
           <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
         </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   form: {
     paddingTop: spacing.md,
     paddingBottom: spacing.xxl,

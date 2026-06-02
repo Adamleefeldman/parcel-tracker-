@@ -11,7 +11,11 @@ jest.mock('@tanstack/react-query', () => ({
 jest.mock('../authedClient', () => ({ authedApiRequest: jest.fn() }));
 
 import { authedApiRequest } from '../authedClient';
-import { supplierPaymentsQueryKey, useSupplierPayments } from './useSupplierPayments';
+import {
+  SUPPLIER_PAYMENTS_PAGE_LIMIT,
+  supplierPaymentsQueryKey,
+  useSupplierPayments,
+} from './useSupplierPayments';
 
 const mockAuthedApiRequest = authedApiRequest as jest.MockedFunction<typeof authedApiRequest>;
 
@@ -28,11 +32,13 @@ describe('supplierPaymentsQueryKey', () => {
 describe('useSupplierPayments', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('hits the invoice-scoped path', async () => {
+  it('hits the invoice-scoped path with a high limit so the client-side sum is exact', async () => {
     mockAuthedApiRequest.mockResolvedValue({} as never);
     const query = useSupplierPayments('inv-1', { enabled: true }) as any;
     await query.queryFn();
-    expect(mockAuthedApiRequest).toHaveBeenCalledWith('/api/v1/invoices/inv-1/supplier-payments');
+    expect(mockAuthedApiRequest).toHaveBeenCalledWith(
+      `/api/v1/invoices/inv-1/supplier-payments?limit=${SUPPLIER_PAYMENTS_PAGE_LIMIT}`,
+    );
   });
 
   it('is disabled when the caller is not admin (enabled: false)', () => {

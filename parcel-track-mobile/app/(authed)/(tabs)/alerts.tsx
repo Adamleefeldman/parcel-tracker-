@@ -2,20 +2,20 @@ import { useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
 import { FlatList, RefreshControl, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import { ApiError } from '@/src/api/client';
 import { useMarkNotificationRead } from '@/src/api/mutations/useMarkNotificationRead';
 import { useNotifications } from '@/src/api/queries/useNotifications';
 import type { NotificationOut } from '@/src/api/types/notification';
-import { Button, Pill, ScreenContainer, Spinner, Text } from '@/src/components/ui';
+import { ErrorState, Pill, ScreenContainer, Spinner, Text } from '@/src/components/ui';
 import { notificationLabel, notificationTone } from '@/src/features/alerts/notificationDisplay';
 import { formatRelativeTime } from '@/src/lib/relativeTime';
 import { colors, spacing } from '@/src/theme/tokens';
 
 /**
  * Notifications feed. Single page of up to 50 (pull-to-refresh); load-more
- * pagination is a follow-up. Tapping a row marks it read and, when the
- * notification carries a `booking_id`, deep-links to that booking. There is no
- * mark-all-read endpoint, so that action is omitted.
+ * pagination is a follow-up, so when more than a page exists a footer makes the
+ * truncation explicit rather than implying the list is complete. Tapping a row
+ * marks it read and, when the notification carries a `booking_id`, deep-links to
+ * that booking. There is no mark-all-read endpoint, so that action is omitted.
  */
 export default function AlertsScreen() {
   const router = useRouter();
@@ -58,6 +58,15 @@ export default function AlertsScreen() {
               No alerts.
             </Text>
           }
+          ListFooterComponent={
+            data && data.total > items.length ? (
+              <View style={styles.footer}>
+                <Text variant="small" muted style={styles.centeredText}>
+                  Showing the first {items.length} of {data.total} alerts.
+                </Text>
+              </View>
+            ) : null
+          }
         />
       )}
     </ScreenContainer>
@@ -91,23 +100,6 @@ function AlertRow({
         </Text>
       </View>
     </TouchableOpacity>
-  );
-}
-
-function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const message =
-    error instanceof ApiError
-      ? error.message
-      : error instanceof Error
-        ? error.message
-        : 'Something went wrong.';
-  return (
-    <View style={styles.centered}>
-      <Text muted style={styles.centeredText}>
-        {message}
-      </Text>
-      <Button title="Retry" variant="ghost" onPress={onRetry} />
-    </View>
   );
 }
 
@@ -145,12 +137,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
   },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  footer: {
+    paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
-    gap: spacing.md,
   },
   centeredText: {
     textAlign: 'center',

@@ -2,7 +2,6 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
-import { ApiError } from '@/src/api/client';
 import { useBooking } from '@/src/api/queries/useBooking';
 import { useSupplierPayments } from '@/src/api/queries/useSupplierPayments';
 import type {
@@ -22,6 +21,7 @@ import { DocumentsList } from '@/src/components/documents/DocumentsList';
 import {
   Button,
   Card,
+  ErrorState,
   ListItem,
   ProgressBar,
   ScreenContainer,
@@ -29,8 +29,9 @@ import {
   StatusPill,
   Text,
 } from '@/src/components/ui';
+import { formatDate, formatDateTime } from '@/src/lib/date';
 import { formatMoney, parseRatio, sumDecimalStrings } from '@/src/lib/money';
-import { spacing } from '@/src/theme/tokens';
+import { colors, spacing } from '@/src/theme/tokens';
 
 export default function BookingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -64,7 +65,7 @@ function Body({
   const router = useRouter();
   const onContainerPress = useCallback(
     (containerId: string) =>
-      router.push(`/(authed)/bookings/${booking.id}/containers/${containerId}`),
+      router.push(`/bookings/${booking.id}/containers/${containerId}`),
     [router, booking.id],
   );
 
@@ -77,10 +78,12 @@ function Body({
       <ConfirmationTerms booking={booking} />
       <VesselAndBL bl={booking.bill_of_lading} />
       <ContainersSection bl={booking.bill_of_lading} onContainerPress={onContainerPress} />
-      <LegsSection legs={booking.legs} />
-      <POsSection pos={booking.purchase_orders} bookingId={booking.id} />
+      {/* The arrays below are non-null in the typed schema, but defend against a
+          null from the wire — `null.length` would crash the whole screen. */}
+      <LegsSection legs={booking.legs ?? []} />
+      <POsSection pos={booking.purchase_orders ?? []} bookingId={booking.id} />
       <ClearingDocsSection docs={booking.clearing_docs} />
-      <DeliverySection points={booking.delivery_points} />
+      <DeliverySection points={booking.delivery_points ?? []} />
     </ScrollView>
   );
 }
@@ -121,11 +124,11 @@ function ConfirmationTerms({ booking }: { booking: BookingDetail }) {
         <KV label="Free days (demurrage)" value={fmt(booking.free_days_demurrage)} />
         <KV
           label="Detention rate / day"
-          value={booking.detention_rate_gbp_after ? `£${booking.detention_rate_gbp_after}` : '—'}
+          value={formatMoney(booking.detention_rate_gbp_after, 'GBP')}
         />
         <KV
           label="Demurrage rate / day"
-          value={booking.demurrage_rate_gbp_after ? `£${booking.demurrage_rate_gbp_after}` : '—'}
+          value={formatMoney(booking.demurrage_rate_gbp_after, 'GBP')}
         />
         <KV label="Terminal" value={fmt(booking.port_of_discharge_terminal)} />
         <KV label="Service mode" value={fmt(booking.service_mode)} />
@@ -265,10 +268,7 @@ function POsSection({ pos, bookingId }: { pos: PurchaseOrder[]; bookingId: strin
           <Grid>
             <KV label="PO date" value={formatDate(po.po_date)} />
             <KV label="Quantity" value={`${po.quantity} ${po.quantity_unit}`} />
-            <KV
-              label="Total value"
-              value={po.total_value ? `${po.currency} ${po.total_value}` : '—'}
-            />
+            <KV label="Total value" value={formatMoney(po.total_value, po.currency)} />
             <KV label="Notes" value={fmt(po.notes)} />
           </Grid>
           <DocumentsList
@@ -303,10 +303,7 @@ function InvoiceBlock({
       </View>
       <Grid>
         <KV label="Invoice date" value={formatDate(invoice.invoice_date)} />
-        <KV
-          label="Value"
-          value={invoice.value ? `${invoice.currency} ${invoice.value}` : '—'}
-        />
+        <KV label="Value" value={formatMoney(invoice.value, invoice.currency)} />
         <KV label="Terms" value={fmt(invoice.payment_terms)} />
         <KV label="Due" value={formatDate(invoice.due_date)} />
       </Grid>
@@ -360,6 +357,12 @@ function SupplierPaymentsSection({
   const payments = data?.items ?? [];
   const totalPaid = sumDecimalStrings(payments.map((p) => p.amount));
   const ratio = parseRatio(totalPaid, invoiceValue);
+  // The "Paid X of Y" total sums only the fetched payments. We request a high
+  // limit so this is the whole list in practice, but if the server reports more
+  // than we fetched, the sum is partial — say so rather than under-count.
+  const fetchedCount = payments.length;
+  const totalCount = data?.total ?? fetchedCount;
+  const isPartial = totalCount > fetchedCount;
 
   return (
     <View style={styles.supplierPaymentsBlock}>
@@ -376,8 +379,15 @@ function SupplierPaymentsSection({
           <Text variant="body">
             Paid {formatMoney(totalPaid, currency)}
             {invoiceValue ? ` of ${formatMoney(invoiceValue, currency)}` : ''}
+            {isPartial ? ' (partial)' : ''}
           </Text>
           {ratio !== null ? <ProgressBar progress={ratio} /> : null}
+          {isPartial ? (
+            <Text variant="small" muted>
+              Showing {fetchedCount} of {totalCount} payments — total above covers only
+              those shown.
+            </Text>
+          ) : null}
 
           {payments.length > 0 ? (
             <View style={styles.supplierPaymentList}>
@@ -432,7 +442,7 @@ function ClearingDocsSection({ docs }: { docs: ClearingDocs | null }) {
         <KV label="Duty rate" value={docs.duty_rate ? `${docs.duty_rate}%` : '—'} />
         <KV
           label="Estimated duty + VAT"
-          value={docs.estimated_duty_vat ? `£${docs.estimated_duty_vat}` : '—'}
+          value={formatMoney(docs.estimated_duty_vat, 'GBP')}
         />
       </Grid>
       <View style={styles.checksBlock}>
@@ -576,46 +586,9 @@ function KV({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const message =
-    error instanceof ApiError
-      ? error.message
-      : error instanceof Error
-        ? error.message
-        : 'Something went wrong.';
-  return (
-    <View style={styles.centered}>
-      <Text muted style={styles.centeredText}>
-        {message}
-      </Text>
-      <Button title="Retry" variant="ghost" onPress={onRetry} />
-    </View>
-  );
-}
-
 function fmt(value: string | number | null | undefined): string {
   if (value == null || value === '') return '—';
   return String(value);
-}
-
-function formatDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 const styles = StyleSheet.create({
@@ -688,14 +661,14 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#ddd',
+    borderTopColor: colors.border,
     gap: spacing.sm,
   },
   supplierPaymentsBlock: {
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#ddd',
+    borderTopColor: colors.border,
     gap: spacing.sm,
   },
   supplierPaymentList: {
@@ -715,34 +688,24 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#ddd',
+    borderTopColor: colors.border,
     gap: spacing.sm,
   },
   dividerBottom: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#ddd',
+    borderBottomColor: colors.border,
   },
   checksBlock: {
     marginTop: spacing.sm,
     gap: spacing.xs,
   },
   checkOff: {
-    color: '#999',
+    color: colors.textMuted,
   },
   notesInline: {
     gap: spacing.xs,
   },
   failureText: {
-    color: '#c00',
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
-  },
-  centeredText: {
-    textAlign: 'center',
+    color: colors.error,
   },
 });

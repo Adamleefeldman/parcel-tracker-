@@ -3,6 +3,8 @@ export type { ButtonProps } from './Button';
 export { Card } from './Card';
 export { DateField } from './DateField';
 export type { DateFieldProps } from './DateField';
+export { ErrorState } from './ErrorState';
+export type { ErrorStateProps } from './ErrorState';
 export { FormError } from './FormError';
 export type { FormErrorProps } from './FormError';
 export { Input } from './Input';

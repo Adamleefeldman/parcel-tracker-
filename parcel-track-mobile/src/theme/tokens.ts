@@ -14,6 +14,8 @@ export const colors = {
   primaryText: '#fff',
   border: '#ddd',
   error: '#c00',
+  /** Light red fill behind error banners / dispute cards. */
+  errorSurface: '#fde6e6',
   warning: '#c80',
   success: '#0a7',
   surface: '#f7f7f7',

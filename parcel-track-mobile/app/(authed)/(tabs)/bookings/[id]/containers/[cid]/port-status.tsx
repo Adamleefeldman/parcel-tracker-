@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { useUpdatePortStatus } from '@/src/api/mutations/useUpdatePortStatus';
 import { useContainer } from '@/src/api/queries/useContainer';
@@ -77,7 +77,15 @@ export default function PortStatusForm() {
       {isLoading ? (
         <Spinner centered />
       ) : (
-        <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.flex}
+        >
+          <ScrollView
+            contentContainerStyle={styles.form}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+          >
           <Select
             label="Port status"
             value={currentPortStatus}
@@ -114,13 +122,17 @@ export default function PortStatusForm() {
           <Text variant="small" muted style={styles.hint}>
             Visible to all booking members.
           </Text>
-        </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
       )}
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   form: {
     paddingTop: spacing.md,
     paddingBottom: spacing.xxl,
