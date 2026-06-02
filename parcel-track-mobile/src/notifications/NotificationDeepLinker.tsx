@@ -4,13 +4,14 @@
  * Three subscriptions, all best-effort:
  *
  *  1. **Received-while-foreground.** Bumps the `['notifications']` query
- *     prefix so the Alerts tab list + the unread-count badge refresh. Same
+ *     prefix so the Inbox tab list + the unread-count badge refresh. Same
  *     prefix the mark-read mutation hits — see `useMarkNotificationRead`.
  *
  *  2. **Tap (background → foreground).** Reads `data.booking_id` /
  *     `data.notification_id` off the response (shipped by the backend in
  *     `app/background/tasks.py` → `send_push_notification`). Deep-links to
- *     `/bookings/{id}` if present, else falls back to `/alerts`, and PATCHes
+ *     `/bookings/{id}` if present, else falls back to `/inbox` (where the
+ *     notifications feed now lives — Phase 10), and PATCHes
  *     the mark-read endpoint via `authedApiRequest` (one fire-and-forget
  *     write; we're outside React render so we can't use the hook).
  *
@@ -47,7 +48,7 @@ function markReadFireAndForget(notificationId: string | undefined): void {
   void authedApiRequest(`/api/v1/notifications/${notificationId}/read`, {
     method: 'PATCH',
   }).catch(() => {
-    // Best-effort — the row is still reachable via Alerts and pull-to-refresh.
+    // Best-effort — the row is still reachable via Inbox and pull-to-refresh.
   });
 }
 
@@ -66,7 +67,7 @@ export function NotificationDeepLinker(): null {
     if (data.booking_id) {
       router.push(`/bookings/${data.booking_id}`);
     } else {
-      router.push('/alerts');
+      router.push('/inbox');
     }
   };
 
