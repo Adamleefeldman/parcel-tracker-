@@ -14,7 +14,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Animated, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, radii, spacing } from '../../theme/tokens';
+import { colors, radii, shadows, spacing } from '../../theme/tokens';
 import { Text } from './Text';
 
 export type ToastTone = 'success' | 'error' | 'info';
@@ -96,9 +96,9 @@ export function useToast(): ToastContextValue {
 }
 
 const toneColor: Record<ToastTone, string> = {
-  success: colors.success,
-  error: colors.error,
-  info: colors.text,
+  success: colors.green,
+  error: colors.red,
+  info: colors.primary,
 };
 
 const styles = StyleSheet.create({
@@ -108,10 +108,11 @@ const styles = StyleSheet.create({
     right: spacing.lg,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
+    ...shadows.sh3,
   },
   message: {
-    color: colors.primaryText,
+    color: colors.primaryInk,
     textAlign: 'center',
   },
 });

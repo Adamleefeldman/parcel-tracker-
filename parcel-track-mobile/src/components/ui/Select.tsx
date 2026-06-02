@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import { colors, radii, spacing, type as typo } from '../../theme/tokens';
+import { colors, radii, shadows, spacing, type as typo } from '../../theme/tokens';
 import { ListItem } from './ListItem';
 import { Text } from './Text';
 
@@ -97,27 +97,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    backgroundColor: colors.bgElev,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.line,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
   },
   caret: {
-    ...typo.body,
+    fontSize: typo.body.fontSize,
     marginLeft: spacing.sm,
   },
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(14,18,23,0.4)',
   },
   sheet: {
-    backgroundColor: colors.bg,
-    borderTopLeftRadius: radii.lg,
-    borderTopRightRadius: radii.lg,
+    backgroundColor: colors.bgElev,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
     paddingTop: spacing.lg,
     paddingBottom: spacing.xxl,
+    ...shadows.sheet,
   },
   sheetTitle: {
     paddingHorizontal: spacing.lg,

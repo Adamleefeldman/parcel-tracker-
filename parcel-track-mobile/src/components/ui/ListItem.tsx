@@ -52,8 +52,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.bg,
+    borderBottomColor: colors.line,
+    backgroundColor: colors.bgElev,
   },
   text: {
     flex: 1,

@@ -29,7 +29,7 @@ export function FormError({ error, fallback }: FormErrorProps) {
   const message = error instanceof ApiError ? error.message : fallback;
   return (
     <View style={styles.banner}>
-      <Text variant="small" style={styles.text}>
+      <Text variant="label" color={colors.redInk}>
         {message}
       </Text>
     </View>
@@ -38,15 +38,10 @@ export function FormError({ error, fallback }: FormErrorProps) {
 
 const styles = StyleSheet.create({
   banner: {
-    backgroundColor: colors.errorSurface,
-    borderWidth: 1,
-    borderColor: colors.error,
+    backgroundColor: colors.redSoft,
     borderRadius: radii.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
     marginBottom: spacing.md,
-  },
-  text: {
-    color: colors.error,
   },
 });

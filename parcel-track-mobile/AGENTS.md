@@ -1,6 +1,6 @@
 # AGENTS.md — parcel-track-mobile
 
-_Last reviewed: 2026-06-02. The Expo SDK pin and any "current state" notes below go stale fast — update this date whenever you touch them._
+_Last reviewed: 2026-06-02 (Phase 9 design-system). The Expo SDK pin and any "current state" notes below go stale fast — update this date whenever you touch them._
 
 The companion backend doc is [`../parcel-track/CLAUDE.md`](../parcel-track/CLAUDE.md). Read it before doing anything that crosses the API boundary (auth shape, status enums, endpoint paths under `/api/v1`, error envelope).
 
@@ -74,9 +74,85 @@ Bundle / package: `com.thefmcghub.logistics` (permanent — do not change).
 - **Single-flight refresh.** N concurrent 401s run exactly one `POST /api/v1/auth/refresh`. Don't add a parallel path.
 - **Session-expired is an event, not a return value.** On refresh failure, `client.ts` calls `clearTokens()` and `emitSessionExpired()` (`src/auth/sessionEvents.ts`). `AuthProvider` listens and flips status → `anonymous`, which re-renders the login screen. Don't try to navigate from inside the API client.
 - **`AuthContext` is the only consumer of token storage.** Screens read `useAuth()` for `{ status, user, signIn, signOut }` — they don't call `getAccessToken()` themselves.
-- **Theme tokens, not inline styles.** Colours, spacing, radii live in `src/theme/tokens.ts` and are consumed via `src/theme/index.ts`. Hard-coded hex/px in a component is a code-smell.
+- **Theme tokens, not inline styles.** Colours, spacing, radii, shadows, and the Geist type scale live in `src/theme/tokens.ts` and are consumed via `src/theme/index.ts`. Hard-coded hex/px or a raw `fontWeight` in a component is a code-smell. See **Theme & design system** below for the full vocabulary.
 - **Shared UI primitives in `src/components/ui/`.** `Button`, `Card`, `FormError`, `Input`, `ListItem`, `Pill`, `ScreenContainer`, `Select`, `Spinner`, `StatusPill`, `Text`, plus the `ToastProvider`/`useToast` feedback system. Reach for these before building bespoke views.
 - **One status-pill component.** Any badge that renders a `BookingStatus` or `ContainerLifecycleStatus` goes through `<StatusPill>` (`src/components/ui/StatusPill.tsx`). It maps each enum value to a tone via an exhaustive `Record<...>` — a new backend enum value will fail TS until the mapping in `statusPillMapping.ts` is updated. Don't render raw status strings, and don't reimplement a local tone-picker.
+
+---
+
+## Theme & design system
+
+Phase 9 ported the client prototype's visual identity onto the tokens: a warm
+"paper" palette, the **Geist** typeface, and soft/ink semantic color pairs. It
+was a **reskin only** — no IA/feature/backend changes; the prototype's bigger
+ideas (4-tab IA, Money-risk dashboard, enriched Inbox, Admin console) are
+catalogued in `mobile-redesign-roadmap.md` as later phases. Everything funnels
+through `src/theme/tokens.ts` + the primitives in `src/components/ui/`, so a
+screen almost never sets a color/font itself.
+
+### Palette (soft/ink convention)
+
+`colors` is a warm-paper surface ramp (`bg`/`bgSoft`/`bgSunk`/`bgElev`), a cool
+ink text ramp (`ink`/`ink2`/`ink3`/`ink4`), borders (`line`/`lineStrong`), the
+brand navy (`primary`/`primarySoft`/`primaryInk`), and four semantic triplets —
+`green`/`amber`/`red`/`info`, each with a `*Soft` (surface fill) and `*Ink`
+(text-on-fill) variant. **A pill or banner uses `xSoft` as fill + `xInk` as
+text** (low-saturation surface, high-contrast text), not a saturated outline.
+
+The pre-Phase-9 export names are kept as **aliases** pointing at the new palette
+(`text→ink`, `textMuted→ink3`, `border→line`, `surface→bgSoft`,
+`primaryText→primaryInk`, `error→red`, `errorSurface→redSoft`, `warning→amber`,
+`success→green`) so screens importing `colors.text` etc. didn't churn. Prefer
+the new names in new code.
+
+### Typography — Geist (weight-by-family)
+
+**Custom RN fonts do NOT synthesize weight.** `fontFamily:'Geist'` +
+`fontWeight:'700'` renders Regular, not Bold. So every cut is loaded as its own
+family in `app/_layout.tsx`: `Geist-Regular/Medium/SemiBold/Bold` +
+`GeistMono-Regular/Medium` (from `@expo-google-fonts/geist` + `geist-mono`). The
+**only** place that maps a `(weight, mono)` pair to a family string is
+`fontFamily()` in `tokens.ts`; the `<Text>` primitive is its sole caller.
+
+- **Never set `fontWeight` in a component.** Use `<Text weight="semibold">` (or
+  a variant whose default weight is heavier). The weight prop picks the family.
+- **`<Text>` is the font funnel** — apply Geist there, not per screen. Variants:
+  `display`/`heading`/`title`/`body`/`label`/`small`/`overline` (the tracked
+  uppercase label, e.g. "BOOKINGS"). Each carries a default weight; override via
+  `weight`.
+- **`mono` is for refs/IDs/amounts** — container/booking refs, vessel IMO,
+  invoice numbers, the state-machine chip text, monetary figures in dense rows.
+  `<Text mono>`. Geist Mono ships Regular + Medium only (heavier cuts fall back
+  to Medium).
+
+### Radii, shadows
+
+`radii` = `sm 6 / md 10 / lg 14 / xl 20 / pill 999`. `shadows` = `sh1` (hairline)
+/ `sh2` (resting card) / `sh3` (raised) / `sheet` (bottom sheets, casts upward) —
+RN-friendly maps (iOS `shadow*` + Android `elevation`); spread `...shadows.sh2`.
+RN can't draw the prototype's 1px ring via shadow, so `Card` pairs `sh2` with a
+real `borderWidth:1` + `line`.
+
+### Font-loading boot sequence (`app/_layout.tsx`)
+
+`SplashScreen.preventAutoHideAsync()` runs at module load. `RootLayout` loads
+the six families via `useFonts`, **returns `null` until they resolve** (so the
+first painted frame is already in-font — no system-font flash), then hides the
+splash in an effect once `fontsLoaded || fontError`. On font error it falls back
+to the system font rather than hanging on the splash. The splash background is
+the brand paper `#fcfaf6` (`expo-splash-screen` plugin in `app.json`).
+
+### Primitives
+
+All restyled to the prototype: `Pill` (soft/ink, full pill radius, borderless),
+`Button` (navy primary + `sh2`, secondary/ghost), `Card` (elevated white + ring
+
+- `sh2`), `Input`/`Select`/`DateField` (elevated field, navy focus ring),
+  `FormError` (`redSoft`/`redInk`), `ProgressBar` (rounded navy fill on `bgSunk`),
+  `BookingStepper` (presentational segmented DRAFT→…→DONE bar fed by
+  `BookingStatus`), plus `Toast`/`Spinner`/`ScreenContainer`/`ListItem`. Restyle a
+  primitive, not 40 screens. Don't change a primitive's props/behavior — visual
+  only.
 
 ---
 
@@ -241,6 +317,8 @@ This means deep-linking straight to a container URL works (cold cache → loads 
 
 `<StatusPill kind="booking" | "lifecycle" status={…}>` is the single way to render a status badge. The tone mappings (`BOOKING_TONES`, `LIFECYCLE_TONES`) live in `statusPillMapping.ts` next to the component, typed as `Record<EnumType, PillTone>` so missing an enum member fails the typecheck. Tests in `StatusPill.test.ts` belt-and-braces this at runtime. Don't render raw status strings; don't add a second tone-picker anywhere.
 
+**Tones (`PillTone`, Phase 9 — prototype-aligned).** Five tones, each a soft/ink pair: `default` (grey, early/idle), `info` (**blue**, in-flight shipping), `warning` (amber, money in progress), `success` (green, terminal-good), `error` (red, problem). The prototype colors in-flight SHIPPING states **blue**, not amber — so `bl_issued`/`in_transit`/`cleared` + `at_sea`/`arrived`/`import_cleared`/`delivered` → `info`; `invoice_received`/`payment_confirmed`/`invoiced` (money pending) → `warning`; `complete`/`paid`/`banked`/`closed` → `success`; `disputed` → `error`; `draft`/`po_submitted`/`ordered` → `default`. A few were judgment calls where the prototype was silent (noted in the Phase 9 PR): `po_submitted`/`payment_confirmed` and `delivered` (kept in the blue physical-movement family before the amber money phase). Update the `Record<>` **and** `StatusPill.test.ts` in lock-step.
+
 The two enums map to different state-spaces:
 
 - `BookingStatus` — coarse booking lifecycle (`draft → … → complete`).
@@ -387,6 +465,7 @@ Bump when a matching Expo Go ships: `npx expo install expo@latest --fix`, then u
 | Editing `.env*` and expecting hot reload                                                                         | Env files are bundler-startup only. Restart `expo start`                                                                                             |
 | Logging out on `ApiError.isNetworkError`                                                                         | Transport failure is not an auth failure. Surface "check your connection" instead                                                                    |
 | Inline `#hex` colours / magic px in a component                                                                  | Use `src/theme/tokens.ts`                                                                                                                            |
+| `fontWeight:'700'` (or any `fontWeight`) on a custom-font `<Text>`                                               | Custom RN fonts don't synthesize weight — it renders Regular. Use `<Text weight="semibold">`; family-by-weight resolves via `fontFamily()` (Theme)   |
 | Rendering a status string directly or rolling a local `toneFor` helper                                           | Use `<StatusPill kind="booking"                                                                                                                      | "lifecycle" …>` — see Status pills |
 | Calling `apiRequest` directly from a screen for authed reads                                                     | Use a query hook in `src/api/queries/` via `useQuery` + `authedApiRequest`                                                                           |
 | Calling `apiRequest`/`fetch` from a screen for a write                                                           | Use a mutation hook in `src/api/mutations/` via `useMutation` + `authedApiRequest`; invalidate the parent `['booking', id]` on success               |

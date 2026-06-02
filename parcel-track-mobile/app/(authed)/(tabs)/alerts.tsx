@@ -90,7 +90,7 @@ function AlertRow({
             {formatRelativeTime(notification.created_at)}
           </Text>
         </View>
-        <Text variant="body" numberOfLines={1} style={unread ? styles.unreadTitle : undefined}>
+        <Text variant="body" weight={unread ? 'semibold' : 'regular'} numberOfLines={1}>
           {notification.title}
         </Text>
         <Text variant="small" muted numberOfLines={2}>
@@ -125,9 +125,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
-  },
-  unreadTitle: {
-    fontWeight: '700',
   },
   emptyContainer: {
     flexGrow: 1,

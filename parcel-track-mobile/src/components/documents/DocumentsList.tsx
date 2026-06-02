@@ -76,7 +76,7 @@ export function DocumentsList({ entityType, entityId, label }: DocumentsListProp
           </Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onAdd} accessibilityRole="button">
-          <Text variant="small" style={styles.add}>
+          <Text variant="small" weight="semibold" style={styles.add}>
             + Add
           </Text>
         </TouchableOpacity>
@@ -169,7 +169,6 @@ const styles = StyleSheet.create({
   },
   add: {
     color: colors.primary,
-    fontWeight: '600',
   },
   body: {
     marginTop: spacing.sm,

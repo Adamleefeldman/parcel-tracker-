@@ -1,3 +1,5 @@
+export { BookingStepper } from './BookingStepper';
+export type { BookingStepperProps } from './BookingStepper';
 export { Button } from './Button';
 export type { ButtonProps } from './Button';
 export { Card } from './Card';
