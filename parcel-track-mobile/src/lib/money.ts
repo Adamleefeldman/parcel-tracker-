@@ -34,10 +34,7 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
  * aggregate's numbers without ever doing float maths on the value — it splits
  * the decimal lexically and groups the integer part, so exact digits survive.
  */
-export function formatMoney(
-  amount: string | number | null | undefined,
-  currency = 'GBP',
-): string {
+export function formatMoney(amount: string | number | null | undefined, currency = 'GBP'): string {
   if (amount === null || amount === undefined || amount === '') return EMPTY_MONEY;
   const raw = typeof amount === 'number' ? String(amount) : amount.trim();
   const symbol = CURRENCY_SYMBOLS[currency] ?? `${currency} `;

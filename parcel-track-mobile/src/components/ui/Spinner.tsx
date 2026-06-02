@@ -7,7 +7,12 @@ export interface SpinnerProps extends ActivityIndicatorProps {
   centered?: boolean;
 }
 
-export function Spinner({ centered, size = 'large', color = colors.primary, ...rest }: SpinnerProps) {
+export function Spinner({
+  centered,
+  size = 'large',
+  color = colors.primary,
+  ...rest
+}: SpinnerProps) {
   if (centered) {
     return (
       <View style={styles.centered}>

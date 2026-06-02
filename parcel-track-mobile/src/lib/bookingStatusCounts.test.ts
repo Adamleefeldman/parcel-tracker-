@@ -34,8 +34,8 @@ describe('countByStatus', () => {
 
 describe('totalCount', () => {
   it('sums all status counts', () => {
-    expect(totalCount(countByStatus([booking('draft'), booking('cleared'), booking('complete')]))).toBe(
-      3,
-    );
+    expect(
+      totalCount(countByStatus([booking('draft'), booking('cleared'), booking('complete')])),
+    ).toBe(3);
   });
 });

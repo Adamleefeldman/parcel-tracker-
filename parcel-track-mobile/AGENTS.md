@@ -51,19 +51,19 @@ Bundle / package: `com.thefmcghub.logistics` (permanent — do not change).
 
 ## Stack
 
-| Layer | Technology |
-|---|---|
-| Framework | Expo SDK 54 (pinned — see Expo SDK pin note below) |
-| Runtime | React Native 0.81, React 19.1, Hermes |
-| Language | TypeScript ~5.9 (strict; no DOM lib used) |
-| Auth storage | `expo-secure-store` |
-| JWT decode (UI only) | `jwt-decode` |
-| HTTP | native `fetch`, wrapped by `src/api/client.ts` |
-| Tests | jest 29 + ts-jest (node env, pure-logic only) |
-| Navigation | Expo Router (file-based; routes under `app/`, route groups `(auth)` + `(authed)`; the signed-in area is a bottom-tab navigator under `(authed)/(tabs)`) |
-| Server state | TanStack Query — `QueryClientProvider` in `app/_layout.tsx`; hooks in `src/api/queries/` |
-| Client state | React Context only (`AuthContext`). No Redux/Zustand until there's a concrete need |
-| Env loading | `expo` reads `.env`, `.env.local`, `.env.production` at bundler start |
+| Layer                | Technology                                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework            | Expo SDK 54 (pinned — see Expo SDK pin note below)                                                                                                      |
+| Runtime              | React Native 0.81, React 19.1, Hermes                                                                                                                   |
+| Language             | TypeScript ~5.9 (strict; no DOM lib used)                                                                                                               |
+| Auth storage         | `expo-secure-store`                                                                                                                                     |
+| JWT decode (UI only) | `jwt-decode`                                                                                                                                            |
+| HTTP                 | native `fetch`, wrapped by `src/api/client.ts`                                                                                                          |
+| Tests                | jest 29 + ts-jest (node env, pure-logic only)                                                                                                           |
+| Navigation           | Expo Router (file-based; routes under `app/`, route groups `(auth)` + `(authed)`; the signed-in area is a bottom-tab navigator under `(authed)/(tabs)`) |
+| Server state         | TanStack Query — `QueryClientProvider` in `app/_layout.tsx`; hooks in `src/api/queries/`                                                                |
+| Client state         | React Context only (`AuthContext`). No Redux/Zustand until there's a concrete need                                                                      |
+| Env loading          | `expo` reads `.env`, `.env.local`, `.env.production` at bundler start                                                                                   |
 
 ---
 
@@ -82,23 +82,23 @@ Bundle / package: `com.thefmcghub.logistics` (permanent — do not change).
 
 ## Folder map
 
-| Folder | What lives here | Example |
-|---|---|---|
-| `app/` | Expo Router routes. Route groups `(auth)` (anon-only) + `(authed)` (signed-in); the signed-in area is the bottom-tab group `(authed)/(tabs)` (Dashboard / Bookings / Alerts). Each folder has a `_layout.tsx` for its guard/navigator | `app/(authed)/(tabs)/bookings/[id]/index.tsx` |
-| `src/api/` | HTTP client + typed endpoint wrappers + React-hook-shaped queries | `client.ts`, `authedClient.ts`, `queries/useBookings.ts`, `queries/useBooking.ts` |
-| `src/api/queries/` | TanStack Query read hooks | `useBookings.ts`, `useBooking.ts`, `useContainer.ts` |
-| `src/api/mutations/` | TanStack Query write hooks (invalidate-and-refetch) | `useUpdatePortStatus.ts`, `useOpenDispute.ts`, `useCreateCustomerPayment.ts`, `useUploadDocument.ts` |
-| `src/api/documents/` | Imperative (non-cached) document helpers | `getDownloadUrl.ts` |
-| `src/api/types/` | Hand-typed TS mirrors of backend Pydantic schemas. Split per domain | `booking.ts`, `container.ts`, `enums.ts` |
-| `src/auth/` | Auth state machine, token storage, JWT decode, session events, role gating | `AuthContext.tsx`, `tokenStorage.ts`, `jwt.ts`, `sessionEvents.ts`, `authApi.ts`, `permissions.ts` |
-| `src/components/` | Cross-cutting components that compose primitives | `AppHeader.tsx`, `documents/DocumentsList.tsx` |
-| `src/components/ui/` | Reusable presentational primitives — no network, no storage | `Button.tsx`, `Card.tsx`, `StatusPill.tsx`, `ScreenContainer.tsx` |
-| `src/config/` | Env-derived constants. Single export per concern | `api.ts` (`API_BASE_URL`) |
-| `src/theme/` | Design tokens + theme helpers | `tokens.ts`, `index.ts` |
-| `src/lib/` | Framework-agnostic pure helpers (no React, no network) | `money.ts`, `idempotency.ts` |
-| `src/forms/` | zod schemas + form→body mappers for non-trivial forms | `customerPaymentSchema.ts` |
-| `src/__mocks__/` | Jest manual mocks for native modules that don't run in node | `expo-secure-store.ts`, `expo-crypto.ts` |
-| _(future)_ `src/hooks/` | Cross-screen hooks that aren't tied to a single domain | — |
+| Folder                  | What lives here                                                                                                                                                                                                                       | Example                                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `app/`                  | Expo Router routes. Route groups `(auth)` (anon-only) + `(authed)` (signed-in); the signed-in area is the bottom-tab group `(authed)/(tabs)` (Dashboard / Bookings / Alerts). Each folder has a `_layout.tsx` for its guard/navigator | `app/(authed)/(tabs)/bookings/[id]/index.tsx`                                                        |
+| `src/api/`              | HTTP client + typed endpoint wrappers + React-hook-shaped queries                                                                                                                                                                     | `client.ts`, `authedClient.ts`, `queries/useBookings.ts`, `queries/useBooking.ts`                    |
+| `src/api/queries/`      | TanStack Query read hooks                                                                                                                                                                                                             | `useBookings.ts`, `useBooking.ts`, `useContainer.ts`                                                 |
+| `src/api/mutations/`    | TanStack Query write hooks (invalidate-and-refetch)                                                                                                                                                                                   | `useUpdatePortStatus.ts`, `useOpenDispute.ts`, `useCreateCustomerPayment.ts`, `useUploadDocument.ts` |
+| `src/api/documents/`    | Imperative (non-cached) document helpers                                                                                                                                                                                              | `getDownloadUrl.ts`                                                                                  |
+| `src/api/types/`        | Hand-typed TS mirrors of backend Pydantic schemas. Split per domain                                                                                                                                                                   | `booking.ts`, `container.ts`, `enums.ts`                                                             |
+| `src/auth/`             | Auth state machine, token storage, JWT decode, session events, role gating                                                                                                                                                            | `AuthContext.tsx`, `tokenStorage.ts`, `jwt.ts`, `sessionEvents.ts`, `authApi.ts`, `permissions.ts`   |
+| `src/components/`       | Cross-cutting components that compose primitives                                                                                                                                                                                      | `AppHeader.tsx`, `documents/DocumentsList.tsx`                                                       |
+| `src/components/ui/`    | Reusable presentational primitives — no network, no storage                                                                                                                                                                           | `Button.tsx`, `Card.tsx`, `StatusPill.tsx`, `ScreenContainer.tsx`                                    |
+| `src/config/`           | Env-derived constants. Single export per concern                                                                                                                                                                                      | `api.ts` (`API_BASE_URL`)                                                                            |
+| `src/theme/`            | Design tokens + theme helpers                                                                                                                                                                                                         | `tokens.ts`, `index.ts`                                                                              |
+| `src/lib/`              | Framework-agnostic pure helpers (no React, no network)                                                                                                                                                                                | `money.ts`, `idempotency.ts`                                                                         |
+| `src/forms/`            | zod schemas + form→body mappers for non-trivial forms                                                                                                                                                                                 | `customerPaymentSchema.ts`                                                                           |
+| `src/__mocks__/`        | Jest manual mocks for native modules that don't run in node                                                                                                                                                                           | `expo-secure-store.ts`, `expo-crypto.ts`                                                             |
+| _(future)_ `src/hooks/` | Cross-screen hooks that aren't tied to a single domain                                                                                                                                                                                | —                                                                                                    |
 
 Tests sit next to the file under test (`client.test.ts` next to `client.ts`), not in a parallel tree.
 
@@ -119,7 +119,7 @@ app/(authed)/(tabs)/bookings/_layout.tsx   # <Stack> for the Bookings tab; regis
 app/(authed)/(tabs)/bookings/**            # list → [id] detail → containers/[cid] → modals
 ```
 
-- **Where new screens go.** A new *top-level destination* is a tab (a file/dir under `(tabs)` + a `<Tabs.Screen>`). A new *bookings detail/form screen* goes inside the Bookings-tab stack (`(tabs)/bookings/…`) so it pushes within that tab.
+- **Where new screens go.** A new _top-level destination_ is a tab (a file/dir under `(tabs)` + a `<Tabs.Screen>`). A new _bookings detail/form screen_ goes inside the Bookings-tab stack (`(tabs)/bookings/…`) so it pushes within that tab.
 - **Modals live in the Bookings-tab stack.** `presentation: 'modal'` for port-status / dispute / record-payment is declared in `(authed)/(tabs)/bookings/_layout.tsx` (names relative to it, e.g. `[id]/containers/[cid]/port-status`) — **not** in `(authed)/_layout.tsx` anymore.
 - **Route groups are invisible in the URL.** `(authed)` and `(tabs)` are parenthesised groups, so a booking's URL stays `/bookings/{id}` regardless of nesting — existing `router.push('/bookings/…')` / `/(authed)/bookings/…` hrefs kept working through the restructure untouched. Switch tabs with a plain href (`router.push('/alerts')`).
 - **Cold start lands on the Dashboard tab** (`(tabs)/index.tsx`); the old `(authed)/index.tsx` redirect was deleted.
@@ -134,7 +134,7 @@ app/(authed)/(tabs)/bookings/**            # list → [id] detail → containers
 
 - **Greeting is the role label only** — there is no `/me` endpoint and the JWT carries no name.
 - **Status counts are client-side.** The bookings list has no faceted-count endpoint, so the dashboard does one `useBookings({ limit: 200 })` and groups with `countByStatus` (`src/lib/bookingStatusCounts.ts`). Caps at one page; the volume upgrade is N `status=X&limit=1` calls reading `total`.
-- **Booking grain only.** There is no cross-booking container endpoint, so dashboards summarize *bookings* (e.g. the UK agent sees their in-transit / cleared bookings); drill into a booking for its containers.
+- **Booking grain only.** There is no cross-booking container endpoint, so dashboards summarize _bookings_ (e.g. the UK agent sees their in-transit / cleared bookings); drill into a booking for its containers.
 - Count cards + the alerts teaser navigate to the Bookings / Alerts tabs (no status filter on the list yet).
 
 ## Notifications (alerts feed)
@@ -144,7 +144,7 @@ Endpoints (`parcel-track/app/api/routes/notifications.py`):
 - `GET /api/v1/notifications?unread_only=&limit=&offset=` → `PaginatedResponse<NotificationOut>` (`useNotifications`, key `['notifications', filters]`).
 - **`PATCH`** `/api/v1/notifications/{id}/read` (no body) → `{ message }` (`useMarkNotificationRead`). It is PATCH, **not** POST.
 - There is **no** `/unread-count` and **no** mark-all-read endpoint. The tab badge derives the count from `GET …?unread_only=true&limit=1` → `.total` (`useUnreadCount`, key `['notifications', 'unread-count']`).
-- **Prefix invalidation:** `useMarkNotificationRead` invalidates the bare `['notifications']` prefix — one call refetches every list query *and* the unread-count badge (both sit under that prefix).
+- **Prefix invalidation:** `useMarkNotificationRead` invalidates the bare `['notifications']` prefix — one call refetches every list query _and_ the unread-count badge (both sit under that prefix).
 - **`NotificationOut`** = `{ id, type, title, message, read, booking_id, created_at }` — the field is `message` (not `body`), and the only entity reference is `booking_id` (nullable). So a row **deep-links to `/bookings/{booking_id}` when set**, and is mark-read-only otherwise (no `entity_type`/`entity_id` exist).
 - **`NotificationType`** has 15 values (mirror in `src/api/types/enums.ts`); `NOTIFICATION_LABELS`/`NOTIFICATION_TONES` (`src/features/alerts/notificationDisplay.ts`) map each exhaustively — a new backend value fails the typecheck until added.
 
@@ -156,9 +156,9 @@ Every call through `apiRequest` either resolves with the parsed JSON body (typed
 
 ```ts
 class ApiError extends Error {
-  readonly status: number;       // HTTP status, or 0 for transport-level failure
-  readonly payload: unknown;     // parsed response body (or original error for status === 0)
-  readonly isNetworkError: boolean;  // true iff status === 0
+  readonly status: number; // HTTP status, or 0 for transport-level failure
+  readonly payload: unknown; // parsed response body (or original error for status === 0)
+  readonly isNetworkError: boolean; // true iff status === 0
 }
 ```
 
@@ -213,7 +213,7 @@ Singular vs plural matters — `['booking', id]` and `['bookings', filters]` are
 ['customer-payments', bookingId, containerId, 'aggregate'] // rolled-up totals
 ```
 
-The aggregate key is the list key **plus a trailing `'aggregate'`**, so a single `invalidateQueries({ queryKey: ['customer-payments', bookingId, containerId] })` (a prefix match) refetches *both*. `useCreateCustomerPayment` invalidates that prefix **and** `['booking', bookingId]` (a payment recomputes the container `lifecycle_status`, read off the booking-detail response). Keep the key builders (`customerPaymentsQueryKey`, `customerPaymentAggregateQueryKey`) as the single source of these shapes — the query-key test asserts the prefix relationship.
+The aggregate key is the list key **plus a trailing `'aggregate'`**, so a single `invalidateQueries({ queryKey: ['customer-payments', bookingId, containerId] })` (a prefix match) refetches _both_. `useCreateCustomerPayment` invalidates that prefix **and** `['booking', bookingId]` (a payment recomputes the container `lifecycle_status`, read off the booking-detail response). Keep the key builders (`customerPaymentsQueryKey`, `customerPaymentAggregateQueryKey`) as the single source of these shapes — the query-key test asserts the prefix relationship.
 
 ### Cross-screen data flow
 
@@ -226,6 +226,7 @@ This means deep-linking straight to a container URL works (cold cache → loads 
 `<StatusPill kind="booking" | "lifecycle" status={…}>` is the single way to render a status badge. The tone mappings (`BOOKING_TONES`, `LIFECYCLE_TONES`) live in `statusPillMapping.ts` next to the component, typed as `Record<EnumType, PillTone>` so missing an enum member fails the typecheck. Tests in `StatusPill.test.ts` belt-and-braces this at runtime. Don't render raw status strings; don't add a second tone-picker anywhere.
 
 The two enums map to different state-spaces:
+
 - `BookingStatus` — coarse booking lifecycle (`draft → … → complete`).
 - `ContainerLifecycleStatus` — per-container end-to-end position (`ordered → at_sea → … → closed`, plus `disputed` as a side-state).
 
@@ -238,7 +239,7 @@ The first write path landed in Phase 3 (container port-status + dispute open/ack
 - **Hooks live in `src/api/mutations/`**, one file per endpoint, shaped `useXxx(bookingId, containerId)` returning a TanStack `useMutation`. The `mutationFn` calls `authedApiRequest<T>(path, { method, body })` — same client as queries, so the 401→refresh→retry-once flow comes for free. Never call `apiRequest`/`fetch` directly. For idempotent financial POSTs, the variables also carry an `idempotencyKey` passed via the `headers` option (see Idempotency).
 - **Invalidate-and-refetch on success.** `onSuccess: () => queryClient.invalidateQueries({ queryKey: bookingQueryKey(bookingId) })`. Container state is read out of the booking-detail response (no standalone container endpoint — see Cross-screen data flow), so refetching the booking re-derives the fresh container. A brief refetch spinner is acceptable for an internal tool.
 - **The screen wires `onSuccess` per call** (`mutation.mutate(body, { onSuccess })`) for toast + navigation — the hook only owns the request + cache invalidation. Disable the submit button on `mutation.isPending`. For errors, render `mutation.error` (inline `<FormError>` in modal forms, or an `onError` toast on a non-modal screen — see Toasts).
-- **Future optimisation (not built):** the dispute open/ack endpoints *return* the updated `ContainerOut`, so those two could switch to optimistic updates (`setQueryData` on mutate + rollback on error) if the refetch flicker proves annoying. Port-status returns only `{ message }`, so it stays refetch-based regardless. Left as a deliberate later improvement to keep the first write path uniform.
+- **Future optimisation (not built):** the dispute open/ack endpoints _return_ the updated `ContainerOut`, so those two could switch to optimistic updates (`setQueryData` on mutate + rollback on error) if the refetch flicker proves annoying. Port-status returns only `{ message }`, so it stays refetch-based regardless. Left as a deliberate later improvement to keep the first write path uniform.
 - **Tests** (`src/api/mutations/*.test.ts`) mock `useMutation`/`useQueryClient` + `authedApiRequest` and assert the mutationFn's path/method/body and that `onSuccess` invalidates the right key. No RN renderer (consistent with Testing policy).
 
 ### Money (Decimal discipline)
@@ -247,10 +248,10 @@ This app handles money; floats silently corrupt it. The rules, enforced from Pha
 
 - **Amounts are `string` end-to-end.** Types, form state, and the request body all carry decimal strings (`"1000.50"`) — exactly what the backend's `Decimal` fields (de)serialize as for the create/list (Pydantic) shapes. **Never `parseFloat`/`Number()` a money value for storage or submission.**
 - **The one sanctioned float coercion is `parseRatio` in `src/lib/money.ts`**, and only because a progress-bar width is cosmetic and never round-trips to the server. A reviewer greps for stray `parseFloat` — if you need one elsewhere, you're probably doing it wrong.
-- **Display via `formatMoney(amount, currency)`** (`src/lib/money.ts`): `"£1,000.50"`, `"—"` for null/masked. It groups thousands *lexically* (string split, no float maths) so exact digits survive, and accepts `string | number` — the latter because the payments **aggregate** endpoint is the exception below.
+- **Display via `formatMoney(amount, currency)`** (`src/lib/money.ts`): `"£1,000.50"`, `"—"` for null/masked. It groups thousands _lexically_ (string split, no float maths) so exact digits survive, and accepts `string | number` — the latter because the payments **aggregate** endpoint is the exception below.
 - **Total money client-side with `sumDecimalStrings(values)`** (`src/lib/money.ts`), never a `parseFloat` reduce. It sums in integer **cents** (lexical split of each decimal string), skips null/empty entries (masked/absent amounts), and returns a 2-dp decimal string — so `["0.10","0.20"] → "0.30"`, never `0.30000000000000004`. This is the canonical way to roll up a list of amounts (e.g. the supplier-payments per-invoice "Paid X / Y"). The progress-bar ratio still goes through `parseRatio` (the one cosmetic float).
 - **"Is it paid/banked?" comes from the backend, not client math.** Use `container.lifecycle_status === 'banked'` (authoritative — the server recomputes it from banked totals vs `sale_price_total`). Don't compare Decimal sums client-side to decide payment state.
-- **Backend money-serialization gotcha:** model responses (`CustomerPaymentOut`, `ContainerOut`) serialize `Decimal` → JSON **string**. But the customer-payments **aggregate** route returns a *plain dict* (no `response_model`), so FastAPI's `jsonable_encoder` serializes its Decimals → JSON **number**. Hence `CustomerPaymentAggregate` is typed with `number` fields and the money helpers accept `string | number`. Watch for this on any future endpoint that returns a bare dict of Decimals.
+- **Backend money-serialization gotcha:** model responses (`CustomerPaymentOut`, `ContainerOut`) serialize `Decimal` → JSON **string**. But the customer-payments **aggregate** route returns a _plain dict_ (no `response_model`), so FastAPI's `jsonable_encoder` serializes its Decimals → JSON **number**. Hence `CustomerPaymentAggregate` is typed with `number` fields and the money helpers accept `string | number`. Watch for this on any future endpoint that returns a bare dict of Decimals.
 
 ### Forms (react-hook-form + zod)
 
@@ -259,14 +260,14 @@ The standard for **non-trivial** forms (Phase 4's record-payment form is the ref
 - **Schema + mapper colocated in `src/forms/`.** A zod object validates the form's **all-string** values (so RHF state is uniform and the defaults are clean), and a `toCreateBody(values)` function maps validated values to the typed request body — trimming, omitting blank optionals, and converting non-money counts (e.g. `tranche_index`) to numbers. Money fields pass through as strings.
 - **`useForm({ resolver: zodResolver(schema), defaultValues, mode: 'onTouched' })`.** Wrap each field (`Input`, `Select`, `DateField`) in a `<Controller>`; surface `fieldState.error?.message` on the field. Disable submit on `mutation.isPending || !formState.isValid`.
 - **Validation mirrors the backend's single-field rules only** — no cross-field validation client-side unless the server has it (the payment endpoint doesn't).
-- **zod gotcha (TS 5.5+):** a `.refine((v) => v === 'a' || v === 'b')` predicate is inferred as a *type guard* and narrows the field's inferred type to the union — which then rejects a `''` default. Use `.refine((v) => ['a','b'].includes(v))` when you want the value to stay `string` (e.g. a Select that starts blank).
+- **zod gotcha (TS 5.5+):** a `.refine((v) => v === 'a' || v === 'b')` predicate is inferred as a _type guard_ and narrows the field's inferred type to the union — which then rejects a `''` default. Use `.refine((v) => ['a','b'].includes(v))` when you want the value to stay `string` (e.g. a Select that starts blank).
 - **Modal errors → `<FormError>`, never a toast** (toasts paint behind modals — see Toasts). Success toast fires right before `router.back()`.
 
 ### Idempotency
 
 Financial create endpoints **require** an `Idempotency-Key` header (missing → 400). The backend caches the response 24h, so resubmitting with the same key after a lost response returns the cached result instead of creating a duplicate.
 
-- **Generate one key per form mount**, not per tap: `const [idempotencyKey] = useState(() => newIdempotencyKey());` (`src/lib/idempotency.ts`, backed by `expo-crypto`'s synchronous `randomUUID()` — *not* the non-existent browser `crypto.randomUUID`). Reuse it for every submit of that form session; a fresh open = a fresh key. This is what makes a lost-response retry safe.
+- **Generate one key per form mount**, not per tap: `const [idempotencyKey] = useState(() => newIdempotencyKey());` (`src/lib/idempotency.ts`, backed by `expo-crypto`'s synchronous `randomUUID()` — _not_ the non-existent browser `crypto.randomUUID`). Reuse it for every submit of that form session; a fresh open = a fresh key. This is what makes a lost-response retry safe.
 - **Pass it via `authedApiRequest`'s `headers` option** in the mutationFn: `{ method: 'POST', body, headers: { 'Idempotency-Key': key } }`. The mutation hook takes the key as a variable (`{ body, idempotencyKey }`) so the screen owns its lifecycle. The mutation test asserts the header is present.
 - Applies to: customer payments (Phase 4), supplier payments (Phase 7). Future: BL upload. GETs and idempotent-by-nature writes don't need it.
 
@@ -275,7 +276,7 @@ Financial create endpoints **require** an `Idempotency-Key` header (missing → 
 Phase 7's mirror of customer payments — money **OUT** (outbound USD wires to the supplier) instead of in. The deltas from the customer-payment pattern:
 
 - **Invoice-scoped, not container-scoped.** `POST`/`GET /api/v1/invoices/{invoiceId}/supplier-payments`. The UI hangs off each PO's `invoice` block on the booking detail screen (`SupplierPaymentsSection`), not the container screen. Read hook `useSupplierPayments(invoiceId, { enabled })`, key `['supplier-payments', invoiceId]`; create hook `useCreateSupplierPayment(invoiceId, bookingId)`.
-- **Admin-only on BOTH create and list** (`require_admin`). Unlike customer payments — which let non-admin members *read* masked amounts — non-admins get a **403 even on the list**. So: the whole section renders only when `user.role === 'admin'`, **and** the list query is gated with `enabled: isAdmin` so a non-admin never fires the doomed request. There is **no** masked-read UI here by design.
+- **Admin-only on BOTH create and list** (`require_admin`). Unlike customer payments — which let non-admin members _read_ masked amounts — non-admins get a **403 even on the list**. So: the whole section renders only when `user.role === 'admin'`, **and** the list query is gated with `enabled: isAdmin` so a non-admin never fires the doomed request. There is **no** masked-read UI here by design.
 - **Status is server-set to `confirmed`** on creation — the client never sends a status and there is **no separate confirm action/endpoint**. One POST is final (contrast the dispute open/ack two-step).
 - **Currency is fixed to `"USD"`** — a static label in the form, not an editable field; `toCreateBody` hard-codes it.
 - **Auto-advance side effect.** Recording payments whose cumulative total clears the invoices auto-advances the booking `INVOICE_RECEIVED → PAYMENT_CONFIRMED` server-side and notifies. The mobile app does nothing for this beyond invalidating `['booking', bookingId]` in the create mutation's `onSuccess` (alongside the `['supplier-payments', invoiceId]` list) so the lifecycle pill reflects it.
@@ -284,15 +285,16 @@ Phase 7's mirror of customer payments — money **OUT** (outbound USD wires to t
 
 ### Toasts
 
-`useToast().showToast(message, tone?: 'success' | 'error' | 'info')` is the feedback channel for **non-modal** screens. `<ToastProvider>` is mounted once at the root (`app/_layout.tsx`, inside `SafeAreaProvider`/`AuthProvider`). It's a hand-rolled `Animated` banner near the bottom (~3s auto-dismiss); calling it again replaces the current toast. Don't add a second snackbar mechanism for routine feedback — `Alert.alert` is reserved for *confirmations* (e.g. acknowledge-dispute), not result messages.
+`useToast().showToast(message, tone?: 'success' | 'error' | 'info')` is the feedback channel for **non-modal** screens. `<ToastProvider>` is mounted once at the root (`app/_layout.tsx`, inside `SafeAreaProvider`/`AuthProvider`). It's a hand-rolled `Animated` banner near the bottom (~3s auto-dismiss); calling it again replaces the current toast. Don't add a second snackbar mechanism for routine feedback — `Alert.alert` is reserved for _confirmations_ (e.g. acknowledge-dispute), not result messages.
 
-**Toasts don't show over modal routes.** `presentation: 'modal'` screens are presented in a native layer *above* the root, so a toast fired while a modal is open is drawn behind it. Two consequences for modal **forms** (port-status, dispute):
+**Toasts don't show over modal routes.** `presentation: 'modal'` screens are presented in a native layer _above_ the root, so a toast fired while a modal is open is drawn behind it. Two consequences for modal **forms** (port-status, dispute):
+
 - **Success** → call `showToast(...)` then `router.back()`; the toast appears on the detail screen once the modal dismisses. ✓
 - **Error** → the form stays open, so use the inline **`<FormError error={mutation.error} fallback="…" />`** banner instead of a toast. (This was caught in Phase 3 device testing — an error toast on an open modal was invisible.)
 
 ### Permissions (cosmetic role gating)
 
-`src/auth/permissions.ts` holds pure role-check functions (`canManageDisputes`, `canUpdatePortStatus`, `canManageCustomerPayments`) used to decide which action buttons a screen *shows*. **This is cosmetic only.** The server is the real gate — dispute endpoints are `require_admin` and 403 non-admins regardless of what the UI rendered. Never treat a hidden button as a security boundary. Helpers are null-safe: undefined role denies (restrictive default). Role comes from `useAuth().user?.role`, itself a UI hint decoded from the JWT.
+`src/auth/permissions.ts` holds pure role-check functions (`canManageDisputes`, `canUpdatePortStatus`, `canManageCustomerPayments`) used to decide which action buttons a screen _shows_. **This is cosmetic only.** The server is the real gate — dispute endpoints are `require_admin` and 403 non-admins regardless of what the UI rendered. Never treat a hidden button as a security boundary. Helpers are null-safe: undefined role denies (restrictive default). Role comes from `useAuth().user?.role`, itself a UI hint decoded from the JWT.
 
 ### Modal form routes
 
@@ -310,7 +312,7 @@ Hard rules (the server enforces them too; the client mirrors for UX):
 
 - **`Content-Type` MUST equal the presigned `mime_type` exactly** — it's baked into the R2 signature, so a mismatch makes R2 reject the PUT. Thread one `mime_type` string presign → PUT → confirm. This is the #1 failure cause.
 - **`entity_type`/`entity_id` ride the QUERY STRING on confirm**, never the body. The confirm body is only `file_key`/`file_name`/`mime_type`/`file_size_bytes`.
-- **NO `Idempotency-Key`** on any document endpoint — unlike the financial create endpoints (`src/lib/idempotency.ts` is *not* used here). Don't add one.
+- **NO `Idempotency-Key`** on any document endpoint — unlike the financial create endpoints (`src/lib/idempotency.ts` is _not_ used here). Don't add one.
 - **Limits mirror the backend** (`src/lib/files.ts`): 50 MB cap, MIME allowlist (`application/pdf`, `image/jpeg`, `image/png`, `image/webp`, xlsx, `application/vnd.ms-excel`). `validateFile` blocks bad picks client-side before a wasted presign; the server re-checks the object it HEADs in R2 (the source of truth) and 400s/413s regardless.
 - **Auth is booking-scoped server-side** — any member of the parent booking can upload/list/view; a non-member gets 403. The client surfaces that gracefully (toast / `<FormError>`); it is not a client gate.
 
@@ -324,11 +326,11 @@ UI: one reusable **`<DocumentsList entityType entityId label>`** (`src/component
 
 Configured via `EXPO_PUBLIC_API_URL`, consumed only through `import { API_BASE_URL } from '@/src/config/api'`. Never hardcode URLs in components.
 
-| File | Used by | Committed? |
-|---|---|---|
-| `.env` | Local dev defaults | yes |
-| `.env.local` | Per-machine override (LAN IP for physical device) | **no** (gitignored) |
-| `.env.production` | Production build | yes |
+| File              | Used by                                           | Committed?          |
+| ----------------- | ------------------------------------------------- | ------------------- |
+| `.env`            | Local dev defaults                                | yes                 |
+| `.env.local`      | Per-machine override (LAN IP for physical device) | **no** (gitignored) |
+| `.env.production` | Production build                                  | yes                 |
 
 Production points at `https://api.thefmcghub.com`.
 
@@ -357,31 +359,31 @@ Bump when a matching Expo Go ships: `npx expo install expo@latest --fix`, then u
 
 ## Common gotchas
 
-| Mistake | Correct approach |
-|---|---|
-| Raw `fetch(...)` in a screen/hook | Always go through `apiRequest` — bypasses 401 refresh, timeout, error normalisation |
-| `localStorage`, `DOMException`, `window`, `XMLHttpRequest`, `Blob` | None exist in Hermes. Use `expo-secure-store`, `instanceof Error && err.name === 'AbortError'`, etc. |
-| `npm install <expo-package>` | Use `npx expo install <pkg>` for anything Expo-managed — picks the version aligned with your SDK. Plain `npm install` only for non-Expo libs |
-| `npm audit fix --force` | Downgrades `expo` ~10 major versions and breaks the project. Live with the `uuid` advisory (see Known audit noise) |
-| Hardcoded `http://...` URL in a component | Always import `API_BASE_URL` from `src/config/api` |
-| Tokens in `AsyncStorage`, Redux, or React state | `expo-secure-store` only, via `src/auth/tokenStorage.ts` |
-| Trusting `user.role` from JWT for security | UI hint only. Backend re-checks; handle 403 |
-| Editing `.env*` and expecting hot reload | Env files are bundler-startup only. Restart `expo start` |
-| Logging out on `ApiError.isNetworkError` | Transport failure is not an auth failure. Surface "check your connection" instead |
-| Inline `#hex` colours / magic px in a component | Use `src/theme/tokens.ts` |
-| Rendering a status string directly or rolling a local `toneFor` helper | Use `<StatusPill kind="booking" | "lifecycle" …>` — see Status pills |
-| Calling `apiRequest` directly from a screen for authed reads | Use a query hook in `src/api/queries/` via `useQuery` + `authedApiRequest` |
-| Calling `apiRequest`/`fetch` from a screen for a write | Use a mutation hook in `src/api/mutations/` via `useMutation` + `authedApiRequest`; invalidate the parent `['booking', id]` on success |
-| Hiding an admin button and assuming the action is now safe | Role gating (`src/auth/permissions.ts`) is cosmetic — the server 403s. Handle the error toast, don't rely on the hidden button |
-| `Alert.alert` / a second snackbar for routine success/error | Use `useToast().showToast(msg, tone)` — the single feedback channel. `Alert.alert` is for confirmations only |
-| `parseFloat`/`Number()` on a money value, or storing it as a number | Money is `string` end-to-end (see Money). The only sanctioned coercion is `parseRatio` for the cosmetic progress bar |
-| Deciding "is it banked/paid?" by summing Decimals client-side | Read `container.lifecycle_status === 'banked'` — the backend recomputes it authoritatively |
-| Generating an `Idempotency-Key` per submit/tap, or via browser `crypto.randomUUID` | One key per form mount (`useState(() => newIdempotencyKey())`); `newIdempotencyKey` uses `expo-crypto` |
-| Hand-rolling a complex form with `useState` | react-hook-form + zod schema in `src/forms/` (see Forms). Hand-rolled is fine only for ≤3 simple fields |
-| Uploading a document with a `Content-Type` that differs from the presigned `mime_type` | Thread one `mime_type` string presign → PUT → confirm; R2 signs the type, so a mismatch is rejected (see File uploads) |
-| Putting `entity_type`/`entity_id` in the confirm **body**, or adding an `Idempotency-Key` to a document endpoint | Confirm takes them as **query params**; document endpoints take **no** Idempotency-Key (unlike payments) |
-| Importing `expo-document-picker`/`expo-image-picker`/`expo-web-browser` at module top-level | Lazy-`import()` them inside the handler that uses them (bundle hygiene — see File uploads) |
-| Reaching for the new `expo-file-system` `File`/`Directory` API for an upload | Use `expo-file-system/legacy`'s `createUploadTask` — the new API has no binary-PUT-with-progress (see `src/lib/upload.ts`) |
+| Mistake                                                                                                          | Correct approach                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Raw `fetch(...)` in a screen/hook                                                                                | Always go through `apiRequest` — bypasses 401 refresh, timeout, error normalisation                                                          |
+| `localStorage`, `DOMException`, `window`, `XMLHttpRequest`, `Blob`                                               | None exist in Hermes. Use `expo-secure-store`, `instanceof Error && err.name === 'AbortError'`, etc.                                         |
+| `npm install <expo-package>`                                                                                     | Use `npx expo install <pkg>` for anything Expo-managed — picks the version aligned with your SDK. Plain `npm install` only for non-Expo libs |
+| `npm audit fix --force`                                                                                          | Downgrades `expo` ~10 major versions and breaks the project. Live with the `uuid` advisory (see Known audit noise)                           |
+| Hardcoded `http://...` URL in a component                                                                        | Always import `API_BASE_URL` from `src/config/api`                                                                                           |
+| Tokens in `AsyncStorage`, Redux, or React state                                                                  | `expo-secure-store` only, via `src/auth/tokenStorage.ts`                                                                                     |
+| Trusting `user.role` from JWT for security                                                                       | UI hint only. Backend re-checks; handle 403                                                                                                  |
+| Editing `.env*` and expecting hot reload                                                                         | Env files are bundler-startup only. Restart `expo start`                                                                                     |
+| Logging out on `ApiError.isNetworkError`                                                                         | Transport failure is not an auth failure. Surface "check your connection" instead                                                            |
+| Inline `#hex` colours / magic px in a component                                                                  | Use `src/theme/tokens.ts`                                                                                                                    |
+| Rendering a status string directly or rolling a local `toneFor` helper                                           | Use `<StatusPill kind="booking"                                                                                                              | "lifecycle" …>` — see Status pills |
+| Calling `apiRequest` directly from a screen for authed reads                                                     | Use a query hook in `src/api/queries/` via `useQuery` + `authedApiRequest`                                                                   |
+| Calling `apiRequest`/`fetch` from a screen for a write                                                           | Use a mutation hook in `src/api/mutations/` via `useMutation` + `authedApiRequest`; invalidate the parent `['booking', id]` on success       |
+| Hiding an admin button and assuming the action is now safe                                                       | Role gating (`src/auth/permissions.ts`) is cosmetic — the server 403s. Handle the error toast, don't rely on the hidden button               |
+| `Alert.alert` / a second snackbar for routine success/error                                                      | Use `useToast().showToast(msg, tone)` — the single feedback channel. `Alert.alert` is for confirmations only                                 |
+| `parseFloat`/`Number()` on a money value, or storing it as a number                                              | Money is `string` end-to-end (see Money). The only sanctioned coercion is `parseRatio` for the cosmetic progress bar                         |
+| Deciding "is it banked/paid?" by summing Decimals client-side                                                    | Read `container.lifecycle_status === 'banked'` — the backend recomputes it authoritatively                                                   |
+| Generating an `Idempotency-Key` per submit/tap, or via browser `crypto.randomUUID`                               | One key per form mount (`useState(() => newIdempotencyKey())`); `newIdempotencyKey` uses `expo-crypto`                                       |
+| Hand-rolling a complex form with `useState`                                                                      | react-hook-form + zod schema in `src/forms/` (see Forms). Hand-rolled is fine only for ≤3 simple fields                                      |
+| Uploading a document with a `Content-Type` that differs from the presigned `mime_type`                           | Thread one `mime_type` string presign → PUT → confirm; R2 signs the type, so a mismatch is rejected (see File uploads)                       |
+| Putting `entity_type`/`entity_id` in the confirm **body**, or adding an `Idempotency-Key` to a document endpoint | Confirm takes them as **query params**; document endpoints take **no** Idempotency-Key (unlike payments)                                     |
+| Importing `expo-document-picker`/`expo-image-picker`/`expo-web-browser` at module top-level                      | Lazy-`import()` them inside the handler that uses them (bundle hygiene — see File uploads)                                                   |
+| Reaching for the new `expo-file-system` `File`/`Directory` API for an upload                                     | Use `expo-file-system/legacy`'s `createUploadTask` — the new API has no binary-PUT-with-progress (see `src/lib/upload.ts`)                   |
 
 ---
 
@@ -402,7 +404,7 @@ If you open the **monorepo root** (`parcel-tracker/`) in VSCode instead of `parc
 
 After this file lands, in VSCode: `Cmd+Shift+P → TypeScript: Restart TS Server`. The picker will now offer "Use Workspace Version" pointing at the mobile TS install, and the phantom errors disappear.
 
-If you prefer multi-root or open the mobile folder directly, those work too — the only failure mode is opening the monorepo root *without* this settings file.
+If you prefer multi-root or open the mobile folder directly, those work too — the only failure mode is opening the monorepo root _without_ this settings file.
 
 ---
 
@@ -419,7 +421,7 @@ Single workflow at `../.github/workflows/ci.yml` (monorepo root). Three mobile j
 
 - `mobile-typecheck` — `npm ci` + `npx tsc --noEmit`
 - `mobile-test` — `npm ci` + `npm test`
-- `mobile-lint` — `npm ci` + `npm run lint` + `npm run format:check`. **Report-only** (`continue-on-error: true`) — see Linting below.
+- `mobile-lint` — `npm ci` + `npm run lint` + `npm run format:check`. **Blocking** — see Linting below.
 
 A workflow run executes both backend and mobile jobs regardless of which files changed — accepted cost at this scale.
 
@@ -433,7 +435,7 @@ ESLint + Prettier, both pinned to the Expo SDK 54 line:
 - **Prettier** — `.prettierrc` captures the de-facto style already in the tree: single quotes, semicolons, trailing commas (`all`), 2-space indent, 100-char print width.
 - Run locally: `npm run lint` (and `npm run format:check`). Highest-value signals are `react-hooks/rules-of-hooks` + `exhaustive-deps` in this react-query app.
 
-**Report-only for now.** The `mobile-lint` CI job is **non-blocking** (`continue-on-error: true`) because the existing tree predates linting and still reports pre-existing nits — a hard failure would be noise. **Do not run `prettier --write` / `eslint --fix` across the tree as a drive-by** — it rewrites source and collides with in-flight feature work. A dedicated cleanup pass will fix the tree, then drop `continue-on-error` from the job to make lint blocking (mirrors how the backend's mypy job started non-blocking).
+**Blocking.** The tree was formatted (`prettier --write .`) and lint-cleaned, then `continue-on-error` was dropped from the `mobile-lint` job — so a new ESLint finding or an unformatted file now fails CI. **Run `npm run lint` + `npm run format:check` before pushing**; `npx prettier --write .` fixes formatting in place. The test-file `import/first` rule is disabled in `eslint.config.js` (jest requires `jest.mock(...)` hoisted above imports — see the override).
 
 ---
 
@@ -447,7 +449,7 @@ Tracked here so they don't rot inside prose elsewhere.
 4. **Mutation tooling.** ✅ Landed: toast/snackbar (Phase 3); react-hook-form + zod form library and `Idempotency-Key` plumbing (Phase 4). See Forms / Idempotency / Money.
 5. **EAS Build profile.** Not configured yet — first production build will need `eas.json` + credentials.
 6. **Payments masking UX.** Non-admins get null amounts back; the section shows a single "Amounts hidden for your role" hint. Revisit if a richer masked view is wanted.
-7. **Make lint blocking.** A cleanup pass to fix the pre-existing ESLint/Prettier findings, then drop `continue-on-error` from the `mobile-lint` CI job. See Linting.
+7. **Make lint blocking.** ✅ Done — the tree was formatted + lint-cleaned and `mobile-lint` is now a hard gate. See Linting.
 
 ---
 

@@ -1,9 +1,5 @@
 import type { UserRole } from '../api/types/enums';
-import {
-  canManageDisputes,
-  canManageSupplierPayments,
-  canUpdatePortStatus,
-} from './permissions';
+import { canManageDisputes, canManageSupplierPayments, canUpdatePortStatus } from './permissions';
 
 const ALL_ROLES: UserRole[] = ['admin', 'morocco_agent', 'uk_agent', 'customer'];
 

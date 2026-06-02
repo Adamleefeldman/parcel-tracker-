@@ -40,9 +40,9 @@ describe('validateFile', () => {
   });
 
   it('rejects an oversize file', () => {
-    expect(
-      validateFile({ size: MAX_UPLOAD_BYTES + 1, contentType: 'application/pdf' }),
-    ).toMatch(/too large/);
+    expect(validateFile({ size: MAX_UPLOAD_BYTES + 1, contentType: 'application/pdf' })).toMatch(
+      /too large/,
+    );
   });
 
   it('accepts a file at exactly the cap', () => {

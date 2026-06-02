@@ -1,8 +1,4 @@
-import type {
-  ContainerLifecycleStatus,
-  ContainerStatus,
-  PortStatus,
-} from './enums';
+import type { ContainerLifecycleStatus, ContainerStatus, PortStatus } from './enums';
 
 export interface Broker {
   id: string;

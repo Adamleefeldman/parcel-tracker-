@@ -86,42 +86,42 @@ export default function PortStatusForm() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
           >
-          <Select
-            label="Port status"
-            value={currentPortStatus}
-            options={PORT_STATUS_OPTIONS}
-            onChange={(v) => setPortStatus(v as PortStatus)}
-            placeholder="Select a port status"
-          />
-          <Input
-            label="Destin8 ref"
-            value={currentDestin8}
-            onChangeText={setDestin8Ref}
-            placeholder="e.g. D8-12345"
-            autoCapitalize="characters"
-          />
-          <Input
-            label="Notes"
-            value={currentNotes}
-            onChangeText={setNotes}
-            placeholder="Optional notes"
-            multiline
-            numberOfLines={4}
-            style={styles.notes}
-          />
-          <FormError error={mutation.error} fallback="Could not update status" />
-          <View style={styles.actions}>
-            <Button
-              title="Save changes"
-              onPress={onSubmit}
-              loading={mutation.isPending}
-              disabled={mutation.isPending}
+            <Select
+              label="Port status"
+              value={currentPortStatus}
+              options={PORT_STATUS_OPTIONS}
+              onChange={(v) => setPortStatus(v as PortStatus)}
+              placeholder="Select a port status"
             />
-            <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
-          </View>
-          <Text variant="small" muted style={styles.hint}>
-            Visible to all booking members.
-          </Text>
+            <Input
+              label="Destin8 ref"
+              value={currentDestin8}
+              onChangeText={setDestin8Ref}
+              placeholder="e.g. D8-12345"
+              autoCapitalize="characters"
+            />
+            <Input
+              label="Notes"
+              value={currentNotes}
+              onChangeText={setNotes}
+              placeholder="Optional notes"
+              multiline
+              numberOfLines={4}
+              style={styles.notes}
+            />
+            <FormError error={mutation.error} fallback="Could not update status" />
+            <View style={styles.actions}>
+              <Button
+                title="Save changes"
+                onPress={onSubmit}
+                loading={mutation.isPending}
+                disabled={mutation.isPending}
+              />
+              <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
+            </View>
+            <Text variant="small" muted style={styles.hint}>
+              Visible to all booking members.
+            </Text>
           </ScrollView>
         </KeyboardAvoidingView>
       )}

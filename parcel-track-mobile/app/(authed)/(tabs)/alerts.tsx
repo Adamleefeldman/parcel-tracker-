@@ -49,9 +49,7 @@ export default function AlertsScreen() {
           data={items}
           keyExtractor={(n) => n.id}
           renderItem={({ item }) => <AlertRow notification={item} onPress={onPressRow} />}
-          refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />
-          }
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
           contentContainerStyle={items.length === 0 ? styles.emptyContainer : undefined}
           ListEmptyComponent={
             <Text muted style={styles.centeredText}>

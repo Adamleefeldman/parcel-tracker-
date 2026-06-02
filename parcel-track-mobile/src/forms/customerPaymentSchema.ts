@@ -31,9 +31,7 @@ export const customerPaymentSchema = z.object({
   // `.includes` form is deliberate — a `v === 'cash' || v === 'transfer'`
   // predicate would be inferred as a type guard (TS 5.5+) and narrow the
   // inferred type to the union, rejecting the '' default value.
-  method: z
-    .string()
-    .refine((v) => ['cash', 'transfer'].includes(v), 'Select a payment method'),
+  method: z.string().refine((v) => ['cash', 'transfer'].includes(v), 'Select a payment method'),
   amount_received: z
     .string()
     .regex(DECIMAL_RE, 'Enter a valid amount (up to 2 decimals)')

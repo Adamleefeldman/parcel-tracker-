@@ -22,7 +22,7 @@ const ROLE_LABEL: Record<UserRole | (string & {}), string> = {
 
 export function AppHeader({ title }: { title: string }) {
   const { user } = useAuth();
-  const roleLabel = user ? ROLE_LABEL[user.role] ?? user.role : null;
+  const roleLabel = user ? (ROLE_LABEL[user.role] ?? user.role) : null;
   return (
     <View style={styles.row}>
       <Text variant="heading" numberOfLines={1}>

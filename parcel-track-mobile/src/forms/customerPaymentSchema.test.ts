@@ -5,7 +5,9 @@ import {
   type CustomerPaymentFormValues,
 } from './customerPaymentSchema';
 
-function validValues(overrides: Partial<CustomerPaymentFormValues> = {}): CustomerPaymentFormValues {
+function validValues(
+  overrides: Partial<CustomerPaymentFormValues> = {},
+): CustomerPaymentFormValues {
   return {
     payment_date: '2026-04-15',
     method: 'transfer',
@@ -57,9 +59,9 @@ describe('customerPaymentSchema', () => {
   });
 
   it('rejects a bad payment_date', () => {
-    expect(customerPaymentSchema.safeParse(validValues({ payment_date: '15/04/2026' })).success).toBe(
-      false,
-    );
+    expect(
+      customerPaymentSchema.safeParse(validValues({ payment_date: '15/04/2026' })).success,
+    ).toBe(false);
     expect(customerPaymentSchema.safeParse(validValues({ payment_date: '' })).success).toBe(false);
   });
 
@@ -82,9 +84,7 @@ describe('customerPaymentSchema', () => {
   });
 
   it('accepts a signed variance (negative = short, positive = over)', () => {
-    expect(customerPaymentSchema.safeParse(validValues({ variance: '-50.25' })).success).toBe(
-      true,
-    );
+    expect(customerPaymentSchema.safeParse(validValues({ variance: '-50.25' })).success).toBe(true);
     expect(customerPaymentSchema.safeParse(validValues({ variance: '50.25' })).success).toBe(true);
   });
 
@@ -101,8 +101,11 @@ describe('customerPaymentSchema', () => {
     // until the user picks one — which is why the submit button starts disabled.
     expect(customerPaymentSchema.safeParse(defaultPaymentFormValues).success).toBe(false);
     expect(
-      customerPaymentSchema.safeParse({ ...defaultPaymentFormValues, method: 'cash', amount_received: '1' })
-        .success,
+      customerPaymentSchema.safeParse({
+        ...defaultPaymentFormValues,
+        method: 'cash',
+        amount_received: '1',
+      }).success,
     ).toBe(true);
   });
 });

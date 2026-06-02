@@ -1,6 +1,4 @@
-import DateTimePicker, {
-  type DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import React, { useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
 
@@ -97,12 +95,7 @@ export function DateField({ label, value, onChange, error }: DateFieldProps) {
         >
           <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
             <Pressable style={styles.sheet} onPress={() => {}}>
-              <DateTimePicker
-                value={current}
-                mode="date"
-                display="inline"
-                onChange={onIosChange}
-              />
+              <DateTimePicker value={current} mode="date" display="inline" onChange={onIosChange} />
               <Button title="Done" onPress={() => setOpen(false)} />
             </Pressable>
           </Pressable>

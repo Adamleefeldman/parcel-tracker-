@@ -22,10 +22,7 @@ export default function BookingsScreen() {
   const { signOut, user } = useAuth();
   const { data, isLoading, isError, error, refetch, isRefetching } = useBookings();
 
-  const onItemPress = useCallback(
-    (id: string) => router.push(`/bookings/${id}`),
-    [router],
-  );
+  const onItemPress = useCallback((id: string) => router.push(`/bookings/${id}`), [router]);
 
   return (
     <ScreenContainer padded={false}>
@@ -54,9 +51,7 @@ export default function BookingsScreen() {
           data={data.items}
           keyExtractor={(b) => b.id}
           renderItem={({ item }) => <BookingRow booking={item} onPress={onItemPress} />}
-          refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />
-          }
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
           ListFooterComponent={
             data.total > data.items.length ? (
               <TruncationNotice shown={data.items.length} total={data.total} />

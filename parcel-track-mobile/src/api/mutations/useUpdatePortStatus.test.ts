@@ -37,7 +37,10 @@ describe('useUpdatePortStatus', () => {
 
     expect(mockAuthedApiRequest).toHaveBeenCalledWith(
       '/api/v1/bookings/booking-1/containers/container-9/port-status',
-      { method: 'PATCH', body: { port_status: 'released', destin8_ref: 'D8-123', notes: 'cleared customs' } },
+      {
+        method: 'PATCH',
+        body: { port_status: 'released', destin8_ref: 'D8-123', notes: 'cleared customs' },
+      },
     );
   });
 
