@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.expo/
+web-build/
+expo-env.d.ts
+package-lock.json
+ios/
+android/
+
+# Planning scratch / shell helpers — not source.
+tasks/

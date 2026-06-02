@@ -30,8 +30,14 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# env files — never commit real values.
+# `.env` / `.env.production` carry the per-environment EXPO_PUBLIC_API_URL and
+# may pick up secrets over time, so they stay untracked. Only the *.example
+# templates are committed (placeholders only); copy one to the real name locally.
+.env
+.env.*
+!.env.example
+!.env.production.example
 
 # typescript
 *.tsbuildinfo
