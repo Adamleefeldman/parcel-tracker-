@@ -64,8 +64,7 @@ function Body({
 }) {
   const router = useRouter();
   const onContainerPress = useCallback(
-    (containerId: string) =>
-      router.push(`/bookings/${booking.id}/containers/${containerId}`),
+    (containerId: string) => router.push(`/bookings/${booking.id}/containers/${containerId}`),
     [router, booking.id],
   );
 
@@ -228,10 +227,7 @@ function LegsSection({ legs }: { legs: ShipmentLeg[] }) {
   return (
     <Section title="Route history">
       {sorted.map((leg, i) => (
-        <View
-          key={leg.id}
-          style={[styles.legBlock, i < sorted.length - 1 && styles.dividerBottom]}
-        >
+        <View key={leg.id} style={[styles.legBlock, i < sorted.length - 1 && styles.dividerBottom]}>
           <Text variant="body">
             {leg.leg_index}. {leg.vessel_name || 'Unknown vessel'}
             {leg.voyage_number ? ` · voy ${leg.voyage_number}` : ''}
@@ -384,8 +380,7 @@ function SupplierPaymentsSection({
           {ratio !== null ? <ProgressBar progress={ratio} /> : null}
           {isPartial ? (
             <Text variant="small" muted>
-              Showing {fetchedCount} of {totalCount} payments — total above covers only
-              those shown.
+              Showing {fetchedCount} of {totalCount} payments — total above covers only those shown.
             </Text>
           ) : null}
 
@@ -440,10 +435,7 @@ function ClearingDocsSection({ docs }: { docs: ClearingDocs | null }) {
         <KV label="Customs entry ref" value={fmt(docs.customs_entry_ref)} />
         <KV label="HS code" value={fmt(docs.hs_code)} />
         <KV label="Duty rate" value={docs.duty_rate ? `${docs.duty_rate}%` : '—'} />
-        <KV
-          label="Estimated duty + VAT"
-          value={formatMoney(docs.estimated_duty_vat, 'GBP')}
-        />
+        <KV label="Estimated duty + VAT" value={formatMoney(docs.estimated_duty_vat, 'GBP')} />
       </Grid>
       <View style={styles.checksBlock}>
         <Check label="Customs entry" on={docs.has_customs_entry} />

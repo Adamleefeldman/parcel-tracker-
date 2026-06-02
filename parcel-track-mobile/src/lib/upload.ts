@@ -33,7 +33,12 @@ export interface PutFileArgs {
  * throws on any other status (so the caller surfaces an inline error and the
  * confirm step never runs against a failed upload).
  */
-export async function putFile({ url, fileUri, contentType, onProgress }: PutFileArgs): Promise<void> {
+export async function putFile({
+  url,
+  fileUri,
+  contentType,
+  onProgress,
+}: PutFileArgs): Promise<void> {
   const task = createUploadTask(
     url,
     fileUri,

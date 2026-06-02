@@ -94,73 +94,73 @@ export default function RecordPaymentForm() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
         >
-        <Controller
-          control={control}
-          name="payment_date"
-          render={({ field, fieldState }) => (
-            <DateField
-              label="Payment date"
-              value={field.value}
-              onChange={field.onChange}
-              error={fieldState.error?.message}
-            />
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="method"
-          render={({ field, fieldState }) => (
-            <View>
-              <Select
-                label="Method"
-                value={field.value || null}
-                options={METHOD_OPTIONS}
+          <Controller
+            control={control}
+            name="payment_date"
+            render={({ field, fieldState }) => (
+              <DateField
+                label="Payment date"
+                value={field.value}
                 onChange={field.onChange}
-                placeholder="Select a payment method"
+                error={fieldState.error?.message}
               />
-              {fieldState.error ? (
-                <Text variant="small" style={styles.fieldError}>
-                  {fieldState.error.message}
-                </Text>
-              ) : null}
-            </View>
-          )}
-        />
-
-        <MoneyInput control={control} name="amount_received" label="Amount received (£)" />
-        <MoneyInput control={control} name="banked_total" label="Banked total (£)" />
-        <MoneyInput control={control} name="variance" label="Variance (£, +/−)" />
-        <MoneyInput control={control} name="expense_courier" label="Courier expense (£)" />
-        <MoneyInput control={control} name="expense_bank_charge" label="Bank charge (£)" />
-
-        {isTransfer ? (
-          <>
-            <TextField control={control} name="sender_bank" label="Sender bank" />
-            <TextField control={control} name="receiver_bank" label="Receiver bank" />
-          </>
-        ) : null}
-
-        <TextField
-          control={control}
-          name="tranche_index"
-          label="Tranche #"
-          keyboardType="number-pad"
-        />
-        <TextField control={control} name="customer_invoice_ref" label="Invoice reference" />
-        <TextField control={control} name="notes" label="Notes" multiline />
-
-        <FormError error={mutation.error} fallback="Could not record payment" />
-
-        <View style={styles.actions}>
-          <Button
-            title="Record payment"
-            onPress={onSubmit}
-            loading={mutation.isPending}
-            disabled={mutation.isPending || !formState.isValid}
+            )}
           />
-          <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
-        </View>
+
+          <Controller
+            control={control}
+            name="method"
+            render={({ field, fieldState }) => (
+              <View>
+                <Select
+                  label="Method"
+                  value={field.value || null}
+                  options={METHOD_OPTIONS}
+                  onChange={field.onChange}
+                  placeholder="Select a payment method"
+                />
+                {fieldState.error ? (
+                  <Text variant="small" style={styles.fieldError}>
+                    {fieldState.error.message}
+                  </Text>
+                ) : null}
+              </View>
+            )}
+          />
+
+          <MoneyInput control={control} name="amount_received" label="Amount received (£)" />
+          <MoneyInput control={control} name="banked_total" label="Banked total (£)" />
+          <MoneyInput control={control} name="variance" label="Variance (£, +/−)" />
+          <MoneyInput control={control} name="expense_courier" label="Courier expense (£)" />
+          <MoneyInput control={control} name="expense_bank_charge" label="Bank charge (£)" />
+
+          {isTransfer ? (
+            <>
+              <TextField control={control} name="sender_bank" label="Sender bank" />
+              <TextField control={control} name="receiver_bank" label="Receiver bank" />
+            </>
+          ) : null}
+
+          <TextField
+            control={control}
+            name="tranche_index"
+            label="Tranche #"
+            keyboardType="number-pad"
+          />
+          <TextField control={control} name="customer_invoice_ref" label="Invoice reference" />
+          <TextField control={control} name="notes" label="Notes" multiline />
+
+          <FormError error={mutation.error} fallback="Could not record payment" />
+
+          <View style={styles.actions}>
+            <Button
+              title="Record payment"
+              onPress={onSubmit}
+              loading={mutation.isPending}
+              disabled={mutation.isPending || !formState.isValid}
+            />
+            <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>

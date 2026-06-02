@@ -12,10 +12,7 @@ import React from 'react';
 export default function BookingsStackLayout() {
   return (
     <Stack>
-      <Stack.Screen
-        name="[id]/containers/[cid]/port-status"
-        options={{ presentation: 'modal' }}
-      />
+      <Stack.Screen name="[id]/containers/[cid]/port-status" options={{ presentation: 'modal' }} />
       <Stack.Screen name="[id]/containers/[cid]/dispute" options={{ presentation: 'modal' }} />
       <Stack.Screen
         name="[id]/containers/[cid]/record-payment"

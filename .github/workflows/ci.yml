@@ -13,8 +13,8 @@
 # Mobile (parcel-track-mobile/) — three jobs:
 #   4. mobile-typecheck — npm ci + tsc --noEmit.
 #   5. mobile-test      — npm ci + jest (pure-logic, ts-jest, node env).
-#   6. mobile-lint      — npm ci + eslint + prettier --check. REPORT-ONLY
-#                         (continue-on-error) until a cleanup pass; see job.
+#   6. mobile-lint      — npm ci + eslint + prettier --check. BLOCKING (the
+#                         tree was formatted + lint-cleaned, so it must stay so).
 #
 # The backend tests run against Postgres (not SQLite) to match production
 # behaviour. A TEST_DATABASE_URL env var is set so conftest.py can pick it up.
@@ -217,17 +217,14 @@ jobs:
       - name: Run tests
         run: npm test -- --ci
 
-  # ── Mobile lint (REPORT-ONLY) ─────────────────────────────────────────────
-  # eslint-config-expo + prettier. NON-BLOCKING for now: the existing tree
-  # predates linting and reports pre-existing nits (and a sibling code PR may
-  # have in-flight changes), so a hard failure here would be noise. The job
-  # surfaces problems in the logs without failing CI. Once a dedicated cleanup
-  # pass makes the tree pass, drop `continue-on-error` to flip it to blocking.
-  # (Mirrors how the backend's mypy job started non-blocking.)
+  # ── Mobile lint (BLOCKING) ────────────────────────────────────────────────
+  # eslint-config-expo + prettier. The tree was formatted (`prettier --write`)
+  # and lint-cleaned, so this is now a hard gate — a new ESLint finding or
+  # unformatted file fails CI. Run `npm run lint` + `npm run format:check`
+  # locally before pushing; `npx prettier --write .` fixes formatting.
   mobile-lint:
-    name: ESLint + Prettier (mobile, report-only)
+    name: ESLint + Prettier (mobile)
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: parcel-track-mobile

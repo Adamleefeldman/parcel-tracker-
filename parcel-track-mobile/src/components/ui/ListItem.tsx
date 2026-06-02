@@ -26,7 +26,11 @@ export function ListItem({ title, subtitle, right, onPress }: ListItemProps) {
       </View>
       <View style={styles.right}>
         {right}
-        {onPress ? <Text variant="body" muted style={styles.chevron}>›</Text> : null}
+        {onPress ? (
+          <Text variant="body" muted style={styles.chevron}>
+            ›
+          </Text>
+        ) : null}
       </View>
     </View>
   );

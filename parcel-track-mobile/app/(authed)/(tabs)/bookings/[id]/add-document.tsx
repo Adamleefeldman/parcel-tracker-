@@ -225,7 +225,12 @@ export default function AddDocumentScreen() {
             loading={uploading}
             disabled={!selected || !!validationError || uploading}
           />
-          <Button title="Cancel" variant="ghost" onPress={() => router.back()} disabled={uploading} />
+          <Button
+            title="Cancel"
+            variant="ghost"
+            onPress={() => router.back()}
+            disabled={uploading}
+          />
         </View>
       </View>
     </ScreenContainer>

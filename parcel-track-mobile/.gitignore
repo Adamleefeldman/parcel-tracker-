@@ -45,3 +45,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# planning artefacts (per AGENTS.md Commit Rules) — kept local, never committed
+tasks/

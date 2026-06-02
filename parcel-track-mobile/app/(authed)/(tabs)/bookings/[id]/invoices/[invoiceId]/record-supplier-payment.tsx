@@ -93,80 +93,80 @@ export default function RecordSupplierPaymentForm() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
         >
-        <TextField control={control} name="swift_ref" label="SWIFT reference" />
+          <TextField control={control} name="swift_ref" label="SWIFT reference" />
 
-        <Controller
-          control={control}
-          name="payment_date"
-          render={({ field, fieldState }) => (
-            <DateField
-              label="Payment date"
-              value={field.value}
-              onChange={field.onChange}
-              error={fieldState.error?.message}
-            />
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="amount"
-          render={({ field, fieldState }) => (
-            <Input
-              label="Amount (USD)"
-              value={field.value}
-              onChangeText={field.onChange}
-              onBlur={field.onBlur}
-              keyboardType="decimal-pad"
-              placeholder="0.00"
-              error={fieldState.error?.message}
-            />
-          )}
-        />
-
-        {/* Currency is fixed to USD — shown as a static label, not editable. */}
-        <View style={styles.staticField}>
-          <Text variant="small" muted>
-            Currency
-          </Text>
-          <Text variant="body">USD</Text>
-        </View>
-
-        <Controller
-          control={control}
-          name="payment_type"
-          render={({ field, fieldState }) => (
-            <View>
-              <Select
-                label="Payment type"
-                value={field.value || null}
-                options={PAYMENT_TYPE_OPTIONS}
+          <Controller
+            control={control}
+            name="payment_date"
+            render={({ field, fieldState }) => (
+              <DateField
+                label="Payment date"
+                value={field.value}
                 onChange={field.onChange}
-                placeholder="Select a payment type"
+                error={fieldState.error?.message}
               />
-              {fieldState.error ? (
-                <Text variant="small" style={styles.fieldError}>
-                  {fieldState.error.message}
-                </Text>
-              ) : null}
-            </View>
-          )}
-        />
-
-        <TextField control={control} name="bank_name" label="Bank name (optional)" />
-        <TextField control={control} name="notes" label="Notes (optional)" multiline />
-
-        <FormError error={mutation.error} fallback="Could not record payment" />
-
-        <View style={styles.actions}>
-          <Button
-            title="Record payment"
-            onPress={onSubmit}
-            loading={mutation.isPending}
-            disabled={mutation.isPending || !formState.isValid}
+            )}
           />
-          <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
-        </View>
+
+          <Controller
+            control={control}
+            name="amount"
+            render={({ field, fieldState }) => (
+              <Input
+                label="Amount (USD)"
+                value={field.value}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                error={fieldState.error?.message}
+              />
+            )}
+          />
+
+          {/* Currency is fixed to USD — shown as a static label, not editable. */}
+          <View style={styles.staticField}>
+            <Text variant="small" muted>
+              Currency
+            </Text>
+            <Text variant="body">USD</Text>
+          </View>
+
+          <Controller
+            control={control}
+            name="payment_type"
+            render={({ field, fieldState }) => (
+              <View>
+                <Select
+                  label="Payment type"
+                  value={field.value || null}
+                  options={PAYMENT_TYPE_OPTIONS}
+                  onChange={field.onChange}
+                  placeholder="Select a payment type"
+                />
+                {fieldState.error ? (
+                  <Text variant="small" style={styles.fieldError}>
+                    {fieldState.error.message}
+                  </Text>
+                ) : null}
+              </View>
+            )}
+          />
+
+          <TextField control={control} name="bank_name" label="Bank name (optional)" />
+          <TextField control={control} name="notes" label="Notes (optional)" multiline />
+
+          <FormError error={mutation.error} fallback="Could not record payment" />
+
+          <View style={styles.actions}>
+            <Button
+              title="Record payment"
+              onPress={onSubmit}
+              loading={mutation.isPending}
+              disabled={mutation.isPending || !formState.isValid}
+            />
+            <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>

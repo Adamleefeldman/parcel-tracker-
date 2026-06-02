@@ -29,14 +29,18 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Dashboard',
-          tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home-outline" color={color} size={size} />
+          ),
         }}
       />
       <Tabs.Screen
         name="bookings"
         options={{
           title: 'Bookings',
-          tabBarIcon: ({ color, size }) => <Ionicons name="cube-outline" color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="cube-outline" color={color} size={size} />
+          ),
         }}
       />
       <Tabs.Screen

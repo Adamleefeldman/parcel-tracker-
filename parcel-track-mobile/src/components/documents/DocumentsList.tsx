@@ -57,10 +57,7 @@ export function DocumentsList({ entityType, entityId, label }: DocumentsListProp
       const WebBrowser = await import('expo-web-browser');
       await WebBrowser.openBrowserAsync(url);
     } catch (err) {
-      showToast(
-        err instanceof ApiError ? err.message : 'Could not open the document.',
-        'error',
-      );
+      showToast(err instanceof ApiError ? err.message : 'Could not open the document.', 'error');
     } finally {
       setOpeningId(null);
     }
@@ -143,7 +140,13 @@ function DocumentRow({
           {formatBytes(doc.file_size_bytes)} · {formatDate(doc.uploaded_at)}
         </Text>
       </View>
-      {opening ? <ActivityIndicator color={colors.primary} /> : <Text variant="body" muted>↗</Text>}
+      {opening ? (
+        <ActivityIndicator color={colors.primary} />
+      ) : (
+        <Text variant="body" muted>
+          ↗
+        </Text>
+      )}
     </TouchableOpacity>
   );
 }

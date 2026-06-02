@@ -3,14 +3,7 @@ import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { useOpenDispute } from '@/src/api/mutations/useOpenDispute';
-import {
-  Button,
-  FormError,
-  Input,
-  ScreenContainer,
-  Text,
-  useToast,
-} from '@/src/components/ui';
+import { Button, FormError, Input, ScreenContainer, Text, useToast } from '@/src/components/ui';
 import { spacing } from '@/src/theme/tokens';
 
 export default function DisputeForm() {
@@ -50,30 +43,30 @@ export default function DisputeForm() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
         >
-        <Text variant="body" muted style={styles.intro}>
-          Opening a dispute marks this container as disputed and blocks the booking from
-          completing until an admin acknowledges it.
-        </Text>
-        <Input
-          label="Reason"
-          value={reason}
-          onChangeText={setReason}
-          placeholder="Describe the issue"
-          multiline
-          numberOfLines={4}
-          style={styles.reason}
-          autoFocus
-        />
-        <FormError error={mutation.error} fallback="Could not open dispute" />
-        <View style={styles.actions}>
-          <Button
-            title="Open dispute"
-            onPress={onSubmit}
-            loading={mutation.isPending}
-            disabled={!canSubmit}
+          <Text variant="body" muted style={styles.intro}>
+            Opening a dispute marks this container as disputed and blocks the booking from
+            completing until an admin acknowledges it.
+          </Text>
+          <Input
+            label="Reason"
+            value={reason}
+            onChangeText={setReason}
+            placeholder="Describe the issue"
+            multiline
+            numberOfLines={4}
+            style={styles.reason}
+            autoFocus
           />
-          <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
-        </View>
+          <FormError error={mutation.error} fallback="Could not open dispute" />
+          <View style={styles.actions}>
+            <Button
+              title="Open dispute"
+              onPress={onSubmit}
+              loading={mutation.isPending}
+              disabled={!canSubmit}
+            />
+            <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>

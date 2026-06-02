@@ -41,11 +41,7 @@ export type ContainerLifecycleStatus =
   | 'closed'
   | 'disputed';
 
-export type PortStatus =
-  | 'not_arrived'
-  | 'awaiting_customs'
-  | 'customs_hold'
-  | 'released';
+export type PortStatus = 'not_arrived' | 'awaiting_customs' | 'customs_hold' | 'released';
 
 /**
  * Inbound customer payment method. The backend has no `CustomerPaymentStatus`
