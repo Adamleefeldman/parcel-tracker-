@@ -1,9 +1,10 @@
 /**
- * Exhaustiveness check for the status→tone mappings.
+ * Exhaustiveness + tone-semantics check for the status→tone mappings.
  *
- * The TS `Record<EnumType, PillTone>` type already enforces this at compile
- * time, but a runtime test guards against accidental `as any` casts and
- * documents the contract.
+ * The TS `Record<EnumType, PillTone>` type already enforces exhaustiveness at
+ * compile time, but a runtime test guards against accidental `as any` casts and
+ * documents the prototype-aligned tone contract (Phase 9: in-flight shipping
+ * states are blue/`info`, not amber).
  */
 
 import type { BookingStatus, ContainerLifecycleStatus } from '../../api/types/enums';
@@ -46,15 +47,33 @@ describe('StatusPill mappings', () => {
     expect(LIFECYCLE_TONES.disputed).toBe('error');
   });
 
-  it('routes draft booking and ordered container to default tone (idle/early)', () => {
+  it('routes draft/po_submitted booking and ordered container to default tone (idle/early)', () => {
     expect(BOOKING_TONES.draft).toBe('default');
+    expect(BOOKING_TONES.po_submitted).toBe('default');
     expect(LIFECYCLE_TONES.ordered).toBe('default');
+  });
+
+  it('routes in-flight shipping statuses to info (blue) tone', () => {
+    expect(BOOKING_TONES.bl_issued).toBe('info');
+    expect(BOOKING_TONES.in_transit).toBe('info');
+    expect(BOOKING_TONES.cleared).toBe('info');
+    expect(LIFECYCLE_TONES.at_sea).toBe('info');
+    expect(LIFECYCLE_TONES.arrived).toBe('info');
+    expect(LIFECYCLE_TONES.import_cleared).toBe('info');
+    expect(LIFECYCLE_TONES.delivered).toBe('info');
+  });
+
+  it('routes money-in-progress statuses to warning (amber) tone', () => {
+    expect(BOOKING_TONES.invoice_received).toBe('warning');
+    expect(BOOKING_TONES.payment_confirmed).toBe('warning');
+    expect(LIFECYCLE_TONES.invoiced).toBe('warning');
   });
 
   it('routes terminal-good statuses to success tone', () => {
     expect(BOOKING_TONES.complete).toBe('success');
-    expect(LIFECYCLE_TONES.closed).toBe('success');
+    expect(LIFECYCLE_TONES.paid).toBe('success');
     expect(LIFECYCLE_TONES.banked).toBe('success');
+    expect(LIFECYCLE_TONES.closed).toBe('success');
   });
 });
 

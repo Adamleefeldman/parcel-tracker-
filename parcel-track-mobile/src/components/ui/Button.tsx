@@ -7,7 +7,7 @@ import {
   View,
 } from 'react-native';
 
-import { colors, radii, spacing, type as typo } from '../../theme/tokens';
+import { colors, radii, shadows, spacing } from '../../theme/tokens';
 import { Text } from './Text';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
@@ -18,6 +18,11 @@ export interface ButtonProps extends Omit<TouchableOpacityProps, 'children'> {
   loading?: boolean;
 }
 
+/**
+ * - primary   navy fill + white ink + resting card shadow (the solid CTA)
+ * - secondary elevated white surface + hairline border (neutral action)
+ * - ghost     transparent + navy outline (low-emphasis, e.g. "snooze")
+ */
 export function Button({
   title,
   variant = 'primary',
@@ -31,14 +36,22 @@ export function Button({
     <TouchableOpacity
       activeOpacity={0.7}
       disabled={isDisabled}
-      style={[styles.base, variantStyles[variant], isDisabled && styles.disabled, style]}
+      style={[
+        styles.base,
+        variantStyles[variant],
+        variant === 'primary' && shadows.sh2,
+        isDisabled && styles.disabled,
+        style,
+      ]}
       {...rest}
     >
       <View style={styles.content}>
         {loading ? (
           <ActivityIndicator color={labelColor[variant]} />
         ) : (
-          <Text style={[styles.label, { color: labelColor[variant] }]}>{title}</Text>
+          <Text variant="body" weight="semibold" color={labelColor[variant]}>
+            {title}
+          </Text>
         )}
       </View>
     </TouchableOpacity>
@@ -58,11 +71,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   disabled: {
-    opacity: 0.6,
-  },
-  label: {
-    ...typo.body,
-    fontWeight: '600',
+    opacity: 0.5,
   },
 });
 
@@ -71,9 +80,9 @@ const variantStyles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   secondary: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bgElev,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.line,
   },
   ghost: {
     backgroundColor: 'transparent',
@@ -83,7 +92,7 @@ const variantStyles = StyleSheet.create({
 });
 
 const labelColor: Record<Variant, string> = {
-  primary: colors.primaryText,
-  secondary: colors.text,
+  primary: colors.primaryInk,
+  secondary: colors.ink,
   ghost: colors.primary,
 };

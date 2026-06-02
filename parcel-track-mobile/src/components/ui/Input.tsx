@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, TextInput, type TextInputProps, View } from 'react-native';
 
-import { colors, radii, spacing, type as typo } from '../../theme/tokens';
+import { colors, fontFamily, radii, spacing, type as typo } from '../../theme/tokens';
 import { Text } from './Text';
 
 export interface InputProps extends TextInputProps {
@@ -9,21 +9,39 @@ export interface InputProps extends TextInputProps {
   error?: string | null;
 }
 
-export function Input({ label, error, style, ...rest }: InputProps) {
+/**
+ * Text field on an elevated surface. Focus lifts the border to the brand navy
+ * (the prototype's focus ring); error state overrides to red.
+ */
+export function Input({ label, error, style, onFocus, onBlur, ...rest }: InputProps) {
+  const [focused, setFocused] = useState(false);
   return (
     <View style={styles.wrapper}>
       {label ? (
-        <Text variant="small" muted style={styles.label}>
+        <Text variant="label" muted style={styles.label}>
           {label}
         </Text>
       ) : null}
       <TextInput
-        placeholderTextColor={colors.textMuted}
-        style={[styles.input, error ? styles.inputError : null, style]}
+        placeholderTextColor={colors.ink4}
+        style={[
+          styles.input,
+          focused && styles.inputFocused,
+          error ? styles.inputError : null,
+          style,
+        ]}
+        onFocus={(e) => {
+          setFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlur?.(e);
+        }}
         {...rest}
       />
       {error ? (
-        <Text variant="small" style={styles.errorText}>
+        <Text variant="small" color={colors.redInk} style={styles.errorText}>
           {error}
         </Text>
       ) : null}
@@ -39,19 +57,24 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   input: {
+    backgroundColor: colors.bgElev,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.line,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    color: colors.text,
-    ...typo.body,
+    color: colors.ink,
+    fontFamily: fontFamily('regular'),
+    fontSize: typo.body.fontSize,
+    lineHeight: typo.body.lineHeight,
+  },
+  inputFocused: {
+    borderColor: colors.primary,
   },
   inputError: {
-    borderColor: colors.error,
+    borderColor: colors.red,
   },
   errorText: {
-    color: colors.error,
     marginTop: spacing.xs,
   },
 });

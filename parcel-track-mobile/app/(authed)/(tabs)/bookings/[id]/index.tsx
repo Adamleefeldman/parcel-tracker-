@@ -19,6 +19,7 @@ import { canManageSupplierPayments } from '@/src/auth/permissions';
 import { AppHeader } from '@/src/components/AppHeader';
 import { DocumentsList } from '@/src/components/documents/DocumentsList';
 import {
+  BookingStepper,
   Button,
   Card,
   ErrorState,
@@ -98,6 +99,9 @@ function Header({ booking }: { booking: BookingDetail }) {
             Ref {booking.reference}
           </Text>
         ) : null}
+      </View>
+      <View style={styles.headerStepper}>
+        <BookingStepper status={booking.status} />
       </View>
     </View>
   );
@@ -597,6 +601,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+  },
+  headerStepper: {
+    marginTop: spacing.xs,
   },
   section: {
     paddingHorizontal: spacing.lg,

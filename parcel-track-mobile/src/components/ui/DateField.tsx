@@ -2,7 +2,7 @@ import DateTimePicker, { type DateTimePickerEvent } from '@react-native-communit
 import React, { useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import { colors, radii, spacing } from '../../theme/tokens';
+import { colors, radii, shadows, spacing } from '../../theme/tokens';
 import { Button } from './Button';
 import { Text } from './Text';
 
@@ -113,31 +113,33 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   field: {
+    backgroundColor: colors.bgElev,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.line,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
   },
   fieldError: {
-    borderColor: colors.error,
+    borderColor: colors.red,
   },
   errorText: {
-    color: colors.error,
+    color: colors.redInk,
     marginTop: spacing.xs,
   },
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(14,18,23,0.4)',
   },
   sheet: {
-    backgroundColor: colors.bg,
-    borderTopLeftRadius: radii.lg,
-    borderTopRightRadius: radii.lg,
+    backgroundColor: colors.bgElev,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.xxl,
     gap: spacing.md,
+    ...shadows.sheet,
   },
 });

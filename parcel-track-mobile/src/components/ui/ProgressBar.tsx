@@ -23,12 +23,13 @@ export function ProgressBar({ progress }: ProgressBarProps) {
 const styles = StyleSheet.create({
   track: {
     height: 6,
-    borderRadius: radii.sm,
-    backgroundColor: colors.border,
+    borderRadius: radii.pill,
+    backgroundColor: colors.bgSunk,
     overflow: 'hidden',
   },
   fill: {
     height: '100%',
+    borderRadius: radii.pill,
     backgroundColor: colors.primary,
   },
 });
