@@ -20,4 +20,14 @@ module.exports = [
   {
     ignores: ['node_modules/', 'dist/', '.expo/', 'web-build/', 'expo-env.d.ts'],
   },
+  {
+    // Test files use `jest.mock(...)` calls that MUST be hoisted above the
+    // imports they mock — that's a hard requirement of jest's module mocking,
+    // so `import/first` (which wants every import at the very top of the file)
+    // reports a false positive on every mocked import. Disable it for tests.
+    files: ['**/*.test.ts', '**/*.test.tsx'],
+    rules: {
+      'import/first': 'off',
+    },
+  },
 ];
