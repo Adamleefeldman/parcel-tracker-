@@ -205,11 +205,21 @@ def send_push_notification(self, notification_id: str):
             if user is None or not user.expo_push_token:
                 return
 
+            # `data` ships the routing context the mobile tap handler needs:
+            # mark-read by notification id and deep-link to the booking.
+            data: dict[str, str] = {
+                "notification_id": str(notif.id),
+                "type": notif.type.value,
+            }
+            if notif.booking_id is not None:
+                data["booking_id"] = str(notif.booking_id)
+
             payload = {
                 "to": user.expo_push_token,
                 "title": notif.title,
                 "body": notif.message,
                 "sound": "default",
+                "data": data,
             }
 
             async with build_client("expo") as client:
