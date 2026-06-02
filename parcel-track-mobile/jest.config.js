@@ -22,5 +22,9 @@ module.exports = {
   moduleNameMapper: {
     '^expo-secure-store$': '<rootDir>/src/__mocks__/expo-secure-store.ts',
     '^expo-crypto$': '<rootDir>/src/__mocks__/expo-crypto.ts',
+    '^expo-notifications$': '<rootDir>/src/__mocks__/expo-notifications.ts',
+    '^expo-device$': '<rootDir>/src/__mocks__/expo-device.ts',
+    '^expo-constants$': '<rootDir>/src/__mocks__/expo-constants.ts',
+    '^react-native$': '<rootDir>/src/__mocks__/react-native.ts',
   },
 };

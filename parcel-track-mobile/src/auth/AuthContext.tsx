@@ -22,10 +22,21 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
+import { registerAndSyncPushToken } from '../notifications/pushRegistration';
 import { loginRequest } from './authApi';
 import { decodeUserFromToken, type User } from './jwt';
 import { onSessionExpired } from './sessionEvents';
 import { clearTokens, getAccessToken, setTokens } from './tokenStorage';
+
+/**
+ * Fire-and-forget push registration. Never block sign-in / cold-start on it —
+ * the helper already swallows its own errors, but float on a microtask anyway
+ * so we don't extend the auth tick. Push is a delivery-channel optimisation;
+ * the in-app Alerts tab is the source of truth either way.
+ */
+function kickPushRegistration(): void {
+  void registerAndSyncPushToken();
+}
 
 export type AuthStatus = 'loading' | 'anonymous' | 'authenticated';
 
@@ -51,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (token) {
         setUser(decodeUserFromToken(token));
         setStatus('authenticated');
+        kickPushRegistration();
       } else {
         setStatus('anonymous');
       }
@@ -75,6 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await setTokens(tokens);
     setUser(decodeUserFromToken(tokens.accessToken));
     setStatus('authenticated');
+    kickPushRegistration();
   }, []);
 
   const signOut = useCallback(async () => {

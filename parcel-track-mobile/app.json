@@ -35,7 +35,8 @@
           "photosPermission": "FMCG Hub accesses your photos so you can attach documents to a booking.",
           "cameraPermission": "FMCG Hub uses the camera so you can photograph documents to attach to a booking."
         }
-      ]
+      ],
+      "expo-notifications"
     ]
   }
 }
