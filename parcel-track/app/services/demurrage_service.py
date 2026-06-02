@@ -19,7 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.enums import BookingStatus, NotificationType, UserRole
 from app.core.redis import get_redis_client
-from app.db.models import BillOfLading, Booking, Vessel
+from app.db.models import BillOfLading, Booking, Container, Vessel
+from app.schemas.money_risk import DemurrageCountdownOut, DemurrageSummary
 from app.services.notification_service import NotificationService
 
 logger = logging.getLogger("parceltrack.celery")
@@ -89,3 +90,64 @@ class DemurrageService:
 
         logger.info("Demurrage check: %d arrived vessel(s), %d alerted", len(rows), alerted)
         return alerted
+
+    @staticmethod
+    async def countdown(db: AsyncSession) -> DemurrageSummary:
+        """Read-only per-container demurrage countdown for the money-risk dashboard.
+
+        One row per container under an arrived vessel (matching the prototype's
+        per-container list). ``days_remaining`` is whole days via the shared
+        :func:`days_left` — ``Vessel.ata`` is a date, so no hour precision is
+        invented; a negative value means free time has already expired. Rows are
+        sorted soonest-expiring first.
+        """
+        settings = get_settings()
+        today = date.today()
+
+        result = await db.execute(
+            select(
+                Container,
+                Vessel.ata,
+                BillOfLading.port_of_discharge,
+                Booking.id,
+                Booking.free_days_demurrage,
+                Booking.demurrage_rate_gbp_after,
+            )
+            .join(BillOfLading, Container.bl_id == BillOfLading.id)
+            .join(Vessel, Vessel.bl_id == BillOfLading.id)
+            .join(Booking, BillOfLading.booking_id == Booking.id)
+            .where(
+                Vessel.ata.is_not(None),
+                Booking.status != BookingStatus.COMPLETE,
+            )
+        )
+
+        items: list[DemurrageCountdownOut] = []
+        for container, ata, port, booking_id, free_days_demurrage, rate in result.all():
+            free_days = free_days_demurrage or settings.DEMURRAGE_DEFAULT_FREE_DAYS
+            remaining = days_left(ata, free_days, today)
+            items.append(
+                DemurrageCountdownOut(
+                    booking_id=booking_id,
+                    container_id=container.id,
+                    container_number=container.container_number,
+                    port_of_discharge=port,
+                    ata=ata,
+                    free_days=free_days,
+                    days_remaining=remaining,
+                    expired=remaining < 0,
+                    rate_gbp_after=rate,
+                )
+            )
+
+        items.sort(key=lambda i: i.days_remaining)
+        expiring_count = sum(
+            1 for i in items if i.days_remaining <= settings.DEMURRAGE_WARNING_LEAD_DAYS
+        )
+        soonest = items[0].days_remaining if items else None
+
+        return DemurrageSummary(
+            expiring_count=expiring_count,
+            soonest_days_remaining=soonest,
+            items=items,
+        )

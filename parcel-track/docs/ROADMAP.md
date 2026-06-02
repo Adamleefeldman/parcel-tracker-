@@ -458,6 +458,24 @@ within `DEMURRAGE_WARNING_LEAD_DAYS` of expiry fires `NotificationType.DEMURRAGE
 to `ADMIN` + `UK_AGENT`, deduplicated once per booking per day. New
 `notificationtype` enum values added in migration `d3e4f5a6b7c8`.
 
+### Money-risk read endpoint — COMPLETE (`money-risk-endpoints`)
+
+Surfaces the P1.4 (A/R aging) and P1.5 (demurrage) computed signals — which
+previously existed only as write-only Celery alerters — as a read endpoint for
+the mobile Money-risk dashboard (mobile Phase 10). Additive + read-only: **no
+migration, no model changes.** `GET /api/v1/money-risk` →
+`MoneyRiskOut { ar_aging, demurrage, disputes }`, gated to `ADMIN` + `UK_AGENT`.
+`MoneyRiskService.summary()` composes `ARagingService.summary()` (A/R buckets +
+full unbanked exposure) + `DemurrageService.countdown()` (per-container
+whole-day countdown) + dispute counts; the existing `run()` alerters are left
+untouched. Three deliberate approximations carried over from the underlying
+model: outstanding £ is the **full** sum of `Container.sale_price_total` (not
+netted against banked tranches); demurrage `days_remaining` is whole-day
+(`Vessel.ata` is a `date`; negative = expired); aging is measured from
+`Container.updated_at` (no precise `delivered_at` yet), buckets 0-14 / 15-30 /
+31-60 / 60+. A precise `delivered_at` / arrival-time field and dashboard write
+actions (chase / escalate) are out of scope here.
+
 ### Trading P1.6 — Outbound `CustomerInvoiceBatch`
 
 `CustomerPayment.customer_invoice_ref` is a free-text string today. Promote it

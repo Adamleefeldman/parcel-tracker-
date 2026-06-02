@@ -33,6 +33,7 @@ from app.api.routes import (
     delivery_router,
     doc_router,
     invoice_router,
+    money_risk_router,
     notif_router,
     payment_router,
     po_router,
@@ -236,6 +237,7 @@ app.include_router(clearing_router, prefix=PREFIX)
 app.include_router(delivery_router, prefix=PREFIX)
 app.include_router(doc_router, prefix=PREFIX)
 app.include_router(notif_router, prefix=PREFIX)
+app.include_router(money_risk_router, prefix=PREFIX)
 
 # ── Docs gating ───────────────────────────────────────────────────────────────
 #
