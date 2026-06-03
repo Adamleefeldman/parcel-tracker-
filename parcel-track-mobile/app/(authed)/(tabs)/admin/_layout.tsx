@@ -2,6 +2,17 @@ import { Stack } from 'expo-router';
 import React from 'react';
 
 /**
+ * Anchor the Admin tab's stack to the section menu. Without this, state
+ * restoration / a lingering modal can leave the tab showing a modal screen
+ * (e.g. the port-template editor) instead of `index` when you tap the tab.
+ * `initialRouteName` pins `index` as the stack's root so the tab always opens
+ * on the menu and modals sit above it.
+ */
+export const unstable_settings = {
+  initialRouteName: 'index',
+};
+
+/**
  * Stack for the Admin tab (Phase 13a). The tab was a single "coming soon"
  * screen (`admin.tsx`); it's now a stack so the OPERATIONS sub-screens push
  * within the tab — mirroring the Bookings-tab stack. The section menu is

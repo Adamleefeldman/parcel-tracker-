@@ -49,6 +49,11 @@ export default function EditPortTemplateScreen() {
   const validPort = VALID_PORTS.includes(port as UKPort) ? (port as UKPort) : null;
   const title = validPort ? UK_PORT_LABELS[validPort] : 'Port template';
 
+  // Never dead-end: if this screen is somehow the stack root (no modal to
+  // dismiss), fall back to the port-templates list instead of a no-op back().
+  const dismiss = () =>
+    router.canGoBack() ? router.back() : router.replace('/admin/port-templates');
+
   if (!isAdmin) {
     return (
       <ScreenContainer>
@@ -56,7 +61,7 @@ export default function EditPortTemplateScreen() {
         <Text variant="body" muted style={styles.notPermitted}>
           You don&apos;t have permission to manage port templates.
         </Text>
-        <Button title="Close" variant="ghost" onPress={() => router.back()} />
+        <Button title="Close" variant="ghost" onPress={dismiss} />
       </ScreenContainer>
     );
   }
@@ -68,7 +73,7 @@ export default function EditPortTemplateScreen() {
         <Text variant="body" muted style={styles.notPermitted}>
           Unknown port.
         </Text>
-        <Button title="Close" variant="ghost" onPress={() => router.back()} />
+        <Button title="Close" variant="ghost" onPress={dismiss} />
       </ScreenContainer>
     );
   }
