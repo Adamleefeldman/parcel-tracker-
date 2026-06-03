@@ -31,10 +31,13 @@ import { spacing } from '@/src/theme/tokens';
 const VALID_PORTS = Object.keys(UK_PORT_LABELS) as UKPort[];
 
 /**
- * Edit (upsert) a port template. Pre-fills from the existing template (warm from
- * the list query cache; cold deep-link loads it), or defaults for a port with no
- * saved row. PUTs to upsert — there is no separate create. Money discipline:
- * rate fields stay strings; free-days are ints (see `portTemplateSchema`).
+ * Edit (upsert) a port template. The target port arrives as the `port` **query
+ * param** (a static modal route — not a dynamic `[port]` segment, which doesn't
+ * reliably bind to useLocalSearchParams for an explicitly-registered modal).
+ * Pre-fills from the existing template (warm from the list query cache; cold
+ * load fetches it), or defaults for a port with no saved row. PUTs to upsert —
+ * there is no separate create. Money discipline: rate fields stay strings;
+ * free-days are ints (see `portTemplateSchema`).
  */
 export default function EditPortTemplateScreen() {
   const { port } = useLocalSearchParams<{ port: string }>();

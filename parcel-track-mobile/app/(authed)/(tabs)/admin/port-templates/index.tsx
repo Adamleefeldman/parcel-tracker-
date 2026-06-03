@@ -56,7 +56,13 @@ export default function PortTemplatesScreen() {
               key={port}
               port={port}
               template={byPort.get(port)}
-              onPress={() => router.push(`/admin/port-templates/${port}`)}
+              // Static modal route + `port` as a query param. A dynamic terminal
+              // segment (`[port]`) doesn't reliably bind to useLocalSearchParams
+              // for an explicitly-registered modal screen, so we pass it as a
+              // search param, which always surfaces.
+              onPress={() =>
+                router.push({ pathname: '/admin/port-templates/edit', params: { port } })
+              }
             />
           ))}
         </ScrollView>

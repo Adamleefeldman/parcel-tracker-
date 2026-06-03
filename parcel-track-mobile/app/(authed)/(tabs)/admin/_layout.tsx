@@ -12,11 +12,16 @@ import React from 'react';
  *
  * The tab itself stays `name="admin"` in `(tabs)/_layout.tsx`, so the existing
  * `href: null` role-gating (admin-only) still applies unchanged.
+ *
+ * Note the port-template editor is a **static** `port-templates/edit` route that
+ * takes the port as a query param, NOT a dynamic `port-templates/[port]`:
+ * expo-router doesn't reliably bind a modal screen's own terminal dynamic
+ * segment to `useLocalSearchParams`, so a query param is used instead.
  */
 export default function AdminStackLayout() {
   return (
     <Stack>
-      <Stack.Screen name="port-templates/[port]" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="port-templates/edit" options={{ presentation: 'modal' }} />
       <Stack.Screen name="brokers/new" options={{ presentation: 'modal' }} />
       <Stack.Screen name="end-customers/new" options={{ presentation: 'modal' }} />
     </Stack>
