@@ -187,7 +187,8 @@ up to close the booking.
 | Concern | Path |
 |---|---|
 | Entry point, CORS, router mounts, exception handlers | `app/main.py` |
-| Per-resource route files (18 modules, 19 routers — `parties.py` exports broker + company) | `app/api/routes/` — auth, bl, bookings, clearing, containers, customer_payments, customs, delivery, documents, invoices, money_risk, notifications, parties (brokers + companies), po, port_templates, shipment_legs, supplier_payments, vessels |
+| Per-resource route files (19 modules, 20 routers — `parties.py` exports broker + company) | `app/api/routes/` — admin, auth, bl, bookings, clearing, containers, customer_payments, customs, delivery, documents, invoices, money_risk, notifications, parties (brokers + companies), po, port_templates, shipment_legs, supplier_payments, vessels |
+| Admin read endpoints — `GET /users`, `GET /invites`, `GET /audit-logs` (all `require_admin`, read-only) backing the mobile Admin tab People/System sections. View + send-invites scope only (no revoke/deactivate/role-change). `InviteOut` NEVER serialises `token_hash`; audit `actor_name` joined from `User`. Reuses existing `POST /auth/invite` for sends | `app/api/routes/admin.py`, `app/services/admin_service.py`, schemas `InviteOut`/`AuditLogOut` (users reuse `UserOut`) |
 | Booking state machine — read before touching transitions | `app/services/booking_service.py` |
 | Shipment-leg service (multi-leg transshipment routes) | `app/services/shipment_leg_service.py` |
 | Port-template / A/R-aging / demurrage services | `app/services/port_template_service.py`, `ar_aging_service.py`, `demurrage_service.py` |

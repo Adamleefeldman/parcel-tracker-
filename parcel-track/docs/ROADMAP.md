@@ -476,6 +476,29 @@ netted against banked tranches); demurrage `days_remaining` is whole-day
 31-60 / 60+. A precise `delivered_at` / arrival-time field and dashboard write
 actions (chase / escalate) are out of scope here.
 
+### Admin People/System read endpoints — COMPLETE (`admin-people-system-reads`)
+
+Surfaces the existing `User`, `InviteToken`, and `AuditLog` data as admin-only
+read endpoints for the mobile Admin tab's **PEOPLE** + **SYSTEM** sections
+(mobile Phase 13b). Additive + read-only: **no migration, no model changes.**
+Three endpoints, all `require_admin`:
+
+- `GET /api/v1/users` → `PaginatedResponse[UserOut]` — optional `role` /
+  `is_active` filters; newest first. Role-breakdown counts computed client-side.
+- `GET /api/v1/invites` → `PaginatedResponse[InviteOut]` — `status` ∈
+  `pending|used|expired|all` (default `pending` = not used AND `expires_at > now`);
+  newest first. **`token_hash` is NEVER serialised.** `expired` is a derived flag.
+- `GET /api/v1/audit-logs` → `PaginatedResponse[AuditLogOut]` — global feed,
+  newest first, optional `booking_id` / `actor_id` filters. `actor_name` joined
+  from `User` via an explicit join (no lazy load). `old_value` / `new_value` are
+  stored JSON strings, passed through verbatim.
+
+`AdminService` holds the three read methods; the existing
+`AuthService.create_invite` (`POST /auth/invite`) remains the only invite-write
+path — mobile sends invites through it. **Scope: view + send-invites only.**
+Revoke-invite, deactivate-user, and change-role mutations are deliberately
+deferred (security-sensitive; a later phase if the client wants them).
+
 ### Trading P1.6 — Outbound `CustomerInvoiceBatch`
 
 `CustomerPayment.customer_invoice_ref` is a free-text string today. Promote it

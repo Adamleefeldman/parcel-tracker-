@@ -85,6 +85,43 @@ class UserOut(UUIDModel):
     created_at: datetime
 
 
+# ── Admin read views (People / System) ────────────────────────────────────────
+#
+# Admin-only, read-only projections for the mobile Admin tab. `UserOut` above
+# already carries the exact user shape the admin list needs, so it is reused
+# directly for `GET /users` (no separate UserAdminOut).
+
+
+class InviteOut(UUIDModel):
+    """An invite token as seen by an admin. NEVER includes `token_hash`."""
+
+    email: str
+    role: str
+    expires_at: datetime
+    created_at: datetime
+    used: bool
+    expired: bool  # derived: expires_at <= now() and not yet used
+
+
+class AuditLogOut(UUIDModel):
+    """A single audit-log entry with the actor's name joined in.
+
+    `old_value` / `new_value` are stored JSON strings — passed through verbatim
+    (the client renders them; the server does not re-parse).
+    """
+
+    created_at: datetime
+    actor_id: uuid.UUID
+    actor_name: str | None = None
+    action: str
+    entity_type: str
+    entity_id: uuid.UUID
+    old_value: str | None = None
+    new_value: str | None = None
+    ip_address: str | None = None
+    booking_id: uuid.UUID | None = None
+
+
 # ── Bookings ──────────────────────────────────────────────────────────────────
 
 
