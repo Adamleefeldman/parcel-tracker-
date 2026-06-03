@@ -1,24 +1,32 @@
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { useAuth } from '@/src/auth/AuthContext';
 import { Card, Pill, ScreenContainer, Text } from '@/src/components/ui';
 import { colors, spacing } from '@/src/theme/tokens';
 
 /**
- * Admin console — admin-only shell. Renders the prototype's section structure
- * (PEOPLE / OPERATIONS / SYSTEM) as **non-interactive "coming soon" rows**; the
- * real screens (invites, users, port templates, brokers, end customers, audit
- * log, push, security) are Phase 13. No dead interactive UI — the rows don't
- * navigate, so there's no chevron implying they do.
+ * Admin console section menu (Phase 13a). Renders the prototype's three
+ * sections — PEOPLE / OPERATIONS / SYSTEM. **OPERATIONS is now live**: its rows
+ * navigate into the port-templates / brokers / end-customers screens (all on
+ * existing admin-gated backend APIs). PEOPLE (invites/users) and SYSTEM (audit
+ * log / push / security) stay non-interactive "coming soon" rows — Phase 13b,
+ * which likely needs new backend (invite/user management + an audit read API).
  *
  * The tab is hidden for non-admins (`href: null` in the tabs layout); a
  * deep-linked non-admin gets a friendly "not available" body (defense-in-depth;
  * the server is the real gate for every admin endpoint).
  */
-type AdminRow = { icon: keyof typeof Ionicons.glyphMap; title: string; subtitle: string };
+type AdminRow = {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+  /** When set, the row navigates here; otherwise it's a "coming soon" row. */
+  href?: string;
+};
 
 const SECTIONS: { heading: string; rows: AdminRow[] }[] = [
   {
@@ -35,12 +43,19 @@ const SECTIONS: { heading: string; rows: AdminRow[] }[] = [
         icon: 'boat-outline',
         title: 'Port templates',
         subtitle: 'Free-day defaults · rate cards',
+        href: '/admin/port-templates',
       },
-      { icon: 'cube-outline', title: 'Brokers', subtitle: 'UK & Morocco brokers' },
+      {
+        icon: 'cube-outline',
+        title: 'Brokers',
+        subtitle: 'UK & Morocco brokers',
+        href: '/admin/brokers',
+      },
       {
         icon: 'business-outline',
         title: 'End customers',
         subtitle: 'Aliases · registration · VAT',
+        href: '/admin/end-customers',
       },
     ],
   },
@@ -64,6 +79,7 @@ const SECTIONS: { heading: string; rows: AdminRow[] }[] = [
 
 export default function AdminScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const version = Constants.expoConfig?.version;
 
   if (user?.role !== 'admin') {
@@ -96,20 +112,41 @@ export default function AdminScreen() {
             <Text variant="overline" muted style={styles.sectionHeading}>
               {section.heading}
             </Text>
-            {section.rows.map((row) => (
-              <Card key={row.title} style={styles.row}>
-                <View style={styles.iconWrap}>
-                  <Ionicons name={row.icon} size={20} color={colors.ink2} />
-                </View>
-                <View style={styles.rowBody}>
-                  <Text variant="title">{row.title}</Text>
-                  <Text variant="small" muted>
-                    {row.subtitle}
-                  </Text>
-                </View>
-                <Pill tone="default">Soon</Pill>
-              </Card>
-            ))}
+            {section.rows.map((row) => {
+              const body = (
+                <Card style={styles.row}>
+                  <View style={styles.iconWrap}>
+                    <Ionicons name={row.icon} size={20} color={colors.ink2} />
+                  </View>
+                  <View style={styles.rowBody}>
+                    <Text variant="title">{row.title}</Text>
+                    <Text variant="small" muted>
+                      {row.subtitle}
+                    </Text>
+                  </View>
+                  {row.href ? (
+                    <Text variant="body" muted style={styles.chevron}>
+                      ›
+                    </Text>
+                  ) : (
+                    <Pill tone="default">Soon</Pill>
+                  )}
+                </Card>
+              );
+
+              if (!row.href) {
+                return <View key={row.title}>{body}</View>;
+              }
+              return (
+                <TouchableOpacity
+                  key={row.title}
+                  activeOpacity={0.7}
+                  onPress={() => router.push(row.href as never)}
+                >
+                  {body}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         ))}
 
@@ -155,6 +192,10 @@ const styles = StyleSheet.create({
   rowBody: {
     flex: 1,
     gap: 2,
+  },
+  chevron: {
+    fontSize: 22,
+    lineHeight: 22,
   },
   footer: {
     textAlign: 'center',

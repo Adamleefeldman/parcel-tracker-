@@ -42,3 +42,13 @@ export const canManageCustomerPayments = (role?: UserRole): boolean => role === 
  * the list query's `enabled`, so non-admins never fire a doomed 403 request.
  */
 export const canManageSupplierPayments = (role?: UserRole): boolean => role === 'admin';
+
+/**
+ * Admin-only: the Admin console "Operations" screens (port templates, brokers,
+ * end customers). Drives the Admin tab `href` (cosmetic) AND every list query's
+ * `enabled` gate, so a non-admin who deep-links an admin URL renders a "not
+ * permitted" body and never fires a request. The create/upsert endpoints are
+ * `require_admin` server-side regardless — this is defense-in-depth, not the
+ * real gate.
+ */
+export const canManageAdmin = (role?: UserRole): boolean => role === 'admin';
