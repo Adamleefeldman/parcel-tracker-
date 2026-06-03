@@ -245,7 +245,7 @@ class TestDemurrage:
 class TestDisputes:
     async def test_acknowledged_vs_unacknowledged(self, client: AsyncClient, admin_token: str):
         h = {"Authorization": f"Bearer {admin_token}"}
-        _bid, ctx = await advance_to(client, h, "bl_issued", "MR-DISP")
+        bid, ctx = await advance_to(client, h, "bl_issued", "MR-DISP")
         await _set_container(ctx["container_ids"][0], lifecycle=ContainerLifecycleStatus.DISPUTED)
         await _set_container(
             ctx["container_ids"][1],
@@ -258,11 +258,20 @@ class TestDisputes:
         assert disputes["unacknowledged_count"] == 1
         assert disputes["acknowledged_count"] == 1
 
+        # The drill-in list carries both disputed containers, each with its
+        # booking ref so the mobile dashboard can deep-link to the booking.
+        assert len(disputes["items"]) == 2
+        by_ack = {item["acknowledged"]: item for item in disputes["items"]}
+        assert by_ack[False]["booking_id"] == bid
+        assert by_ack[False]["container_id"] == ctx["container_ids"][0]
+        assert by_ack[False]["container_number"]
+        assert by_ack[True]["container_id"] == ctx["container_ids"][1]
+
     async def test_zero_disputes(self, client: AsyncClient, admin_token: str):
         h = {"Authorization": f"Bearer {admin_token}"}
         resp = await client.get(URL, headers=h)
         disputes = resp.json()["disputes"]
-        assert disputes == {"unacknowledged_count": 0, "acknowledged_count": 0}
+        assert disputes == {"unacknowledged_count": 0, "acknowledged_count": 0, "items": []}
 
 
 # ── Auth ─────────────────────────────────────────────────────────────────────────

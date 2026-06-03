@@ -101,9 +101,25 @@ class DemurrageSummary(BaseModel):
 # ── Disputes ────────────────────────────────────────────────────────────────────
 
 
+class DisputedContainerOut(BaseModel):
+    """A disputed container, for the dashboard drill-in.
+
+    ``acknowledged`` reflects whether an admin has cleared the
+    booking-completion blocker; the lifecycle stays ``DISPUTED`` either way
+    (history is preserved). ``booking_id`` lets the mobile dashboard deep-link to
+    the booking where the dispute is acknowledged.
+    """
+
+    container_id: uuid.UUID
+    container_number: str
+    booking_id: uuid.UUID
+    acknowledged: bool
+
+
 class DisputeSummary(BaseModel):
     unacknowledged_count: int
     acknowledged_count: int
+    items: list[DisputedContainerOut]
 
 
 # ── Combined ────────────────────────────────────────────────────────────────────
