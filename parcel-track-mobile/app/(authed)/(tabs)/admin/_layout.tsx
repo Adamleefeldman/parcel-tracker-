@@ -32,6 +32,12 @@ export const unstable_settings = {
 export default function AdminStackLayout() {
   return (
     <Stack>
+      {/* Declare index first so it's unambiguously the stack root (belt-and-
+          braces with unstable_settings.initialRouteName above). */}
+      <Stack.Screen name="index" />
+      <Stack.Screen name="port-templates/index" />
+      <Stack.Screen name="brokers/index" />
+      <Stack.Screen name="end-customers/index" />
       <Stack.Screen name="port-templates/edit" options={{ presentation: 'modal' }} />
       <Stack.Screen name="brokers/new" options={{ presentation: 'modal' }} />
       <Stack.Screen name="end-customers/new" options={{ presentation: 'modal' }} />
