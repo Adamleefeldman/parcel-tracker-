@@ -5,19 +5,27 @@ import { FlatList, RefreshControl, StyleSheet, TouchableOpacity, View } from 're
 import { useMarkNotificationRead } from '@/src/api/mutations/useMarkNotificationRead';
 import { useNotifications } from '@/src/api/queries/useNotifications';
 import type { NotificationOut } from '@/src/api/types/notification';
-import { ErrorState, Pill, ScreenContainer, Spinner, Text } from '@/src/components/ui';
+import { Card, ErrorState, Pill, ScreenContainer, Spinner, Text } from '@/src/components/ui';
 import { notificationLabel, notificationTone } from '@/src/features/alerts/notificationDisplay';
 import { formatRelativeTime } from '@/src/lib/relativeTime';
 import { colors, spacing } from '@/src/theme/tokens';
 
 /**
- * Notifications feed. Single page of up to 50 (pull-to-refresh); load-more
- * pagination is a follow-up, so when more than a page exists a footer makes the
- * truncation explicit rather than implying the list is complete. Tapping a row
- * marks it read and, when the notification carries a `booking_id`, deep-links to
- * that booking. There is no mark-all-read endpoint, so that action is omitted.
+ * Inbox — the notifications feed (this is the tab the in-app notification list
+ * moved to in Phase 10; the "Alerts" tab is now the Money-risk dashboard). The
+ * unread badge lives on this tab.
+ *
+ * Single page of up to 50 (pull-to-refresh); load-more pagination is a
+ * follow-up, so a footer makes the truncation explicit. Tapping a row marks it
+ * read and, when the notification carries a `booking_id`, deep-links to that
+ * booking. No mark-all-read endpoint exists, so that action is omitted.
+ *
+ * Restyled to the prototype's Inbox card language. The prototype's richer Inbox
+ * (severity tinting, snooze, per-card actions, entity refs, type/urgent/unread
+ * filters) needs backend fields that don't exist yet — deferred to Phase 12.
+ * This renders the current `NotificationOut` shape only.
  */
-export default function AlertsScreen() {
+export default function InboxScreen() {
   const router = useRouter();
   const { data, isLoading, isError, error, refetch, isRefetching } = useNotifications({
     limit: 50,
@@ -37,7 +45,7 @@ export default function AlertsScreen() {
   return (
     <ScreenContainer padded={false}>
       <View style={styles.header}>
-        <Text variant="display">Alerts</Text>
+        <Text variant="display">Inbox</Text>
       </View>
 
       {isLoading ? (
@@ -48,19 +56,19 @@ export default function AlertsScreen() {
         <FlatList
           data={items}
           keyExtractor={(n) => n.id}
-          renderItem={({ item }) => <AlertRow notification={item} onPress={onPressRow} />}
+          renderItem={({ item }) => <InboxRow notification={item} onPress={onPressRow} />}
+          contentContainerStyle={items.length === 0 ? styles.emptyContainer : styles.listContent}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
-          contentContainerStyle={items.length === 0 ? styles.emptyContainer : undefined}
           ListEmptyComponent={
             <Text muted style={styles.centeredText}>
-              No alerts.
+              You&apos;re all caught up.
             </Text>
           }
           ListFooterComponent={
             data && data.total > items.length ? (
               <View style={styles.footer}>
                 <Text variant="small" muted style={styles.centeredText}>
-                  Showing the first {items.length} of {data.total} alerts.
+                  Showing the first {items.length} of {data.total}.
                 </Text>
               </View>
             ) : null
@@ -71,7 +79,7 @@ export default function AlertsScreen() {
   );
 }
 
-function AlertRow({
+function InboxRow({
   notification,
   onPress,
 }: {
@@ -81,8 +89,8 @@ function AlertRow({
   const unread = !notification.read;
   return (
     <TouchableOpacity activeOpacity={0.7} onPress={() => onPress(notification)}>
-      <View style={[styles.row, unread && styles.rowUnread]}>
-        <View style={styles.rowHeader}>
+      <Card style={[styles.card, unread && styles.cardUnread]}>
+        <View style={styles.cardHeader}>
           <Pill tone={notificationTone(notification.type)}>
             {notificationLabel(notification.type)}
           </Pill>
@@ -90,13 +98,13 @@ function AlertRow({
             {formatRelativeTime(notification.created_at)}
           </Text>
         </View>
-        <Text variant="body" weight={unread ? 'semibold' : 'regular'} numberOfLines={1}>
+        <Text variant="title" weight={unread ? 'semibold' : 'medium'} numberOfLines={1}>
           {notification.title}
         </Text>
         <Text variant="small" muted numberOfLines={2}>
           {notification.message}
         </Text>
-      </View>
+      </Card>
     </TouchableOpacity>
   );
 }
@@ -107,20 +115,19 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
   },
-  row: {
+  listContent: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.bg,
+    paddingBottom: spacing.xxl,
+    gap: spacing.md,
+  },
+  card: {
     gap: spacing.xs,
   },
-  rowUnread: {
-    backgroundColor: colors.surface,
+  cardUnread: {
     borderLeftWidth: 3,
     borderLeftColor: colors.primary,
   },
-  rowHeader: {
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -133,8 +140,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   footer: {
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
   },
   centeredText: {
     textAlign: 'center',
