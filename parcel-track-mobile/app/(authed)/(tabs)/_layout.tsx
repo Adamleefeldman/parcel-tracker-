@@ -11,23 +11,25 @@ import { colors } from '@/src/theme/tokens';
  * Bottom-tab navigator — the four top-level destinations (Phase 10 IA), shown
  * role-aware. The labels are counterintuitive, so spell them out:
  *
- *  - **Bookings** — the landing tab (cold start lands here, see `initialRouteName`
- *    below). A stack (`bookings/_layout.tsx`) whose list screen also carries the
- *    merged "Today" dashboard header + money hero cards.
+ *  - **Bookings** — the landing tab. A stack (`bookings/_layout.tsx`) whose list
+ *    screen also carries the merged "Today" dashboard header + money hero cards.
  *  - **Alerts** — the **Money-risk** dashboard (`money-risk.tsx`), NOT
  *    notifications. Admin + uk_agent only.
  *  - **Inbox** — the **notifications** feed (`inbox.tsx`). The unread badge is
  *    here now (moved off the old Alerts tab).
  *  - **Admin** — the admin console shell (`admin.tsx`). Admin only.
  *
+ * **Cold start lands on Bookings** via a hidden `index` redirect route
+ * (`index.tsx` → `<Redirect href="/bookings" />`). The tab group needs a screen
+ * for its base path; without one, route resolution fails at startup and the
+ * splash freezes (the root hides the splash in a post-commit effect). The
+ * redirect resolves the base path and forwards to Bookings — more robust than an
+ * `initialRouteName` with no index route.
+ *
  * Role gating is cosmetic (`href: null` hides a tab); the server is the real
  * gate. Money-risk is additionally `enabled`-gated in its query so a hidden-tab
  * role never fires a 403.
  */
-export const unstable_settings = {
-  initialRouteName: 'bookings',
-};
-
 export default function TabsLayout() {
   const { user } = useAuth();
   const role = user?.role;
@@ -41,6 +43,9 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.primary,
       }}
     >
+      {/* Base-path redirect → Bookings. Hidden from the tab bar; exists only so
+          the group's base path resolves (see the header comment). */}
+      <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen
         name="bookings"
         options={{
