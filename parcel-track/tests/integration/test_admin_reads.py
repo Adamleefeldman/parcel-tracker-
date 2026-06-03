@@ -179,9 +179,7 @@ async def test_list_invites_status_all_includes_everything(client: AsyncClient, 
     assert emails == {"pending@x.com", "used@x.com", "expired@x.com"}
 
 
-async def test_list_invites_status_expired_and_used_filters(
-    client: AsyncClient, admin_token: str
-):
+async def test_list_invites_status_expired_and_used_filters(client: AsyncClient, admin_token: str):
     await _seed_invite("pending@x.com", UserRole.CUSTOMER)
     await _seed_invite("used@x.com", UserRole.CUSTOMER, used=True)
     await _seed_invite("expired@x.com", UserRole.CUSTOMER, expires_in_days=-1)
@@ -230,9 +228,7 @@ async def test_list_invites_never_serializes_token_hash(client: AsyncClient, adm
 # ── Audit logs ────────────────────────────────────────────────────────────────
 
 
-async def test_list_audit_logs_newest_first_and_actor_name(
-    client: AsyncClient, admin_token: str
-):
+async def test_list_audit_logs_newest_first_and_actor_name(client: AsyncClient, admin_token: str):
     admin_id = await _admin_id()
     base = datetime.now(UTC)
     await _seed_audit_log(action="booking.created", actor_id=admin_id, created_at=base)
@@ -263,9 +259,7 @@ async def test_list_audit_logs_newest_first_and_actor_name(
     }
 
 
-async def test_list_audit_logs_passes_through_old_new_values(
-    client: AsyncClient, admin_token: str
-):
+async def test_list_audit_logs_passes_through_old_new_values(client: AsyncClient, admin_token: str):
     admin_id = await _admin_id()
     await _seed_audit_log(
         action="booking.status_changed",
@@ -288,18 +282,14 @@ async def test_list_audit_logs_actor_filter(client: AsyncClient, admin_token: st
     await _seed_audit_log(action="a.one", actor_id=admin_id)
     await _seed_audit_log(action="a.two", actor_id=other_id)
 
-    resp = await client.get(
-        AUDIT_URL, params={"actor_id": str(other_id)}, headers=_h(admin_token)
-    )
+    resp = await client.get(AUDIT_URL, params={"actor_id": str(other_id)}, headers=_h(admin_token))
     assert resp.status_code == 200
     items = resp.json()["items"]
     assert items and all(i["actor_id"] == str(other_id) for i in items)
     assert {i["actor_name"] for i in items} == {"Other"}
 
 
-async def test_list_audit_logs_booking_filter_and_pagination(
-    client: AsyncClient, admin_token: str
-):
+async def test_list_audit_logs_booking_filter_and_pagination(client: AsyncClient, admin_token: str):
     admin_id = await _admin_id()
     booking_id = uuid.uuid4()
     # booking_id is a nullable FK to bookings — but seeded entries below use a

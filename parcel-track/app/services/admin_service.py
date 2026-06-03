@@ -85,9 +85,7 @@ class AdminService:
         q = q.order_by(InviteToken.created_at.desc())
 
         rows = (
-            (await db.execute(q.offset(pagination.offset).limit(pagination.limit)))
-            .scalars()
-            .all()
+            (await db.execute(q.offset(pagination.offset).limit(pagination.limit))).scalars().all()
         )
         items = [
             InviteOut(
