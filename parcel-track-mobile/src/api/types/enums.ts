@@ -104,3 +104,36 @@ export type NotificationType =
   | 'delivery_complete'
   | 'ar_aging_alert'
   | 'demurrage_warning';
+
+/**
+ * UK discharge port (`UKPort` in `app/core/enums.py`). Drives the admin
+ * port-template list (one template per port) — see `src/api/types/admin.ts`.
+ * `UK_PORTS` is the canonical display order (the template list renders every
+ * member, even ports without a saved template); `UK_PORT_LABELS` maps each
+ * member exhaustively, so a new backend value fails the typecheck until added.
+ */
+export type UKPort =
+  | 'felixstowe'
+  | 'london_gateway'
+  | 'tilbury'
+  | 'southampton'
+  | 'liverpool'
+  | 'other';
+
+export const UK_PORTS: readonly UKPort[] = [
+  'felixstowe',
+  'london_gateway',
+  'tilbury',
+  'southampton',
+  'liverpool',
+  'other',
+];
+
+export const UK_PORT_LABELS: Record<UKPort, string> = {
+  felixstowe: 'Felixstowe',
+  london_gateway: 'London Gateway',
+  tilbury: 'Tilbury',
+  southampton: 'Southampton',
+  liverpool: 'Liverpool',
+  other: 'Other',
+};
