@@ -76,9 +76,20 @@ export interface DemurrageSummary {
 
 // ── Disputes ──────────────────────────────────────────────────────────────────
 
+/** A disputed container, for the dashboard drill-in. `booking_id` deep-links to
+ * the booking where the dispute is acknowledged (the container detail screen). */
+export interface DisputedContainer {
+  container_id: string;
+  container_number: string;
+  booking_id: string;
+  acknowledged: boolean;
+}
+
 export interface DisputeSummary {
   unacknowledged_count: number;
   acknowledged_count: number;
+  /** Disputed containers (acknowledged + unacknowledged), oldest first. */
+  items: DisputedContainer[];
 }
 
 // ── Combined ──────────────────────────────────────────────────────────────────

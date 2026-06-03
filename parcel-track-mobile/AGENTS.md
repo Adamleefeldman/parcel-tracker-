@@ -235,7 +235,7 @@ There is no standalone Dashboard tab anymore (Phase 10). The Bookings-tab list s
 - **Money fields are strings.** The route uses `response_model`, so every `Decimal` serialises to a JSON **string**. Types in `src/api/types/moneyRisk.ts`; format/sum via `src/lib/money.ts` (`formatMoney`/`sumDecimalStrings`) — never `parseFloat`.
 - **Demurrage is whole days.** The backend `Vessel.ata` is a date (no time), so `days_remaining` is an int (negative = expired). The prototype's "2d 14h" is design flavour — `formatDaysRemaining` renders "Nd"/"Today"/"Expired", no fabricated hours.
 - **Outstanding £ is full exposure**, not netted against banked tranches; aging clock is `Container.updated_at` (approximate — no precise `delivered_at` yet). These are deliberate backend approximations.
-- Cards (`src/features/moneyRisk/`): `ARAgingCard` (total + buckets + tap-to-expand drill-in over the inline `containers` array), `DemurrageCard` (countdown rows), `DisputesCard` (health line). `MoneyHeroCards` is the compact Bookings-landing summary. Pure helpers in `moneyRiskFormat.ts` (tested).
+- Cards (`src/features/moneyRisk/`): `ARAgingCard` (total + buckets + tap-to-expand drill-in over the inline `containers` array), `DemurrageCard` (countdown rows), `DisputesCard` (health line + a tap-through row per **unacknowledged** dispute → `/bookings/{booking_id}`, where the dispute is acknowledged). The disputes section carries `items: DisputedContainer[]` (each with `booking_id`) — the deep-link target, since the ack action lives on the container detail screen, not here. `MoneyHeroCards` is the compact Bookings-landing summary. Pure helpers in `moneyRiskFormat.ts` (tested).
 
 ## Notifications (Inbox feed)
 

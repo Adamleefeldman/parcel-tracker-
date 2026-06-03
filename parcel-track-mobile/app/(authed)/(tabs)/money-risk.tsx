@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -20,6 +21,7 @@ import { spacing } from '@/src/theme/tokens';
  * "not available" body (defense-in-depth; the server is the real gate).
  */
 export default function MoneyRiskScreen() {
+  const router = useRouter();
   const { user } = useAuth();
   const allowed = canSeeMoneyRisk(user?.role);
   const { data, isLoading, isError, error, refetch, isRefetching } = useMoneyRisk({
@@ -27,6 +29,10 @@ export default function MoneyRiskScreen() {
   });
 
   const onRefresh = useCallback(() => refetch(), [refetch]);
+  const onOpenBooking = useCallback(
+    (bookingId: string) => router.push(`/bookings/${bookingId}`),
+    [router],
+  );
 
   return (
     <ScreenContainer padded={false}>
@@ -54,7 +60,7 @@ export default function MoneyRiskScreen() {
         >
           <ARAgingCard summary={data.ar_aging} />
           <DemurrageCard summary={data.demurrage} />
-          <DisputesCard summary={data.disputes} />
+          <DisputesCard summary={data.disputes} onOpenBooking={onOpenBooking} />
         </ScrollView>
       ) : null}
     </ScreenContainer>
