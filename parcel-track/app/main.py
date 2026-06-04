@@ -21,6 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes import (
+    admin_router,
     auth_router,
     bl_router,
     booking_router,
@@ -238,6 +239,7 @@ app.include_router(delivery_router, prefix=PREFIX)
 app.include_router(doc_router, prefix=PREFIX)
 app.include_router(notif_router, prefix=PREFIX)
 app.include_router(money_risk_router, prefix=PREFIX)
+app.include_router(admin_router, prefix=PREFIX)
 
 # ── Docs gating ───────────────────────────────────────────────────────────────
 #

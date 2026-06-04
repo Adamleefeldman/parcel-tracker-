@@ -1,5 +1,6 @@
 """Per-resource route modules. Import routers from here."""
 
+from app.api.routes.admin import admin_router
 from app.api.routes.auth import auth_router
 from app.api.routes.bl import bl_router
 from app.api.routes.bookings import booking_router
@@ -20,6 +21,7 @@ from app.api.routes.supplier_payments import payment_router
 from app.api.routes.vessels import vessel_router
 
 __all__ = [
+    "admin_router",
     "auth_router",
     "bl_router",
     "booking_router",
