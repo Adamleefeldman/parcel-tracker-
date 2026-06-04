@@ -9,6 +9,20 @@
 
 export type UserRole = 'admin' | 'morocco_agent' | 'uk_agent' | 'customer';
 
+/**
+ * Canonical role order + human labels for the Admin console (user list role
+ * chips + the send-invite role picker). `USER_ROLE_LABELS` maps each member
+ * exhaustively, so a new backend role fails the typecheck until it's added.
+ */
+export const USER_ROLES: readonly UserRole[] = ['admin', 'morocco_agent', 'uk_agent', 'customer'];
+
+export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Admin',
+  morocco_agent: 'Morocco agent',
+  uk_agent: 'UK agent',
+  customer: 'Customer',
+};
+
 export type BookingStatus =
   | 'draft'
   | 'po_submitted'

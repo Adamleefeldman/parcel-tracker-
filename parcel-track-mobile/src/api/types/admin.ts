@@ -18,7 +18,73 @@
  * so there are no `*Update` shapes here.
  */
 
-import type { UKPort } from './enums';
+import type { UKPort, UserRole } from './enums';
+
+// ── People (users + invites) ──────────────────────────────────────────────────
+//
+// Admin-only read views backing the Admin tab's PEOPLE section, plus the
+// send-invite body. Source of truth: `parcel-track/app/api/routes/admin.py` +
+// `app/schemas/schemas.py` (`UserOut`/`InviteOut`/`AuditLogOut`/`InviteRequest`).
+// View + send-invites scope only — no revoke/deactivate/role-change shapes.
+
+/**
+ * A user as seen by an admin. The backend reuses `UserOut` for `GET /users`
+ * (no separate UserAdminOut) — sensitive fields (`hashed_password`,
+ * `expo_push_token`) are never serialised.
+ */
+export interface UserAdmin {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  is_active: boolean;
+  created_at: string;
+}
+
+/**
+ * An invite token as seen by an admin (`InviteOut`). NEVER carries
+ * `token_hash`. `expired` is a backend-derived flag (`expires_at <= now()` and
+ * not yet `used`).
+ */
+export interface Invite {
+  id: string;
+  email: string;
+  role: UserRole;
+  expires_at: string;
+  created_at: string;
+  used: boolean;
+  expired: boolean;
+}
+
+/**
+ * A single audit-log entry (`AuditLogOut`), newest-first in the feed.
+ * `old_value`/`new_value` are stored JSON **strings** (or null) — pretty-print
+ * them defensively (they may be null or non-JSON). `actor_name` is joined from
+ * `User` server-side.
+ */
+export interface AuditLogEntry {
+  id: string;
+  created_at: string;
+  actor_id: string;
+  actor_name: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  old_value: string | null;
+  new_value: string | null;
+  ip_address: string | null;
+  booking_id: string | null;
+}
+
+/**
+ * Body for `POST /api/v1/invite` (`InviteRequest`). The Admin console sends
+ * org-level invites, so `booking_id` is omitted. NO Idempotency-Key (not a
+ * financial create).
+ */
+export interface InviteCreate {
+  email: string;
+  role: UserRole;
+}
 
 // ── Brokers ───────────────────────────────────────────────────────────────────
 

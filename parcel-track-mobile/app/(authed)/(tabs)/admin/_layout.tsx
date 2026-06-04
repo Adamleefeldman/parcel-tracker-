@@ -35,12 +35,21 @@ export default function AdminStackLayout() {
       {/* Declare index first so it's unambiguously the stack root (belt-and-
           braces with unstable_settings.initialRouteName above). */}
       <Stack.Screen name="index" />
+      {/* People (Phase 13b) */}
+      <Stack.Screen name="users/index" />
+      <Stack.Screen name="invites/index" />
+      <Stack.Screen name="invites/new" options={{ presentation: 'modal' }} />
+      {/* Operations (Phase 13a) */}
       <Stack.Screen name="port-templates/index" />
       <Stack.Screen name="brokers/index" />
       <Stack.Screen name="end-customers/index" />
       <Stack.Screen name="port-templates/edit" options={{ presentation: 'modal' }} />
       <Stack.Screen name="brokers/new" options={{ presentation: 'modal' }} />
       <Stack.Screen name="end-customers/new" options={{ presentation: 'modal' }} />
+      {/* System (Phase 13b) */}
+      <Stack.Screen name="audit-log/index" />
+      <Stack.Screen name="system/push" />
+      <Stack.Screen name="system/security" />
     </Stack>
   );
 }
