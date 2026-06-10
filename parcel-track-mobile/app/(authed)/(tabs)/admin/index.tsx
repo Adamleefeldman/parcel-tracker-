@@ -5,35 +5,46 @@ import React from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { useAuth } from '@/src/auth/AuthContext';
-import { Card, Pill, ScreenContainer, Text } from '@/src/components/ui';
+import { Card, ScreenContainer, Text } from '@/src/components/ui';
 import { colors, spacing } from '@/src/theme/tokens';
 
 /**
- * Admin console section menu (Phase 13a). Renders the prototype's three
- * sections — PEOPLE / OPERATIONS / SYSTEM. **OPERATIONS is now live**: its rows
- * navigate into the port-templates / brokers / end-customers screens (all on
- * existing admin-gated backend APIs). PEOPLE (invites/users) and SYSTEM (audit
- * log / push / security) stay non-interactive "coming soon" rows — Phase 13b,
- * which likely needs new backend (invite/user management + an audit read API).
+ * Admin console section menu. Renders the prototype's three sections — PEOPLE /
+ * OPERATIONS / SYSTEM — all now live. PEOPLE (Invites, Users) and SYSTEM (Audit
+ * log, Push notifications, Security) landed in Phase 13b on the new admin read
+ * endpoints (`GET /users`/`/invites`/`/audit-logs`) plus the existing
+ * `POST /auth/invite` for sends; OPERATIONS (port templates / brokers / end
+ * customers) landed in Phase 13a. Scope is view + send-invites — no
+ * revoke/deactivate/role-change; Push + Security are static info panels.
  *
  * The tab is hidden for non-admins (`href: null` in the tabs layout); a
- * deep-linked non-admin gets a friendly "not available" body (defense-in-depth;
- * the server is the real gate for every admin endpoint).
+ * deep-linked non-admin gets a friendly "not available" body here, and each
+ * sub-screen re-checks (defense-in-depth; the server is the real gate).
  */
 type AdminRow = {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   subtitle: string;
-  /** When set, the row navigates here; otherwise it's a "coming soon" row. */
-  href?: string;
+  /** Navigation target for the row. */
+  href: string;
 };
 
 const SECTIONS: { heading: string; rows: AdminRow[] }[] = [
   {
     heading: 'People',
     rows: [
-      { icon: 'person-add-outline', title: 'Invites', subtitle: 'Invite agents & customers' },
-      { icon: 'people-outline', title: 'Users', subtitle: 'Roles & access' },
+      {
+        icon: 'person-add-outline',
+        title: 'Invites',
+        subtitle: 'Invite agents & customers',
+        href: '/admin/invites',
+      },
+      {
+        icon: 'people-outline',
+        title: 'Users',
+        subtitle: 'Roles & access',
+        href: '/admin/users',
+      },
     ],
   },
   {
@@ -62,16 +73,23 @@ const SECTIONS: { heading: string; rows: AdminRow[] }[] = [
   {
     heading: 'System',
     rows: [
-      { icon: 'document-text-outline', title: 'Audit log', subtitle: 'Append-only state history' },
+      {
+        icon: 'document-text-outline',
+        title: 'Audit log',
+        subtitle: 'Append-only state history',
+        href: '/admin/audit-log',
+      },
       {
         icon: 'notifications-outline',
         title: 'Push notifications',
         subtitle: 'Delivery & templates',
+        href: '/admin/system/push',
       },
       {
         icon: 'shield-checkmark-outline',
         title: 'Security',
         subtitle: 'JWT · revocation · bcrypt',
+        href: '/admin/system/security',
       },
     ],
   },
@@ -112,8 +130,12 @@ export default function AdminScreen() {
             <Text variant="overline" muted style={styles.sectionHeading}>
               {section.heading}
             </Text>
-            {section.rows.map((row) => {
-              const body = (
+            {section.rows.map((row) => (
+              <TouchableOpacity
+                key={row.title}
+                activeOpacity={0.7}
+                onPress={() => router.push(row.href as never)}
+              >
                 <Card style={styles.row}>
                   <View style={styles.iconWrap}>
                     <Ionicons name={row.icon} size={20} color={colors.ink2} />
@@ -124,29 +146,12 @@ export default function AdminScreen() {
                       {row.subtitle}
                     </Text>
                   </View>
-                  {row.href ? (
-                    <Text variant="body" muted style={styles.chevron}>
-                      ›
-                    </Text>
-                  ) : (
-                    <Pill tone="default">Soon</Pill>
-                  )}
+                  <Text variant="body" muted style={styles.chevron}>
+                    ›
+                  </Text>
                 </Card>
-              );
-
-              if (!row.href) {
-                return <View key={row.title}>{body}</View>;
-              }
-              return (
-                <TouchableOpacity
-                  key={row.title}
-                  activeOpacity={0.7}
-                  onPress={() => router.push(row.href as never)}
-                >
-                  {body}
-                </TouchableOpacity>
-              );
-            })}
+              </TouchableOpacity>
+            ))}
           </View>
         ))}
 
