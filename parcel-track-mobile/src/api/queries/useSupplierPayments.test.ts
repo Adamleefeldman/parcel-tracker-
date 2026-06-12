@@ -32,13 +32,19 @@ describe('supplierPaymentsQueryKey', () => {
 describe('useSupplierPayments', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('hits the invoice-scoped path with a high limit so the client-side sum is exact', async () => {
+  it('hits the invoice-scoped path with the backend max limit so the client-side sum is exact', async () => {
     mockAuthedApiRequest.mockResolvedValue({} as never);
     const query = useSupplierPayments('inv-1', { enabled: true }) as any;
     await query.queryFn();
+    // Literal 200, not the constant: the backend's MAX_PAGE_SIZE 422s anything
+    // higher, so a drifted constant must fail here, not in production.
     expect(mockAuthedApiRequest).toHaveBeenCalledWith(
-      `/api/v1/invoices/inv-1/supplier-payments?limit=${SUPPLIER_PAYMENTS_PAGE_LIMIT}`,
+      '/api/v1/invoices/inv-1/supplier-payments?limit=200',
     );
+  });
+
+  it('keeps the page limit at the backend MAX_PAGE_SIZE cap', () => {
+    expect(SUPPLIER_PAYMENTS_PAGE_LIMIT).toBe(200);
   });
 
   it('is disabled when the caller is not admin (enabled: false)', () => {
