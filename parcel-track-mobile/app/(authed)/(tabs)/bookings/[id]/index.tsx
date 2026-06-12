@@ -55,6 +55,10 @@ export default function BookingDetailScreen() {
           body scrolls. */}
       <Stack.Screen
         options={{
+          // `title` never renders here (headerTitle wins) but feeds the BACK
+          // label of screens pushed from this one — without it iOS falls back
+          // to the raw route name ("[id]/index").
+          title: data ? data.booking_number || data.reference : 'Booking',
           headerTitle: () =>
             data ? <StickyTitle booking={data} /> : <AppHeader title="Booking" />,
         }}
