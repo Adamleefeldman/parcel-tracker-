@@ -187,7 +187,16 @@ export default function AddDocumentScreen() {
 
         {uploading ? (
           <View style={styles.progressBlock}>
-            {phase === 'finalising' ? (
+            {phase === 'presigning' ? (
+              // Presign step — nothing has moved yet; labelling it stops the
+              // tap-to-first-progress gap from reading as a hang.
+              <View style={styles.indeterminateRow}>
+                <Spinner size="small" />
+                <Text variant="small" muted>
+                  Preparing…
+                </Text>
+              </View>
+            ) : phase === 'finalising' ? (
               // Confirm step reports no progress — spinner + clear label rather
               // than a bar pinned at 100%.
               <View style={styles.indeterminateRow}>

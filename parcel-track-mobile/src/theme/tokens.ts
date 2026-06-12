@@ -45,7 +45,10 @@ export const colors = {
   ink: '#0e1217', // primary text
   ink2: '#484e54', // secondary text
   ink3: '#7c8186', // muted text
-  ink4: '#a1a5a9', // faint / placeholder
+  // Faint / placeholder. Darkened from #a1a5a9 (2.4:1 on `bg`) in Phase 11 to
+  // pass the WCAG 3:1 large-text/UI floor (3.1:1). True 4.5:1 is unreachable
+  // here — it would land DARKER than ink3 (itself 3.8:1) and invert the ramp.
+  ink4: '#8a8f94',
 
   // Borders
   line: '#e6e4e1', // hairline border
@@ -98,6 +101,45 @@ export const spacing = {
   lg: 16,
   xl: 24,
   xxl: 32,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Sizes (non-spacing dimensions)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fixed component dimensions that aren't rhythm/spacing: progress-track
+ * heights, indicator dots, icon containers. One source so the same visual
+ * element is the same size everywhere (e.g. every thin progress bar is
+ * `trackThin`, every stepper segment is `trackMicro`).
+ */
+export const sizes = {
+  /** Thin determinate progress track (ProgressBar, banked progress). */
+  trackThin: 6,
+  /** Micro segmented track (BookingStepper / BookingCard segments). */
+  trackMicro: 4,
+  /** Small status/urgency dot (DemurrageCard rows). */
+  dotSm: 8,
+  /** Square icon container (admin menu, security panel rows). */
+  iconBox: 36,
+  /** Minimum touch-target height for tappable rows (HIG 44pt). */
+  touchTarget: 44,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Overlays
+// ---------------------------------------------------------------------------
+
+/**
+ * Translucent scrims. Kept out of `colors` because they're alpha composites
+ * over arbitrary content, not surface/text pairs — and tokenizing them keeps a
+ * future dark mode cheap.
+ */
+export const overlays = {
+  /** Modal/backdrop dim behind bottom sheets (Select, DateField). */
+  dim: 'rgba(14,18,23,0.4)',
+  /** Android pressed-state ripple on tappable rows. */
+  ripple: 'rgba(14,18,23,0.08)',
 } as const;
 
 // ---------------------------------------------------------------------------

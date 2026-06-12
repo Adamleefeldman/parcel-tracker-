@@ -29,7 +29,7 @@ import type {
 import { putFile } from '../../lib/upload';
 
 /** Which step of the upload flow is currently running (for UI labelling). */
-export type UploadPhase = 'uploading' | 'finalising';
+export type UploadPhase = 'presigning' | 'uploading' | 'finalising';
 
 export interface UploadDocumentVars {
   fileUri: string;
@@ -39,9 +39,11 @@ export interface UploadDocumentVars {
   fileSize?: number;
   onProgress?: (fraction: number) => void;
   /**
-   * Phase transitions, so the UI can switch the label from "Uploading…" to
-   * "Finalising…" once the byte PUT finishes and the (un-progressed) confirm
-   * POST runs — otherwise the bar sits pinned at 100% with no explanation.
+   * Phase transitions, so the UI can label each silent stretch: "Preparing…"
+   * while the presign POST runs (before any byte moves — without it the gap
+   * between tapping Upload and the first progress event reads as a hang),
+   * then "Uploading…", then "Finalising…" during the (un-progressed) confirm
+   * POST — otherwise the bar sits pinned at 100% with no explanation.
    */
   onPhase?: (phase: UploadPhase) => void;
 }
@@ -57,7 +59,7 @@ export function useUploadDocument(entityType: DocumentEntityType, entityId: stri
       onProgress,
       onPhase,
     }: UploadDocumentVars): Promise<DocumentOut> => {
-      onPhase?.('uploading');
+      onPhase?.('presigning');
       const presignBody: UploadUrlRequest = {
         entity_type: entityType,
         entity_id: entityId,
@@ -70,6 +72,7 @@ export function useUploadDocument(entityType: DocumentEntityType, entityId: stri
         body: presignBody,
       });
 
+      onPhase?.('uploading');
       await putFile({ url: presign.upload_url, fileUri, contentType, onProgress });
 
       // Bytes are in R2; the confirm POST reports no progress, so label it.

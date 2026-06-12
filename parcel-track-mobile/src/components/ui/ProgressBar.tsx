@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { colors, radii } from '../../theme/tokens';
+import { colors, radii, sizes } from '../../theme/tokens';
 
 /**
  * Thin determinate progress bar. `progress` is a 0..1 fraction (clamped).
@@ -22,7 +22,7 @@ export function ProgressBar({ progress }: ProgressBarProps) {
 
 const styles = StyleSheet.create({
   track: {
-    height: 6,
+    height: sizes.trackThin,
     borderRadius: radii.pill,
     backgroundColor: colors.bgSunk,
     overflow: 'hidden',

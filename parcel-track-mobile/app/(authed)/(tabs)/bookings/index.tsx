@@ -2,35 +2,37 @@ import { Stack, useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 
-import { type Booking, useBookings } from '@/src/api/queries/useBookings';
+import { useBookings } from '@/src/api/queries/useBookings';
 import { canSeeMoneyRisk, useMoneyRisk } from '@/src/api/queries/useMoneyRisk';
-import type { BookingStatus, UserRole } from '@/src/api/types/enums';
+import type { UserRole } from '@/src/api/types/enums';
 import { useAuth } from '@/src/auth/AuthContext';
 import {
   Button,
+  EmptyState,
   ErrorState,
-  ListItem,
   Pill,
   ScreenContainer,
   Spinner,
-  StatusPill,
   Text,
 } from '@/src/components/ui';
+import { BookingCard } from '@/src/features/bookings/BookingCard';
+import { countByStatus, formatStatusCounts } from '@/src/features/bookings/bookingStatusCounts';
 import { dashboardConfig } from '@/src/features/dashboard/dashboardSections';
 import { MoneyHeroCards } from '@/src/features/moneyRisk/MoneyHeroCards';
-import { formatDate } from '@/src/lib/date';
 import { spacing } from '@/src/theme/tokens';
 
 /**
  * Bookings tab — the app's landing screen (Phase 10 merged the standalone
  * "Today" dashboard into this list's header). The header carries a role
  * greeting and, for admin / uk_agent, the two money hero cards (aged A/R +
- * soonest demurrage) that tap through to the Alerts (Money-risk) tab. Below it,
- * the live bookings list.
+ * soonest demurrage) that tap through to the Alerts (Money-risk) tab. Roles
+ * without the money cards (customer, morocco_agent) get a compact status-count
+ * strip instead — derived client-side from the same list page, no extra fetch.
+ * Below it, the live bookings list as rich cards (Phase 11).
  *
  * Deferred (→ roadmap): the prototype's "N things need you today" action banner
  * and the All / Active / Needs-me / Mine filter chips — those are cross-booking
- * "needs me" feature work, not part of this IA pass.
+ * "needs me" feature work, not part of this pass.
  */
 export default function BookingsScreen() {
   const router = useRouter();
@@ -49,11 +51,20 @@ export default function BookingsScreen() {
     if (canSeeMoneyRisk(role)) moneyRisk.refetch();
   }, [refetch, moneyRisk, role]);
 
+  const statusStrip = !canSeeMoneyRisk(role)
+    ? formatStatusCounts(countByStatus(data?.items ?? []))
+    : '';
+
   const header = (
     <View style={styles.header}>
       <Pill tone="default">{config.greeting}</Pill>
       {canSeeMoneyRisk(role) && moneyRisk.data ? (
         <MoneyHeroCards data={moneyRisk.data} onPress={() => router.push('/money-risk')} />
+      ) : null}
+      {statusStrip ? (
+        <Text variant="small" muted>
+          {statusStrip}
+        </Text>
       ) : null}
       <Text variant="overline" muted style={styles.listLabel}>
         Bookings
@@ -79,13 +90,15 @@ export default function BookingsScreen() {
           data={data?.items ?? []}
           keyExtractor={(b) => b.id}
           ListHeaderComponent={header}
-          renderItem={({ item }) => <BookingRow booking={item} onPress={onItemPress} />}
+          renderItem={({ item }) => <BookingCard booking={item} onPress={onItemPress} />}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} />}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            <Text muted style={styles.centeredText}>
-              {emptyMessageFor(role)}
-            </Text>
+            <EmptyState
+              icon="file-tray-outline"
+              title="No bookings yet"
+              subtitle={emptyMessageFor(role)}
+            />
           }
           ListFooterComponent={
             data && data.total > data.items.length ? (
@@ -95,17 +108,6 @@ export default function BookingsScreen() {
         />
       )}
     </ScreenContainer>
-  );
-}
-
-function BookingRow({ booking, onPress }: { booking: Booking; onPress: (id: string) => void }) {
-  return (
-    <ListItem
-      title={booking.booking_number || booking.reference}
-      subtitle={formatDate(booking.created_at)}
-      right={<StatusPill kind="booking" status={booking.status as BookingStatus} />}
-      onPress={() => onPress(booking.id)}
-    />
   );
 }
 
@@ -125,7 +127,7 @@ function TruncationNotice({ shown, total }: { shown: number; total: number }) {
 }
 
 function emptyMessageFor(role: string | undefined): string {
-  if (role === 'admin') return 'No bookings yet. Create one from the dashboard.';
+  if (role === 'admin') return 'Create one from the dashboard.';
   // Most restrictive default — covers customer, agents, and the rare null user.
   return "You don't have any bookings assigned to you yet.";
 }
@@ -142,10 +144,11 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl,
+    gap: spacing.md,
     flexGrow: 1,
   },
   footer: {
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   centeredText: {
     textAlign: 'center',

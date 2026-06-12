@@ -6,8 +6,8 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import type { UserRole } from '@/src/api/types/enums';
 import { useAuth } from '@/src/auth/AuthContext';
 import { canManageAdmin } from '@/src/auth/permissions';
-import { Card, ScreenContainer, Text } from '@/src/components/ui';
-import { colors, spacing } from '@/src/theme/tokens';
+import { Card, IconBox, ScreenContainer, Text } from '@/src/components/ui';
+import { spacing } from '@/src/theme/tokens';
 
 /**
  * Static informational panel (Admin → System → Security). Describes how the
@@ -66,9 +66,7 @@ export default function SecurityScreen() {
 
         {ITEMS.map((item) => (
           <Card key={item.title} style={styles.card}>
-            <View style={styles.iconWrap}>
-              <Ionicons name={item.icon} size={20} color={colors.ink2} />
-            </View>
+            <IconBox icon={item.icon} />
             <View style={styles.cardBody}>
               <Text variant="title">{item.title}</Text>
               <Text variant="small" muted style={styles.detail}>
@@ -95,14 +93,6 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     gap: spacing.md,
-  },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.bgSoft,
   },
   cardBody: {
     flex: 1,

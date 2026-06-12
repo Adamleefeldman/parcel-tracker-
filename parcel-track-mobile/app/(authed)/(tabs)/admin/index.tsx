@@ -5,7 +5,7 @@ import React from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { useAuth } from '@/src/auth/AuthContext';
-import { Card, ScreenContainer, Text } from '@/src/components/ui';
+import { Card, IconBox, ScreenContainer, Text } from '@/src/components/ui';
 import { colors, spacing } from '@/src/theme/tokens';
 
 /**
@@ -137,18 +137,14 @@ export default function AdminScreen() {
                 onPress={() => router.push(row.href as never)}
               >
                 <Card style={styles.row}>
-                  <View style={styles.iconWrap}>
-                    <Ionicons name={row.icon} size={20} color={colors.ink2} />
-                  </View>
+                  <IconBox icon={row.icon} />
                   <View style={styles.rowBody}>
                     <Text variant="title">{row.title}</Text>
                     <Text variant="small" muted>
                       {row.subtitle}
                     </Text>
                   </View>
-                  <Text variant="body" muted style={styles.chevron}>
-                    ›
-                  </Text>
+                  <Ionicons name="chevron-forward" size={18} color={colors.ink4} />
                 </Card>
               </TouchableOpacity>
             ))}
@@ -186,21 +182,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.bgSoft,
-  },
   rowBody: {
     flex: 1,
-    gap: 2,
-  },
-  chevron: {
-    fontSize: 22,
-    lineHeight: 22,
+    gap: spacing.xs,
   },
   footer: {
     textAlign: 'center',

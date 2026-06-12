@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import type { DemurrageCountdown, DemurrageSummary } from '../../api/types/moneyRisk';
 import { Card, Pill, Text, type PillTone } from '../../components/ui';
 import { formatMoney } from '../../lib/money';
-import { colors, spacing } from '../../theme/tokens';
+import { colors, radii, sizes, spacing } from '../../theme/tokens';
 import { demurrageTone, formatDaysRemaining } from './moneyRiskFormat';
 
 /** Saturated dot/figure color per urgency. */
@@ -112,8 +112,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: sizes.dotSm,
+    height: sizes.dotSm,
+    borderRadius: radii.pill,
   },
 });

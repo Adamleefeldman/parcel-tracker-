@@ -57,9 +57,12 @@ export function DisputesCard({
               <Text variant="body" mono weight="medium" numberOfLines={1} style={styles.disputeRef}>
                 {c.container_number}
               </Text>
-              <Text variant="body" color={colors.amberInk}>
-                Review ›
-              </Text>
+              <View style={styles.reviewRow}>
+                <Text variant="body" color={colors.amberInk}>
+                  Review
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.amberInk} />
+              </View>
             </TouchableOpacity>
           ))}
         </>
@@ -79,7 +82,7 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
-    gap: 2,
+    gap: spacing.xs,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -95,5 +98,10 @@ const styles = StyleSheet.create({
   },
   disputeRef: {
     flexShrink: 1,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
 });

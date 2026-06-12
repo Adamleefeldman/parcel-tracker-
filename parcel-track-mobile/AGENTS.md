@@ -1,6 +1,6 @@
 # AGENTS.md — parcel-track-mobile
 
-_Last reviewed: 2026-06-04 (Phase 13b — Admin console: People + System). The Expo SDK pin and any "current state" notes below go stale fast — update this date whenever you touch them._
+_Last reviewed: 2026-06-12 (Phase 11 — UX polish & design-system hardening; lands after 13b). The Expo SDK pin and any "current state" notes below go stale fast — update this date whenever you touch them._
 
 The companion backend doc is [`../parcel-track/CLAUDE.md`](../parcel-track/CLAUDE.md). Read it before doing anything that crosses the API boundary (auth shape, status enums, endpoint paths under `/api/v1`, error envelope).
 
@@ -75,7 +75,7 @@ Bundle / package: `com.thefmcghub.logistics` (permanent — do not change).
 - **Session-expired is an event, not a return value.** On refresh failure, `client.ts` calls `clearTokens()` and `emitSessionExpired()` (`src/auth/sessionEvents.ts`). `AuthProvider` listens and flips status → `anonymous`, which re-renders the login screen. Don't try to navigate from inside the API client.
 - **`AuthContext` is the only consumer of token storage.** Screens read `useAuth()` for `{ status, user, signIn, signOut }` — they don't call `getAccessToken()` themselves.
 - **Theme tokens, not inline styles.** Colours, spacing, radii, shadows, and the Geist type scale live in `src/theme/tokens.ts` and are consumed via `src/theme/index.ts`. Hard-coded hex/px or a raw `fontWeight` in a component is a code-smell. See **Theme & design system** below for the full vocabulary.
-- **Shared UI primitives in `src/components/ui/`.** `Button`, `Card`, `FormError`, `Input`, `ListItem`, `Pill`, `ScreenContainer`, `Select`, `Spinner`, `StatusPill`, `Text`, plus the `ToastProvider`/`useToast` feedback system. Reach for these before building bespoke views.
+- **Shared UI primitives in `src/components/ui/`.** `Button`, `Card`, `EmptyState`, `FormError`, `IconBox`, `Input`, `ListItem`, `Pill`, `ScreenContainer`, `Select`, `Spinner`, `StatusPill`, `Text`, plus the `ToastProvider`/`useToast` feedback system and the `animateLayout()` helper (call before a collapsible's `setState` toggle). Reach for these before building bespoke views. Empty lists render `<EmptyState icon? title subtitle?>`, not a hand-rolled centered `<Text>`; the 36×36 icon squares are `<IconBox>`.
 - **One status-pill component.** Any badge that renders a `BookingStatus` or `ContainerLifecycleStatus` goes through `<StatusPill>` (`src/components/ui/StatusPill.tsx`). It maps each enum value to a tone via an exhaustive `Record<...>` — a new backend enum value will fail TS until the mapping in `statusPillMapping.ts` is updated. Don't render raw status strings, and don't reimplement a local tone-picker.
 
 ---
@@ -124,6 +124,24 @@ family in `app/_layout.tsx`: `Geist-Regular/Medium/SemiBold/Bold` +
   invoice numbers, the state-machine chip text, monetary figures in dense rows.
   `<Text mono>`. Geist Mono ships Regular + Medium only (heavier cuts fall back
   to Medium).
+
+### Sizes, overlays (Phase 11)
+
+`sizes` holds fixed non-spacing dimensions — `trackThin 6` (ProgressBar),
+`trackMicro 4` (stepper/card progress segments), `dotSm 8` (status dots),
+`iconBox 36` (IconBox), `touchTarget 44` (min row height). `overlays` holds the
+translucent scrims (`dim` for sheet backdrops, `ripple` for `android_ripple`).
+A raw `height: 6` / `rgba(...)` in a component is the same code-smell as a raw
+hex. `ink4` was darkened to `#8a8f94` in Phase 11 (3.1:1 on `bg` — the WCAG
+large-text floor; a true 4.5:1 would land darker than `ink3` and invert the
+ramp). Chevrons/carets are Ionicons (`chevron-forward/down/up`, usually 18
+`ink4`), never the text glyphs `›`/`▾`/`⌄`.
+
+### Type scaling
+
+The `<Text>` primitive (and `Input`'s `TextInput`) sets
+`maxFontSizeMultiplier={1.3}` so the OS accessibility font setting scales text
+without exploding dense rows. Don't override it per-screen.
 
 ### Radii, shadows
 
@@ -229,7 +247,8 @@ There is no standalone Dashboard tab anymore (Phase 10). The Bookings-tab list s
 
 - **Role greeting** — `dashboardConfig(role).greeting` (`src/features/dashboard/dashboardSections.ts`, pure + tested). The role label only; there is no `/me` endpoint and the JWT carries no name.
 - **Money hero cards (admin/uk_agent only)** — two cards, aged A/R exposure (£) + soonest demurrage countdown, sourced from the same `useMoneyRisk` query the Money-risk screen uses (one shared `['money-risk']` cache slot, not a second fetch). Tapping either navigates to the Alerts (Money-risk) tab. Hidden + query-gated for other roles.
-- The live bookings list follows (one `useBookings({ limit: 200 })` page; per-row `<StatusPill>`).
+- **Status-count strip (customer / morocco_agent)** — roles without the money cards get a one-line "2 in transit · 1 complete" strip instead, derived client-side from the same list page via `countByStatus`/`formatStatusCounts` (`src/features/bookings/bookingStatusCounts.ts`, pure + tested). No extra fetch.
+- The live bookings list follows (one `useBookings({ limit: 200 })` page) rendered as rich `<BookingCard>`s (`src/features/bookings/BookingCard.tsx`): mono ref + `StatusPill`, route/ETA, goods, counts·vessel lines from the **optional** list summary fields (`po_count`, `container_count`, `vessel_name`, `eta`, `port_of_discharge`, `product_summary` on the `Booking` type — typed optional so the app works against a backend without the enrichment), plus a segmented progress bar. The status→step mapping is the pure `bookingProgress.ts` (`BOOKING_STAGES`/`bookingStageIndex`, tested) shared with `BookingStepper` — never fork it.
 - **Deferred (→ roadmap):** the prototype's "N things need you today" action banner and the All / Active / Needs-me / Mine filter chips (cross-booking "needs me" feature work). The Phase-5 status-count grid was retired here in favour of the live list — faceted counts return with the filter chips.
 
 ## Money-risk (the "Alerts" tab)
@@ -517,7 +536,8 @@ Bump when a matching Expo Go ships: `npx expo install expo@latest --fix`, then u
 | Trusting `user.role` from JWT for security                                                                       | UI hint only. Backend re-checks; handle 403                                                                                                          |
 | Editing `.env*` and expecting hot reload                                                                         | Env files are bundler-startup only. Restart `expo start`                                                                                             |
 | Logging out on `ApiError.isNetworkError`                                                                         | Transport failure is not an auth failure. Surface "check your connection" instead                                                                    |
-| Inline `#hex` colours / magic px in a component                                                                  | Use `src/theme/tokens.ts`                                                                                                                            |
+| Inline `#hex` colours / magic px in a component                                                                  | Use `src/theme/tokens.ts` (incl. `sizes` for track/dot/icon-box dimensions and `overlays` for rgba scrims)                                           |
+| Hand-rolled centered `<Text>` for an empty list, or a text `›`/`▾` chevron                                       | `<EmptyState>` for empty lists; Ionicons `chevron-forward/down/up` for chevrons                                                                      |
 | `fontWeight:'700'` (or any `fontWeight`) on a custom-font `<Text>`                                               | Custom RN fonts don't synthesize weight — it renders Regular. Use `<Text weight="semibold">`; family-by-weight resolves via `fontFamily()` (Theme)   |
 | Rendering a status string directly or rolling a local `toneFor` helper                                           | Use `<StatusPill kind="booking"                                                                                                                      | "lifecycle" …>` — see Status pills |
 | Calling `apiRequest` directly from a screen for authed reads                                                     | Use a query hook in `src/api/queries/` via `useQuery` + `authedApiRequest`                                                                           |

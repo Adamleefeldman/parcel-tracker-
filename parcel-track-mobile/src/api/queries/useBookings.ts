@@ -29,6 +29,16 @@ export interface Booking {
   status: string;
   created_at: string;
   updated_at: string;
+  // Summary fields added by the paired backend PR (`booking-list-summary-fields`).
+  // ALL optional on purpose: the app must typecheck and render gracefully
+  // against an un-enriched backend (the two PRs merge in either order).
+  po_count?: number;
+  container_count?: number;
+  vessel_name?: string | null;
+  /** Date string (`YYYY-MM-DD`). */
+  eta?: string | null;
+  port_of_discharge?: string | null;
+  product_summary?: string | null;
 }
 
 export interface PaginatedResponse<T> {

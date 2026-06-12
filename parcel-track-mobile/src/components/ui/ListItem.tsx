@@ -1,7 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
-import { colors, spacing } from '../../theme/tokens';
+import { colors, overlays, sizes, spacing } from '../../theme/tokens';
 import { Text } from './Text';
 
 export interface ListItemProps {
@@ -9,28 +10,35 @@ export interface ListItemProps {
   subtitle?: string;
   right?: React.ReactNode;
   onPress?: () => void;
+  /** Render the title in Geist Mono (refs/IDs — container numbers, codes). */
+  monoTitle?: boolean;
+  /** Render the subtitle in Geist Mono (codes/refs on the second line). */
+  monoSubtitle?: boolean;
 }
 
-export function ListItem({ title, subtitle, right, onPress }: ListItemProps) {
+export function ListItem({
+  title,
+  subtitle,
+  right,
+  onPress,
+  monoTitle,
+  monoSubtitle,
+}: ListItemProps) {
   const content = (
     <View style={styles.row}>
       <View style={styles.text}>
-        <Text variant="body" numberOfLines={1}>
+        <Text variant="body" mono={monoTitle} numberOfLines={1}>
           {title}
         </Text>
         {subtitle ? (
-          <Text variant="small" muted numberOfLines={1} style={styles.subtitle}>
+          <Text variant="small" mono={monoSubtitle} muted numberOfLines={1} style={styles.subtitle}>
             {subtitle}
           </Text>
         ) : null}
       </View>
       <View style={styles.right}>
         {right}
-        {onPress ? (
-          <Text variant="body" muted style={styles.chevron}>
-            ›
-          </Text>
-        ) : null}
+        {onPress ? <Ionicons name="chevron-forward" size={18} color={colors.ink4} /> : null}
       </View>
     </View>
   );
@@ -39,9 +47,13 @@ export function ListItem({ title, subtitle, right, onPress }: ListItemProps) {
     return content;
   }
   return (
-    <TouchableOpacity activeOpacity={0.7} onPress={onPress}>
+    <Pressable
+      onPress={onPress}
+      android_ripple={{ color: overlays.ripple }}
+      style={({ pressed }) => (pressed && Platform.OS === 'ios' ? styles.pressedIos : undefined)}
+    >
       {content}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -49,6 +61,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: sizes.touchTarget,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -67,8 +80,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  chevron: {
-    fontSize: 22,
-    lineHeight: 22,
+  // Android gets the ripple; iOS keeps the old TouchableOpacity-style dim.
+  pressedIos: {
+    opacity: 0.7,
   },
 });

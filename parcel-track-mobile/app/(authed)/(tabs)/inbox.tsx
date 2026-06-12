@@ -5,7 +5,15 @@ import { FlatList, RefreshControl, StyleSheet, TouchableOpacity, View } from 're
 import { useMarkNotificationRead } from '@/src/api/mutations/useMarkNotificationRead';
 import { useNotifications } from '@/src/api/queries/useNotifications';
 import type { NotificationOut } from '@/src/api/types/notification';
-import { Card, ErrorState, Pill, ScreenContainer, Spinner, Text } from '@/src/components/ui';
+import {
+  Card,
+  EmptyState,
+  ErrorState,
+  Pill,
+  ScreenContainer,
+  Spinner,
+  Text,
+} from '@/src/components/ui';
 import { notificationLabel, notificationTone } from '@/src/features/alerts/notificationDisplay';
 import { formatRelativeTime } from '@/src/lib/relativeTime';
 import { colors, spacing } from '@/src/theme/tokens';
@@ -60,9 +68,11 @@ export default function InboxScreen() {
           contentContainerStyle={items.length === 0 ? styles.emptyContainer : styles.listContent}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
           ListEmptyComponent={
-            <Text muted style={styles.centeredText}>
-              You&apos;re all caught up.
-            </Text>
+            <EmptyState
+              icon="mail-open-outline"
+              title="You're all caught up"
+              subtitle="New notifications appear here."
+            />
           }
           ListFooterComponent={
             data && data.total > items.length ? (

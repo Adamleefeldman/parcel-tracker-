@@ -21,6 +21,7 @@ import { DocumentsList } from '@/src/components/documents/DocumentsList';
 import {
   Button,
   Card,
+  EmptyState,
   ErrorState,
   Pill,
   ScreenContainer,
@@ -32,7 +33,7 @@ import {
 import { humanizeStatus } from '@/src/components/ui/statusPillMapping';
 import { formatDate, formatDateTime } from '@/src/lib/date';
 import { formatMoney, parseRatio } from '@/src/lib/money';
-import { colors, radii, spacing } from '@/src/theme/tokens';
+import { colors, radii, sizes, spacing } from '@/src/theme/tokens';
 
 export default function ContainerDetailScreen() {
   const { id, cid } = useLocalSearchParams<{ id: string; cid: string }>();
@@ -76,13 +77,19 @@ function Body({
   refreshing: boolean;
   onRefresh: () => void;
 }) {
+  // The acknowledge mutation lives here (not in ActionsSection) so its pending
+  // state can also dim the dispute banner — the tap visibly does something.
+  const acknowledge = useAcknowledgeDispute(bookingId, containerId);
+
   return (
     <ScrollView
       contentContainerStyle={styles.scroll}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       <View style={styles.header}>
-        <Text variant="display">{container.container_number}</Text>
+        <Text variant="display" mono>
+          {container.container_number}
+        </Text>
         <View style={styles.headerRow}>
           <StatusPill kind="lifecycle" status={container.lifecycle_status} />
           {container.seal_number ? (
@@ -93,8 +100,13 @@ function Body({
         </View>
       </View>
 
-      <DisputeBanner container={container} />
-      <ActionsSection container={container} bookingId={bookingId} containerId={containerId} />
+      <DisputeBanner container={container} acknowledging={acknowledge.isPending} />
+      <ActionsSection
+        container={container}
+        bookingId={bookingId}
+        containerId={containerId}
+        acknowledge={acknowledge}
+      />
       <SaleSection container={container} />
       <PaymentsSection container={container} bookingId={bookingId} containerId={containerId} />
       <PartiesSection container={container} />
@@ -104,12 +116,18 @@ function Body({
   );
 }
 
-function DisputeBanner({ container }: { container: Container }) {
+function DisputeBanner({
+  container,
+  acknowledging,
+}: {
+  container: Container;
+  acknowledging: boolean;
+}) {
   if (!container.dispute_reason) return null;
   const acknowledged = !!container.dispute_acknowledged_at;
   return (
     <View style={styles.section}>
-      <Card style={styles.disputeCard}>
+      <Card style={[styles.disputeCard, acknowledging && styles.disputeCardPending]}>
         <Text variant="heading" style={styles.disputeHeading}>
           Disputed
         </Text>
@@ -122,6 +140,14 @@ function DisputeBanner({ container }: { container: Container }) {
             ? ` · Acknowledged ${formatDateTime(container.dispute_acknowledged_at)}`
             : ' · Not yet acknowledged'}
         </Text>
+        {acknowledging ? (
+          <View style={styles.disputePendingRow}>
+            <Spinner size="small" />
+            <Text variant="small" style={styles.disputeMeta}>
+              Acknowledging…
+            </Text>
+          </View>
+        ) : null}
       </Card>
     </View>
   );
@@ -137,15 +163,16 @@ function ActionsSection({
   container,
   bookingId,
   containerId,
+  acknowledge,
 }: {
   container: Container;
   bookingId: string;
   containerId: string;
+  acknowledge: ReturnType<typeof useAcknowledgeDispute>;
 }) {
   const router = useRouter();
   const { user } = useAuth();
   const { showToast } = useToast();
-  const acknowledge = useAcknowledgeDispute(bookingId, containerId);
   const role = user?.role as UserRole | undefined;
 
   const showPortStatus = canUpdatePortStatus(role);
@@ -285,7 +312,7 @@ function OperationsSection({ container }: { container: Container }) {
       <View style={styles.grid}>
         <KV label="Status" value={humanizeStatus(container.status)} />
         <KV label="Port status" value={humanizeStatus(container.port_status)} />
-        <KV label="Destin8 ref" value={container.destin8_ref ?? '—'} />
+        <KV label="Destin8 ref" value={container.destin8_ref ?? '—'} mono />
         <KV label="Delivery type" value={container.delivery_type ?? '—'} />
       </View>
       {container.notes ? (
@@ -319,13 +346,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function KV({ label, value }: { label: string; value: string }) {
+function KV({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <View style={styles.kv}>
       <Text variant="small" muted>
         {label}
       </Text>
-      <Text variant="body">{value}</Text>
+      <Text variant="body" mono={mono}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -400,6 +429,14 @@ function PaymentsSection({
         </>
       )}
 
+      {/* The masking hint sits ABOVE the masked rows so the column of "—" is
+          explained before it's read, not after. */}
+      {amountsMasked ? (
+        <Text variant="small" muted style={styles.maskHint}>
+          Amounts hidden for your role.
+        </Text>
+      ) : null}
+
       {payments.length > 0 ? (
         <View style={styles.tranches}>
           {payments.map((p) => (
@@ -414,15 +451,7 @@ function PaymentsSection({
           ))}
         </View>
       ) : !aggQuery.isLoading ? (
-        <Text variant="body" muted style={styles.emptyTranches}>
-          No payments recorded yet.
-        </Text>
-      ) : null}
-
-      {amountsMasked ? (
-        <Text variant="small" muted style={styles.maskHint}>
-          Amounts hidden for your role.
-        </Text>
+        <EmptyState title="No payments yet" subtitle="Tranches appear here once recorded." />
       ) : null}
 
       {isAdmin ? (
@@ -502,7 +531,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   progressTrack: {
-    height: 6,
+    height: sizes.trackThin,
     borderRadius: radii.sm,
     backgroundColor: colors.border,
     overflow: 'hidden',
@@ -529,9 +558,6 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     flexShrink: 1,
   },
-  emptyTranches: {
-    marginTop: spacing.sm,
-  },
   maskHint: {
     marginTop: spacing.sm,
   },
@@ -546,6 +572,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.errorSurface,
     borderColor: colors.error,
     borderRadius: radii.md,
+    gap: spacing.sm,
+  },
+  disputeCardPending: {
+    opacity: 0.6,
+  },
+  disputePendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.sm,
   },
   disputeHeading: {

@@ -10,6 +10,7 @@ import { canManageAdmin } from '@/src/auth/permissions';
 import {
   Button,
   Card,
+  EmptyState,
   ErrorState,
   Pill,
   ScreenContainer,
@@ -72,9 +73,11 @@ export default function InvitesScreen() {
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            <Text muted style={styles.centeredText}>
-              No pending invites. Tap Send to invite someone.
-            </Text>
+            <EmptyState
+              icon="person-add-outline"
+              title="No pending invites"
+              subtitle="Tap Send to invite someone."
+            />
           }
           ListFooterComponent={
             data && data.total > invites.length ? (
@@ -130,11 +133,7 @@ const styles = StyleSheet.create({
   },
   cardBody: {
     flex: 1,
-    gap: 2,
-  },
-  centeredText: {
-    textAlign: 'center',
-    marginTop: spacing.xxl,
+    gap: spacing.xs,
   },
   footer: {
     textAlign: 'center',

@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import React from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -9,7 +10,7 @@ import { useAuth } from '@/src/auth/AuthContext';
 import { canManageAdmin } from '@/src/auth/permissions';
 import { Card, ErrorState, Pill, ScreenContainer, Spinner, Text } from '@/src/components/ui';
 import { formatMoney } from '@/src/lib/money';
-import { spacing } from '@/src/theme/tokens';
+import { colors, spacing } from '@/src/theme/tokens';
 
 /**
  * Port-templates list (admin → Operations). Renders **every** UK port (a fixed
@@ -107,9 +108,7 @@ function PortRow({
             </Text>
           )}
         </View>
-        <Text variant="body" muted style={styles.chevron}>
-          ›
-        </Text>
+        <Ionicons name="chevron-forward" size={18} color={colors.ink4} />
       </Card>
     </TouchableOpacity>
   );
@@ -149,11 +148,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   detail: {
-    gap: 2,
-  },
-  chevron: {
-    fontSize: 22,
-    lineHeight: 22,
+    gap: spacing.xs,
   },
   notPermitted: {
     marginVertical: spacing.lg,

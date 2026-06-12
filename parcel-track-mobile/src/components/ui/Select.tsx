@@ -1,7 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import { colors, radii, shadows, spacing, type as typo } from '../../theme/tokens';
+import { colors, overlays, radii, shadows, spacing } from '../../theme/tokens';
 import { ListItem } from './ListItem';
 import { Text } from './Text';
 
@@ -26,9 +27,14 @@ export interface SelectProps {
   onChange: (value: string) => void;
   placeholder?: string;
   label?: string;
+  /**
+   * Block opening the sheet (e.g. while the pre-fill query is still loading —
+   * pair with a "Loading…" placeholder so the field doesn't blank-then-pop).
+   */
+  disabled?: boolean;
 }
 
-export function Select({ value, options, onChange, placeholder, label }: SelectProps) {
+export function Select({ value, options, onChange, placeholder, label, disabled }: SelectProps) {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
 
@@ -41,16 +47,16 @@ export function Select({ value, options, onChange, placeholder, label }: SelectP
       ) : null}
       <TouchableOpacity
         activeOpacity={0.7}
-        style={styles.field}
+        style={[styles.field, disabled && styles.fieldDisabled]}
         onPress={() => setOpen(true)}
+        disabled={disabled}
         accessibilityRole="button"
+        accessibilityState={{ disabled: !!disabled }}
       >
         <Text variant="body" muted={!selected}>
           {selected ? selected.label : (placeholder ?? 'Select…')}
         </Text>
-        <Text variant="body" muted style={styles.caret}>
-          ⌄
-        </Text>
+        <Ionicons name="chevron-down" size={18} color={colors.ink4} style={styles.caret} />
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -104,14 +110,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
   },
+  fieldDisabled: {
+    backgroundColor: colors.bgSoft,
+  },
   caret: {
-    fontSize: typo.body.fontSize,
     marginLeft: spacing.sm,
   },
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(14,18,23,0.4)',
+    backgroundColor: overlays.dim,
   },
   sheet: {
     backgroundColor: colors.bgElev,

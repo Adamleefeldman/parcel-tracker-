@@ -2,7 +2,7 @@ import DateTimePicker, { type DateTimePickerEvent } from '@react-native-communit
 import React, { useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import { colors, radii, shadows, spacing } from '../../theme/tokens';
+import { colors, overlays, radii, shadows, spacing } from '../../theme/tokens';
 import { Button } from './Button';
 import { Text } from './Text';
 
@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(14,18,23,0.4)',
+    backgroundColor: overlays.dim,
   },
   sheet: {
     backgroundColor: colors.bgElev,
