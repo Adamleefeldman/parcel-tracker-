@@ -10,11 +10,11 @@
  * callers sum the list client-side (via `sumDecimalStrings`) against the
  * invoice `value` from the booking detail. Because that client-side sum is a
  * **financial** total, a silently-truncated list would silently under-count it.
- * So we request a high `limit` (well above any realistic per-invoice payment
- * count) to fetch the whole list in one page, and the caller still compares
- * `total` vs the fetched count and shows a "partial" marker if they ever differ
- * — the sum is never silently wrong. (`total` always reflects the full count
- * regardless of `limit`.)
+ * So we request the backend's maximum `limit` (well above any realistic
+ * per-invoice payment count) to fetch the whole list in one page, and the
+ * caller still compares `total` vs the fetched count and shows a "partial"
+ * marker if they ever differ — the sum is never silently wrong. (`total`
+ * always reflects the full count regardless of `limit`.)
  *
  * Query-key convention: resource name first, then the id that scopes the
  * collection. `['supplier-payments', invoiceId]`.
@@ -27,12 +27,13 @@ import type { PaginatedResponse } from './useBookings';
 import type { SupplierPayment } from '../types/supplierPayment';
 
 /**
- * Page size for the supplier-payments fetch. High enough to capture every
- * payment on any real invoice in one request so the client-side total is exact.
- * The backend caps at this; if `total` ever exceeds it the UI flags the sum as
- * partial rather than mislead.
+ * Page size for the supplier-payments fetch. This is the backend's
+ * MAX_PAGE_SIZE (`app/schemas/pagination.py`) — anything above it is a 422,
+ * not a clamped page. High enough to capture every payment on any real
+ * invoice in one request so the client-side total is exact; if `total` ever
+ * exceeds it the UI flags the sum as partial rather than mislead.
  */
-export const SUPPLIER_PAYMENTS_PAGE_LIMIT = 500;
+export const SUPPLIER_PAYMENTS_PAGE_LIMIT = 200;
 
 export function supplierPaymentsQueryKey(invoiceId: string): readonly unknown[] {
   return ['supplier-payments', invoiceId] as const;
