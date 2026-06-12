@@ -136,6 +136,17 @@ class BookingOut(UUIDModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    # List-card summary fields (mobile Phase 11) — pinned contract with the
+    # mobile client, do not rename. Populated by the list + detail routes via
+    # BookingService.summary_fields(); the defaults cover create/PATCH
+    # responses, which serialise the bare ORM booking (a fresh booking really
+    # has 0 POs and no BL).
+    po_count: int = 0
+    container_count: int = 0
+    vessel_name: str | None = None
+    eta: date | None = None
+    port_of_discharge: str | None = None
+    product_summary: str | None = None
 
 
 class BookingAddMember(BaseModel):

@@ -21,7 +21,7 @@ from app.schemas.schemas import (
     BookingUpdate,
     ShipmentLegOut,
 )
-from app.services.booking_service import BookingService
+from app.services.booking_service import BOOKING_SUMMARY_LOADER_OPTIONS, BookingService
 
 booking_router = APIRouter(prefix="/bookings", tags=["bookings"])
 
@@ -65,7 +65,13 @@ async def list_bookings(
     if date_to is not None:
         q = q.where(Booking.created_at <= date_to)
 
-    return await paginate(db, q, pagination)
+    # Eager-load the summary chain (POs, BL → containers/vessel) so the
+    # list-card fields are computed without per-row lazy loads.
+    q = q.options(*BOOKING_SUMMARY_LOADER_OPTIONS)
+
+    page = await paginate(db, q, pagination)
+    page["items"] = [_booking_to_out(b) for b in page["items"]]
+    return page
 
 
 @booking_router.get("/{booking_id}", response_model=BookingDetailOut)
@@ -104,6 +110,7 @@ async def get_booking(
         demurrage_rate_gbp_after=booking.demurrage_rate_gbp_after,
         port_of_discharge_terminal=booking.port_of_discharge_terminal,
         service_mode=booking.service_mode,
+        **BookingService.summary_fields(booking),
     )
 
 
@@ -173,6 +180,22 @@ async def attach_purchase_order(
 #
 # Lives here (rather than as Pydantic .from_orm) because we need to apply
 # financial masking and present a few computed fields.
+
+
+def _booking_to_out(b: Booking) -> BookingOut:
+    """Build BookingOut incl. the list-card summary fields.
+
+    Requires the booking to be loaded with BOOKING_SUMMARY_LOADER_OPTIONS.
+    """
+    return BookingOut(
+        id=b.id,
+        reference=b.reference,
+        booking_number=b.booking_number,
+        status=b.status.value,
+        created_at=b.created_at,
+        updated_at=b.updated_at,
+        **BookingService.summary_fields(b),
+    )
 
 
 def _po_to_out(po):

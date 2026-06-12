@@ -12,6 +12,7 @@ Invoice received, supplier paid) iterate over every PO linked to the Booking.
 import json
 import uuid
 from decimal import Decimal
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -55,6 +56,22 @@ VALID_TRANSITIONS: dict[BookingStatus, list[BookingStatus]] = {
     BookingStatus.CLEARED: [BookingStatus.COMPLETE],
     BookingStatus.COMPLETE: [],  # terminal
 }
+
+# ── List-card summary loading (mobile Phase 11) ───────────────────────────────
+#
+# The minimal eager-load chain that BookingService.summary_fields() reads.
+# Apply to any query whose Booking rows feed BookingOut construction —
+# touching these relationships without it raises MissingGreenlet in async.
+
+BOOKING_SUMMARY_LOADER_OPTIONS = (
+    selectinload(Booking.purchase_order_links).selectinload(BookingPurchaseOrder.purchase_order),
+    selectinload(Booking.bill_of_lading).selectinload(BillOfLading.containers),
+    selectinload(Booking.bill_of_lading).selectinload(BillOfLading.vessel),
+)
+
+# product_summary shows at most this many distinct product descriptions;
+# the remainder collapses into "+N more".
+_PRODUCT_SUMMARY_MAX = 2
 
 
 class BookingService:
@@ -125,6 +142,42 @@ class BookingService:
         if not booking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
         return booking
+
+    @staticmethod
+    def summary_fields(booking: Booking) -> dict[str, Any]:
+        """Compute the list-card summary fields for BookingOut (mobile Phase 11).
+
+        Pure in-memory derivation — the booking must already have
+        purchase_order_links → purchase_order and bill_of_lading →
+        containers / vessel loaded (BOOKING_SUMMARY_LOADER_OPTIONS, or the
+        wider detail chain in get()).
+        """
+        # PO-creation order keeps product_summary stable across requests
+        # (relationship load order is not guaranteed by the DB).
+        pos = sorted(booking.purchase_orders, key=lambda po: (po.created_at, po.po_number))
+
+        products: list[str] = []
+        for po in pos:
+            if po.product_description not in products:
+                products.append(po.product_description)
+        if not products:
+            product_summary = None
+        else:
+            product_summary = " + ".join(products[:_PRODUCT_SUMMARY_MAX])
+            hidden = len(products) - _PRODUCT_SUMMARY_MAX
+            if hidden > 0:
+                product_summary += f" +{hidden} more"
+
+        bl = booking.bill_of_lading
+        vessel = bl.vessel if bl else None
+        return {
+            "po_count": len(pos),
+            "container_count": len(bl.containers) if bl else 0,
+            "vessel_name": vessel.vessel_name if vessel else None,
+            "eta": vessel.eta if vessel else None,
+            "port_of_discharge": bl.port_of_discharge.value if bl else None,
+            "product_summary": product_summary,
+        }
 
     @staticmethod
     async def update(db: AsyncSession, booking_id: uuid.UUID, data: dict, actor: User) -> Booking:
