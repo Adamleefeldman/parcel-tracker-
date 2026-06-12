@@ -11,7 +11,6 @@ import {
   Input,
   ScreenContainer,
   Select,
-  Spinner,
   Text,
   useToast,
 } from '@/src/components/ui';
@@ -74,57 +73,60 @@ export default function PortStatusForm() {
   return (
     <ScreenContainer>
       <Stack.Screen options={{ title: 'Update port status' }} />
-      {isLoading ? (
-        <Spinner centered />
-      ) : (
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.flex}
+      {/* The form renders immediately even while the container query loads —
+          the Select sits disabled with a "Loading…" placeholder and pre-fills
+          once data lands, instead of a full-screen spinner swap (the old
+          blank-then-pop). */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.flex}
+      >
+        <ScrollView
+          contentContainerStyle={styles.form}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         >
-          <ScrollView
-            contentContainerStyle={styles.form}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-          >
-            <Select
-              label="Port status"
-              value={currentPortStatus}
-              options={PORT_STATUS_OPTIONS}
-              onChange={(v) => setPortStatus(v as PortStatus)}
-              placeholder="Select a port status"
+          <Select
+            label="Port status"
+            value={isLoading ? null : currentPortStatus}
+            options={PORT_STATUS_OPTIONS}
+            onChange={(v) => setPortStatus(v as PortStatus)}
+            placeholder={isLoading ? 'Loading…' : 'Select a port status'}
+            disabled={isLoading}
+          />
+          <Input
+            label="Destin8 ref"
+            value={currentDestin8}
+            onChangeText={setDestin8Ref}
+            placeholder="e.g. D8-12345"
+            autoCapitalize="characters"
+            editable={!isLoading}
+          />
+          <Input
+            label="Notes"
+            value={currentNotes}
+            onChangeText={setNotes}
+            placeholder="Optional notes"
+            multiline
+            numberOfLines={4}
+            style={styles.notes}
+            editable={!isLoading}
+          />
+          <FormError error={mutation.error} fallback="Could not update status" />
+          <View style={styles.actions}>
+            <Button
+              title="Save changes"
+              onPress={onSubmit}
+              loading={mutation.isPending}
+              disabled={mutation.isPending || isLoading}
             />
-            <Input
-              label="Destin8 ref"
-              value={currentDestin8}
-              onChangeText={setDestin8Ref}
-              placeholder="e.g. D8-12345"
-              autoCapitalize="characters"
-            />
-            <Input
-              label="Notes"
-              value={currentNotes}
-              onChangeText={setNotes}
-              placeholder="Optional notes"
-              multiline
-              numberOfLines={4}
-              style={styles.notes}
-            />
-            <FormError error={mutation.error} fallback="Could not update status" />
-            <View style={styles.actions}>
-              <Button
-                title="Save changes"
-                onPress={onSubmit}
-                loading={mutation.isPending}
-                disabled={mutation.isPending}
-              />
-              <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
-            </View>
-            <Text variant="small" muted style={styles.hint}>
-              Visible to all booking members.
-            </Text>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      )}
+            <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
+          </View>
+          <Text variant="small" muted style={styles.hint}>
+            Visible to all booking members.
+          </Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }

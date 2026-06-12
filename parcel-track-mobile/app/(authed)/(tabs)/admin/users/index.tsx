@@ -7,7 +7,15 @@ import type { UserAdmin } from '@/src/api/types/admin';
 import { USER_ROLE_LABELS, type UserRole } from '@/src/api/types/enums';
 import { useAuth } from '@/src/auth/AuthContext';
 import { canManageAdmin } from '@/src/auth/permissions';
-import { Card, ErrorState, Pill, ScreenContainer, Spinner, Text } from '@/src/components/ui';
+import {
+  Card,
+  EmptyState,
+  ErrorState,
+  Pill,
+  ScreenContainer,
+  Spinner,
+  Text,
+} from '@/src/components/ui';
 import { spacing } from '@/src/theme/tokens';
 
 /**
@@ -64,9 +72,11 @@ export default function UsersScreen() {
             ) : null
           }
           ListEmptyComponent={
-            <Text muted style={styles.centeredText}>
-              No users yet.
-            </Text>
+            <EmptyState
+              icon="people-outline"
+              title="No users yet"
+              subtitle="Invited users appear here once they sign up."
+            />
           }
           ListFooterComponent={
             truncated ? (
@@ -127,7 +137,7 @@ const styles = StyleSheet.create({
   },
   cardBody: {
     flex: 1,
-    gap: 2,
+    gap: spacing.xs,
   },
   nameRow: {
     flexDirection: 'row',
@@ -136,10 +146,6 @@ const styles = StyleSheet.create({
   },
   name: {
     flexShrink: 1,
-  },
-  centeredText: {
-    textAlign: 'center',
-    marginTop: spacing.xxl,
   },
   footer: {
     textAlign: 'center',

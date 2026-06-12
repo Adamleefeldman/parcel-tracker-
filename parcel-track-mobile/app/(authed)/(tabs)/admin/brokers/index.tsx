@@ -7,7 +7,15 @@ import type { Broker } from '@/src/api/types/admin';
 import type { UserRole } from '@/src/api/types/enums';
 import { useAuth } from '@/src/auth/AuthContext';
 import { canManageAdmin } from '@/src/auth/permissions';
-import { Button, ErrorState, ListItem, ScreenContainer, Spinner, Text } from '@/src/components/ui';
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  ListItem,
+  ScreenContainer,
+  Spinner,
+  Text,
+} from '@/src/components/ui';
 import { spacing } from '@/src/theme/tokens';
 
 /**
@@ -58,9 +66,11 @@ export default function BrokersScreen() {
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            <Text muted style={styles.centeredText}>
-              No brokers yet. Tap Add to create one.
-            </Text>
+            <EmptyState
+              icon="cube-outline"
+              title="No brokers yet"
+              subtitle="Tap Add to create one."
+            />
           }
           ListFooterComponent={
             data && data.total > data.items.length ? (
@@ -76,8 +86,14 @@ export default function BrokersScreen() {
 }
 
 function BrokerRow({ broker }: { broker: Broker }) {
+  // Name leads (what humans scan for); the mono code + phone are the
+  // secondary identifiers.
   return (
-    <ListItem title={`${broker.code} · ${broker.name}`} subtitle={broker.phone ?? 'No phone'} />
+    <ListItem
+      title={broker.name}
+      subtitle={broker.phone ? `${broker.code} · ${broker.phone}` : broker.code}
+      monoSubtitle
+    />
   );
 }
 
@@ -85,10 +101,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: spacing.xxl,
     flexGrow: 1,
-  },
-  centeredText: {
-    textAlign: 'center',
-    marginTop: spacing.xxl,
   },
   footer: {
     textAlign: 'center',

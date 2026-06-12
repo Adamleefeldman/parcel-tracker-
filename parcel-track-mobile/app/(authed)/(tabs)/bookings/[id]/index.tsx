@@ -1,6 +1,15 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import {
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 import { useBooking } from '@/src/api/queries/useBooking';
 import { useSupplierPayments } from '@/src/api/queries/useSupplierPayments';
@@ -19,20 +28,21 @@ import { canManageSupplierPayments } from '@/src/auth/permissions';
 import { AppHeader } from '@/src/components/AppHeader';
 import { DocumentsList } from '@/src/components/documents/DocumentsList';
 import {
+  animateLayout,
   BookingStepper,
   Button,
   Card,
   ErrorState,
-  ListItem,
   ProgressBar,
   ScreenContainer,
   Spinner,
   StatusPill,
   Text,
 } from '@/src/components/ui';
+import { humanizeStatus } from '@/src/components/ui/statusPillMapping';
 import { formatDate, formatDateTime } from '@/src/lib/date';
 import { formatMoney, parseRatio, sumDecimalStrings } from '@/src/lib/money';
-import { colors, spacing } from '@/src/theme/tokens';
+import { colors, overlays, sizes, spacing } from '@/src/theme/tokens';
 
 export default function BookingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -40,7 +50,15 @@ export default function BookingDetailScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <Stack.Screen options={{ headerTitle: () => <AppHeader title="Booking" /> }} />
+      {/* The stack header doubles as the sticky header: once the booking
+          loads, ref + status pill live here, so they stay visible while the
+          body scrolls. */}
+      <Stack.Screen
+        options={{
+          headerTitle: () =>
+            data ? <StickyTitle booking={data} /> : <AppHeader title="Booking" />,
+        }}
+      />
       {isLoading ? (
         <Spinner centered />
       ) : isError ? (
@@ -53,6 +71,13 @@ export default function BookingDetailScreen() {
     </ScreenContainer>
   );
 }
+
+/**
+ * Booking statuses before any physical shipping exists. For these, the
+ * late-stage sections (route history, clearing, delivery) start collapsed —
+ * they're empty-ish noise between an admin and the financial block.
+ */
+const EARLY_STATUSES: BookingDetail['status'][] = ['draft', 'po_submitted', 'invoice_received'];
 
 function Body({
   booking,
@@ -68,7 +93,11 @@ function Body({
     (containerId: string) => router.push(`/bookings/${booking.id}/containers/${containerId}`),
     [router, booking.id],
   );
+  const isEarly = EARLY_STATUSES.includes(booking.status);
 
+  // Section order (Phase 11): the financial block (POs/invoices/supplier
+  // payments) sits right after the confirmation terms so admins reach
+  // "record payment" without scrolling past the whole shipping story.
   return (
     <ScrollView
       contentContainerStyle={styles.scroll}
@@ -76,26 +105,40 @@ function Body({
     >
       <Header booking={booking} />
       <ConfirmationTerms booking={booking} />
-      <VesselAndBL bl={booking.bill_of_lading} />
-      <ContainersSection bl={booking.bill_of_lading} onContainerPress={onContainerPress} />
       {/* The arrays below are non-null in the typed schema, but defend against a
           null from the wire — `null.length` would crash the whole screen. */}
-      <LegsSection legs={booking.legs ?? []} />
       <POsSection pos={booking.purchase_orders ?? []} bookingId={booking.id} />
-      <ClearingDocsSection docs={booking.clearing_docs} />
-      <DeliverySection points={booking.delivery_points ?? []} />
+      <ContainersSection bl={booking.bill_of_lading} onContainerPress={onContainerPress} />
+      <VesselAndBL bl={booking.bill_of_lading} />
+      <LegsSection legs={booking.legs ?? []} collapsedByDefault={isEarly} />
+      <ClearingDocsSection docs={booking.clearing_docs} collapsedByDefault={isEarly} />
+      <DeliverySection points={booking.delivery_points ?? []} collapsedByDefault={isEarly} />
     </ScrollView>
+  );
+}
+
+/** Compact ref + status pill for the (always-visible) stack header. */
+function StickyTitle({ booking }: { booking: BookingDetail }) {
+  return (
+    <View style={styles.stickyTitle}>
+      <Text variant="body" mono weight="medium" numberOfLines={1} style={styles.stickyRef}>
+        {booking.booking_number || booking.reference}
+      </Text>
+      <StatusPill kind="booking" status={booking.status} />
+    </View>
   );
 }
 
 function Header({ booking }: { booking: BookingDetail }) {
   return (
     <View style={styles.headerBlock}>
-      <Text variant="display">{booking.booking_number || booking.reference}</Text>
+      <Text variant="display" mono>
+        {booking.booking_number || booking.reference}
+      </Text>
       <View style={styles.headerRow}>
         <StatusPill kind="booking" status={booking.status} />
         {booking.booking_number ? (
-          <Text variant="small" muted>
+          <Text variant="small" muted mono>
             Ref {booking.reference}
           </Text>
         ) : null}
@@ -148,7 +191,7 @@ function VesselAndBL({ bl }: { bl: BillOfLading | null }) {
   return (
     <Section title="Bill of lading">
       <Grid>
-        <KV label="BL number" value={bl.bl_number} />
+        <KV label="BL number" value={bl.bl_number} mono />
         <KV label="BL date" value={formatDate(bl.bl_date)} />
         <KV label="Status" value={bl.status} />
         <KV label="Containers" value={String(bl.container_count)} />
@@ -204,6 +247,13 @@ function ContainersSection({
   );
 }
 
+/**
+ * Container row with a decision-useful secondary line built from fields
+ * already in the booking-detail payload (no extra fetch): end-company,
+ * delivery type, the sale total (server-masked to null for non-admins), and a
+ * red "Disputed" flag while a dispute is open. Bespoke rather than `ListItem`
+ * because the disputed fragment needs its own color within the line.
+ */
 function ContainerRow({
   container,
   onPress,
@@ -211,25 +261,59 @@ function ContainerRow({
   container: Container;
   onPress: (id: string) => void;
 }) {
-  const subtitle =
-    (container.seal_number ? `Seal ${container.seal_number}` : null) ||
-    container.delivery_type ||
-    undefined;
+  const parts: string[] = [];
+  if (container.end_company) parts.push(container.end_company.legal_name);
+  if (container.delivery_type) parts.push(humanizeStatus(container.delivery_type));
+  // Non-null only for admins — the backend masks sale prices for other roles.
+  if (container.sale_price_total != null) {
+    parts.push(formatMoney(container.sale_price_total, container.sale_currency));
+  }
+  const secondary = parts.join(' · ');
+  const disputed = !!container.dispute_reason;
+
   return (
-    <ListItem
-      title={container.container_number}
-      subtitle={subtitle}
-      right={<StatusPill kind="lifecycle" status={container.lifecycle_status} />}
+    <Pressable
       onPress={() => onPress(container.id)}
-    />
+      android_ripple={{ color: overlays.ripple }}
+      style={({ pressed }) => [
+        styles.containerRow,
+        pressed && Platform.OS === 'ios' ? styles.pressedIos : null,
+      ]}
+    >
+      <View style={styles.containerRowText}>
+        <Text variant="body" mono numberOfLines={1}>
+          {container.container_number}
+        </Text>
+        {secondary || disputed ? (
+          <Text variant="small" muted numberOfLines={1}>
+            {secondary}
+            {disputed ? (
+              <Text variant="small" color={colors.red}>
+                {secondary ? ' · ' : ''}Disputed
+              </Text>
+            ) : null}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.containerRowRight}>
+        <StatusPill kind="lifecycle" status={container.lifecycle_status} />
+        <Ionicons name="chevron-forward" size={18} color={colors.ink4} />
+      </View>
+    </Pressable>
   );
 }
 
-function LegsSection({ legs }: { legs: ShipmentLeg[] }) {
+function LegsSection({
+  legs,
+  collapsedByDefault,
+}: {
+  legs: ShipmentLeg[];
+  collapsedByDefault: boolean;
+}) {
   if (legs.length === 0) return null;
   const sorted = [...legs].sort((a, b) => a.leg_index - b.leg_index);
   return (
-    <Section title="Route history">
+    <CollapsibleSection title="Route history" collapsedByDefault={collapsedByDefault}>
       {sorted.map((leg, i) => (
         <View key={leg.id} style={[styles.legBlock, i < sorted.length - 1 && styles.dividerBottom]}>
           <Text variant="body">
@@ -246,7 +330,7 @@ function LegsSection({ legs }: { legs: ShipmentLeg[] }) {
           </Text>
         </View>
       ))}
-    </Section>
+    </CollapsibleSection>
   );
 }
 
@@ -257,7 +341,9 @@ function POsSection({ pos, bookingId }: { pos: PurchaseOrder[]; bookingId: strin
       {pos.map((po, i) => (
         <View key={po.id} style={[styles.poBlock, i < pos.length - 1 && styles.dividerBottom]}>
           <View style={styles.poHeaderRow}>
-            <Text variant="body">{po.po_number}</Text>
+            <Text variant="body" mono>
+              {po.po_number}
+            </Text>
             <Text variant="small" muted>
               {po.status}
             </Text>
@@ -293,7 +379,7 @@ function InvoiceBlock({
   return (
     <View style={styles.invoiceBlock}>
       <View style={styles.poHeaderRow}>
-        <Text variant="small" muted>
+        <Text variant="small" muted mono>
           Invoice {invoice.invoice_number}
         </Text>
         <Text variant="small" muted>
@@ -430,10 +516,16 @@ function capitalize(s: string): string {
   return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
 }
 
-function ClearingDocsSection({ docs }: { docs: ClearingDocs | null }) {
+function ClearingDocsSection({
+  docs,
+  collapsedByDefault,
+}: {
+  docs: ClearingDocs | null;
+  collapsedByDefault: boolean;
+}) {
   if (!docs) return null;
   return (
-    <Section title="Clearing docs">
+    <CollapsibleSection title="Clearing docs" collapsedByDefault={collapsedByDefault}>
       <Grid>
         <KV label="Status" value={docs.status} />
         <KV label="Customs entry ref" value={fmt(docs.customs_entry_ref)} />
@@ -448,7 +540,7 @@ function ClearingDocsSection({ docs }: { docs: ClearingDocs | null }) {
         <Check label="Health cert" on={docs.has_health_cert} />
       </View>
       <DocumentsList entityType="clearing_docs" entityId={docs.id} label="Clearing docs" />
-    </Section>
+    </CollapsibleSection>
   );
 }
 
@@ -460,10 +552,19 @@ function Check({ label, on }: { label: string; on: boolean }) {
   );
 }
 
-function DeliverySection({ points }: { points: DeliveryPoint[] }) {
+function DeliverySection({
+  points,
+  collapsedByDefault,
+}: {
+  points: DeliveryPoint[];
+  collapsedByDefault: boolean;
+}) {
   if (points.length === 0) return null;
   return (
-    <Section title={`Delivery points (${points.length})`}>
+    <CollapsibleSection
+      title={`Delivery points (${points.length})`}
+      collapsedByDefault={collapsedByDefault}
+    >
       {points.map((dp, i) => (
         <View
           key={dp.id}
@@ -502,7 +603,7 @@ function DeliverySection({ points }: { points: DeliveryPoint[] }) {
           {dp.schedule ? <ScheduleBlock schedule={dp.schedule} /> : null}
         </View>
       ))}
-    </Section>
+    </CollapsibleSection>
   );
 }
 
@@ -567,17 +668,56 @@ function Section({
   );
 }
 
+/**
+ * Section whose card body collapses behind the heading. Late-stage sections
+ * pass `collapsedByDefault` for early-stage bookings, where they're noise
+ * between the admin and the financial block. The toggle animates via
+ * `animateLayout` (see `src/components/ui/animateLayout.ts`).
+ */
+function CollapsibleSection({
+  title,
+  collapsedByDefault,
+  children,
+}: {
+  title: string;
+  collapsedByDefault: boolean;
+  children: React.ReactNode;
+}) {
+  const [collapsed, setCollapsed] = useState(collapsedByDefault);
+  const toggle = () => {
+    animateLayout();
+    setCollapsed((v) => !v);
+  };
+  return (
+    <View style={styles.section}>
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={toggle}
+        style={styles.sectionHeaderRow}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: !collapsed }}
+      >
+        <Text variant="heading">{title}</Text>
+        <Ionicons name={collapsed ? 'chevron-down' : 'chevron-up'} size={18} color={colors.ink4} />
+      </TouchableOpacity>
+      {collapsed ? null : <Card>{children}</Card>}
+    </View>
+  );
+}
+
 function Grid({ children }: { children: React.ReactNode }) {
   return <View style={styles.grid}>{children}</View>;
 }
 
-function KV({ label, value }: { label: string; value: string }) {
+function KV({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <View style={styles.kv}>
       <Text variant="small" muted>
         {label}
       </Text>
-      <Text variant="body">{value}</Text>
+      <Text variant="body" mono={mono}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -590,6 +730,37 @@ function fmt(value: string | number | null | undefined): string {
 const styles = StyleSheet.create({
   scroll: {
     paddingBottom: spacing.xxl,
+  },
+  stickyTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  stickyRef: {
+    flexShrink: 1,
+  },
+  containerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: sizes.touchTarget,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
+    backgroundColor: colors.bgElev,
+  },
+  containerRowText: {
+    flex: 1,
+    paddingRight: spacing.md,
+    gap: spacing.xs,
+  },
+  containerRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  pressedIos: {
+    opacity: 0.7,
   },
   headerBlock: {
     paddingHorizontal: spacing.lg,

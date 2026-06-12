@@ -124,14 +124,8 @@ export default function RecordSupplierPaymentForm() {
             )}
           />
 
-          {/* Currency is fixed to USD — shown as a static label, not editable. */}
-          <View style={styles.staticField}>
-            <Text variant="small" muted>
-              Currency
-            </Text>
-            <Text variant="body">USD</Text>
-          </View>
-
+          {/* Currency is fixed to USD — conveyed by the "Amount (USD)" label;
+              no separate static row. `toCreateBody` hard-codes the currency. */}
           <Controller
             control={control}
             name="payment_type"
@@ -218,10 +212,6 @@ const styles = StyleSheet.create({
   multiline: {
     minHeight: 80,
     textAlignVertical: 'top',
-  },
-  staticField: {
-    gap: spacing.xs,
-    marginBottom: spacing.md,
   },
   fieldError: {
     color: colors.error,

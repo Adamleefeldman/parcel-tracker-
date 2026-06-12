@@ -1,8 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import type { ARAgingSummary } from '../../api/types/moneyRisk';
-import { Card, Pill, Text, type PillTone } from '../../components/ui';
+import { animateLayout, Card, Pill, Text, type PillTone } from '../../components/ui';
 import { formatMoney } from '../../lib/money';
 import { colors, spacing } from '../../theme/tokens';
 import { agedExposure, arBucketTone } from './moneyRiskFormat';
@@ -25,9 +26,25 @@ function bucketLabel(label: string): string {
  * four aging bands, and a tap-to-expand drill-in over the inline `containers`
  * array (no dedicated drill-in route exists yet). All money via `formatMoney`.
  */
+/**
+ * The drill-in renders at most this many rows — a long container list would
+ * otherwise push the demurrage/disputes cards off-screen. The existing
+ * truncation note covers the remainder (the page already scrolls; a nested
+ * scroll region inside a card is awkward on touch).
+ */
+const MAX_DRILL_ROWS = 10;
+
 export function ARAgingCard({ summary }: { summary: ARAgingSummary }) {
   const [expanded, setExpanded] = useState(false);
   const aged = agedExposure(summary.buckets);
+  const drillRows = summary.containers.slice(0, MAX_DRILL_ROWS);
+  const drillTruncated =
+    summary.containers_truncated || summary.containers.length > drillRows.length;
+
+  const toggle = () => {
+    animateLayout();
+    setExpanded((v) => !v);
+  };
 
   return (
     <Card style={styles.card}>
@@ -65,21 +82,25 @@ export function ARAgingCard({ summary }: { summary: ARAgingSummary }) {
           <View style={styles.divider} />
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={() => setExpanded((v) => !v)}
+            onPress={toggle}
             style={styles.drillRow}
+            accessibilityRole="button"
+            accessibilityState={{ expanded }}
           >
             <Text variant="body">
               {expanded ? 'Hide' : 'See'} {summary.container_count} container
               {summary.container_count === 1 ? '' : 's'}
             </Text>
-            <Text variant="body" muted>
-              {expanded ? '▴' : '▾'}
-            </Text>
+            <Ionicons
+              name={expanded ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={colors.ink4}
+            />
           </TouchableOpacity>
 
           {expanded ? (
             <View style={styles.drillList}>
-              {summary.containers.map((c) => (
+              {drillRows.map((c) => (
                 <View key={c.container_id} style={styles.containerRow}>
                   <View style={styles.containerLeft}>
                     <Text variant="body" mono weight="medium" numberOfLines={1}>
@@ -94,9 +115,9 @@ export function ARAgingCard({ summary }: { summary: ARAgingSummary }) {
                   </Text>
                 </View>
               ))}
-              {summary.containers_truncated ? (
+              {drillTruncated ? (
                 <Text variant="small" muted style={styles.truncated}>
-                  Showing the first {summary.containers.length} of {summary.container_count}.
+                  Showing the first {drillRows.length} of {summary.container_count}.
                 </Text>
               ) : null}
             </View>
@@ -144,7 +165,7 @@ const styles = StyleSheet.create({
   },
   containerLeft: {
     flexShrink: 1,
-    gap: 2,
+    gap: spacing.xs,
   },
   truncated: {
     marginTop: spacing.xs,

@@ -27,12 +27,24 @@ export interface TextProps extends RNTextProps {
   color?: string;
 }
 
-export function Text({ variant = 'body', weight, mono, muted, color, style, ...rest }: TextProps) {
+export function Text({
+  variant = 'body',
+  weight,
+  mono,
+  muted,
+  color,
+  style,
+  maxFontSizeMultiplier = 1.3,
+  ...rest
+}: TextProps) {
   const spec = type[variant];
   const resolvedWeight: FontWeight = weight ?? spec.weight;
   const textColor = color ?? (muted ? colors.ink3 : colors.ink);
   return (
     <RNText
+      // Cap OS accessibility font scaling at 1.3× — the dense rows/cards keep
+      // their layout while still honouring (most of) the user's setting.
+      maxFontSizeMultiplier={maxFontSizeMultiplier}
       style={[
         styles[variant],
         { fontFamily: fontFamily(resolvedWeight, mono), color: textColor },

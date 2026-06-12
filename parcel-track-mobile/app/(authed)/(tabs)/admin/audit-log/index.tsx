@@ -8,8 +8,10 @@ import type { UserRole } from '@/src/api/types/enums';
 import { useAuth } from '@/src/auth/AuthContext';
 import { canManageAdmin } from '@/src/auth/permissions';
 import {
+  animateLayout,
   Button,
   Card,
+  EmptyState,
   ErrorState,
   Pill,
   ScreenContainer,
@@ -18,7 +20,7 @@ import {
 } from '@/src/components/ui';
 import { humanizeAction, prettyJson } from '@/src/lib/auditFormat';
 import { formatRelativeTime } from '@/src/lib/relativeTime';
-import { colors, spacing } from '@/src/theme/tokens';
+import { colors, radii, spacing } from '@/src/theme/tokens';
 
 const PAGE = 25;
 
@@ -43,6 +45,7 @@ export default function AuditLogScreen() {
   const hasMore = data ? data.total > entries.length : false;
 
   const toggle = useCallback((id: string) => {
+    animateLayout();
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -83,9 +86,11 @@ export default function AuditLogScreen() {
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            <Text muted style={styles.centeredText}>
-              No audit entries yet.
-            </Text>
+            <EmptyState
+              icon="document-text-outline"
+              title="No audit entries yet"
+              subtitle="State changes are recorded here automatically."
+            />
           }
           ListFooterComponent={
             hasMore ? (
@@ -206,12 +211,8 @@ const styles = StyleSheet.create({
   },
   snapshot: {
     backgroundColor: colors.bgSunk,
-    borderRadius: 8,
+    borderRadius: radii.md,
     padding: spacing.sm,
-  },
-  centeredText: {
-    textAlign: 'center',
-    marginTop: spacing.xxl,
   },
   footer: {
     paddingVertical: spacing.lg,

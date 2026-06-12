@@ -24,6 +24,8 @@ export function Input({ label, error, style, onFocus, onBlur, ...rest }: InputPr
       ) : null}
       <TextInput
         placeholderTextColor={colors.ink4}
+        // Match the <Text> primitive's accessibility font-scaling cap.
+        maxFontSizeMultiplier={1.3}
         style={[
           styles.input,
           focused && styles.inputFocused,

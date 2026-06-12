@@ -2,44 +2,32 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import type { BookingStatus } from '../../api/types/enums';
-import { colors, radii, spacing } from '../../theme/tokens';
+import { BOOKING_STAGES, bookingStageIndex } from '../../features/bookings/bookingProgress';
+import { colors, radii, sizes, spacing } from '../../theme/tokens';
 import { humanizeStatus } from './statusPillMapping';
 import { Text } from './Text';
 
 /**
  * Presentational booking-progress stepper — the prototype's segmented
  * DRAFT→…→DONE bar. Purely a function of the existing `BookingStatus`; it adds
- * no data and makes no requests. The eight booking stages are a fixed forward
- * sequence, so the position is just the status's index.
- *
- * `disputed` is a container side-state, not a booking status, so it never
- * appears here — the stepper only ever reflects `BookingStatus`.
+ * no data and makes no requests. The status→step mapping lives in
+ * `src/features/bookings/bookingProgress.ts` (shared with `BookingCard`'s
+ * compact progress bar — don't fork it).
  */
-
-const STAGES: BookingStatus[] = [
-  'draft',
-  'po_submitted',
-  'invoice_received',
-  'payment_confirmed',
-  'bl_issued',
-  'in_transit',
-  'cleared',
-  'complete',
-];
 
 export interface BookingStepperProps {
   status: BookingStatus;
 }
 
 export function BookingStepper({ status }: BookingStepperProps) {
-  const index = Math.max(0, STAGES.indexOf(status));
+  const index = bookingStageIndex(status);
   const step = index + 1;
   const isComplete = status === 'complete';
 
   return (
     <View>
       <View style={styles.track}>
-        {STAGES.map((stage, i) => (
+        {BOOKING_STAGES.map((stage, i) => (
           <View
             key={stage}
             style={[styles.segment, i <= index ? styles.segmentOn : styles.segmentOff]}
@@ -47,7 +35,9 @@ export function BookingStepper({ status }: BookingStepperProps) {
         ))}
       </View>
       <Text variant="overline" muted style={styles.caption}>
-        {isComplete ? 'Complete' : `Step ${step} of ${STAGES.length} · ${humanizeStatus(status)}`}
+        {isComplete
+          ? 'Complete'
+          : `Step ${step} of ${BOOKING_STAGES.length} · ${humanizeStatus(status)}`}
       </Text>
     </View>
   );
@@ -60,7 +50,7 @@ const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
-    height: 4,
+    height: sizes.trackMicro,
     borderRadius: radii.pill,
   },
   segmentOn: {

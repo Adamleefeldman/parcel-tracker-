@@ -9,8 +9,10 @@ import type { DocumentEntityType } from '../../api/types/enums';
 import type { DocumentListItem } from '../../api/types/document';
 import { formatDate } from '../../lib/date';
 import { formatBytes } from '../../lib/files';
+import { Ionicons } from '@expo/vector-icons';
+
 import { colors, radii, spacing } from '../../theme/tokens';
-import { Spinner, Text, useToast } from '../ui';
+import { animateLayout, Spinner, Text, useToast } from '../ui';
 
 /**
  * Reusable documents affordance for one booking sub-entity, parameterized by
@@ -68,11 +70,20 @@ export function DocumentsList({ entityType, entityId, label }: DocumentsListProp
       <View style={styles.headerRow}>
         <TouchableOpacity
           style={styles.headerLeft}
-          onPress={() => setExpanded((v) => !v)}
+          onPress={() => {
+            animateLayout();
+            setExpanded((v) => !v);
+          }}
           accessibilityRole="button"
+          accessibilityState={{ expanded }}
         >
+          <Ionicons
+            name={expanded ? 'chevron-down' : 'chevron-forward'}
+            size={14}
+            color={colors.ink3}
+          />
           <Text variant="small" muted>
-            {expanded ? '▾' : '▸'} Documents ({count})
+            Documents ({count})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onAdd} accessibilityRole="button">
@@ -166,6 +177,9 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
     paddingVertical: spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   add: {
     color: colors.primary,

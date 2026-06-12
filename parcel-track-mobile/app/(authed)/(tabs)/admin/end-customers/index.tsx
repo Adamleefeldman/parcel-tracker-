@@ -7,7 +7,15 @@ import type { Company } from '@/src/api/types/admin';
 import type { UserRole } from '@/src/api/types/enums';
 import { useAuth } from '@/src/auth/AuthContext';
 import { canManageAdmin } from '@/src/auth/permissions';
-import { Button, ErrorState, ListItem, ScreenContainer, Spinner, Text } from '@/src/components/ui';
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  ListItem,
+  ScreenContainer,
+  Spinner,
+  Text,
+} from '@/src/components/ui';
 import { spacing } from '@/src/theme/tokens';
 
 /**
@@ -61,9 +69,11 @@ export default function EndCustomersScreen() {
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            <Text muted style={styles.centeredText}>
-              No end customers yet. Tap Add to create one.
-            </Text>
+            <EmptyState
+              icon="business-outline"
+              title="No end customers yet"
+              subtitle="Tap Add to create one."
+            />
           }
           ListFooterComponent={
             data && data.total > data.items.length ? (
@@ -98,10 +108,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: spacing.xxl,
     flexGrow: 1,
-  },
-  centeredText: {
-    textAlign: 'center',
-    marginTop: spacing.xxl,
   },
   footer: {
     textAlign: 'center',

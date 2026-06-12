@@ -3,8 +3,8 @@ import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 
 import { ApiError } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
-import { Button, Input, ScreenContainer, Text } from '../../src/components/ui';
-import { colors, spacing } from '../../src/theme/tokens';
+import { Button, FormError, Input, ScreenContainer, Text } from '../../src/components/ui';
+import { spacing } from '../../src/theme/tokens';
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
@@ -75,11 +75,9 @@ export default function LoginScreen() {
             onSubmitEditing={onSubmit}
           />
 
-          {errorMsg ? (
-            <Text variant="small" style={styles.error}>
-              {errorMsg}
-            </Text>
-          ) : null}
+          {/* The shared error banner (`errorMsg` is already a display string,
+              so it rides the fallback). */}
+          <FormError error={errorMsg} fallback={errorMsg ?? ''} />
 
           <Button title="Sign in" loading={submitting} onPress={onSubmit} />
         </View>
@@ -102,11 +100,6 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginBottom: spacing.xxl,
-    textAlign: 'center',
-  },
-  error: {
-    color: colors.error,
-    marginBottom: spacing.md,
     textAlign: 'center',
   },
 });
