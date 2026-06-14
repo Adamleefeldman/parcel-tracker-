@@ -23,6 +23,7 @@ from app.db.models import BillOfLading, Container, CustomsNote, CustomsRecord, U
 from app.schemas.schemas import CustomsNoteCreate, CustomsUpdate
 from app.services.booking_service import BookingService
 from app.services.container_lifecycle_service import ContainerLifecycleService
+from app.services.container_service import ContainerService
 from app.services.notification_service import NotificationService
 
 
@@ -38,6 +39,12 @@ class CustomsService:
     ) -> CustomsRecord:
         if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):
             raise HTTPException(403, "Only admin or UK agent can update customs status")
+
+        # The container must belong to the booking in the URL before any write.
+        # Customs clearance releases goods and cascades the booking to CLEARED, so a
+        # cross-booking container_id must never be writable here. Also 404s when the
+        # container row is missing or RLS-hidden. Reused by the cascade below.
+        container = await ContainerService.get_in_booking(db, booking_id, container_id)
 
         result = await db.execute(
             select(CustomsRecord)
@@ -62,15 +69,6 @@ class CustomsService:
             record.hmrc_ref = body.hmrc_ref
         if body.duty_paid is not None:
             record.duty_paid = body.duty_paid
-
-        container_result = await db.execute(select(Container).where(Container.id == container_id))
-        container = container_result.scalar_one_or_none()
-        if container is None:
-            # Customs records reference container_id but the container row
-            # itself can be missing if it was deleted, or hidden by RLS for
-            # this actor's view. Either way, the cascade below assumes the
-            # container exists — without this guard we crash on container.status.
-            raise HTTPException(404, "Container not found")
 
         if new_status == CustomsStatus.CLEARED:
             container.status = ContainerStatus.CLEARED
@@ -116,12 +114,15 @@ class CustomsService:
     @staticmethod
     async def add_note(
         db: AsyncSession,
+        booking_id: uuid.UUID,
         container_id: uuid.UUID,
         actor: User,
         body: CustomsNoteCreate,
     ) -> None:
         if actor.role not in (UserRole.ADMIN, UserRole.UK_AGENT):
             raise HTTPException(403, "Insufficient role")
+
+        await ContainerService.get_in_booking(db, booking_id, container_id)
 
         record_result = await db.execute(
             select(CustomsRecord).where(CustomsRecord.container_id == container_id)

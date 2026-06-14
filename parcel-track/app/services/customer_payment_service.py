@@ -20,11 +20,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import CustomerPaymentMethod, UserRole
-from app.db.models import Container, CustomerPayment, User
+from app.db.models import CustomerPayment, User
 from app.middleware.auth import financial_fields_allowed
 from app.schemas.pagination import PaginationParams, paginate
 from app.schemas.schemas import CustomerPaymentCreate, CustomerPaymentOut
 from app.services.container_lifecycle_service import ContainerLifecycleService
+from app.services.container_service import ContainerService
 
 # Money / bank-detail fields on a customer-payment record that only admins may
 # see. These names are specific to CustomerPaymentOut, so we mask them here
@@ -65,6 +66,7 @@ class CustomerPaymentService:
     @staticmethod
     async def add(
         db: AsyncSession,
+        booking_id: uuid.UUID,
         container_id: uuid.UUID,
         body: CustomerPaymentCreate,
         actor: User,
@@ -72,10 +74,10 @@ class CustomerPaymentService:
         if actor.role != UserRole.ADMIN:
             raise HTTPException(403, "Only admin can record customer payments")
 
-        # Confirm container exists.
-        container_q = await db.execute(select(Container).where(Container.id == container_id))
-        if not container_q.scalar_one_or_none():
-            raise HTTPException(404, "Container not found")
+        # Confirm the container exists AND belongs to the booking in the URL —
+        # otherwise a payment could be recorded against an unrelated booking's
+        # container (wrong ledger + wrong lifecycle recompute).
+        await ContainerService.get_in_booking(db, booking_id, container_id)
 
         payload = body.model_dump()
         # The schema accepts the method as a string; convert to enum.
@@ -93,6 +95,7 @@ class CustomerPaymentService:
     @staticmethod
     async def aggregate_for_container(
         db: AsyncSession,
+        booking_id: uuid.UUID,
         container_id: uuid.UUID,
         actor: User,
     ) -> dict[str, Any]:
@@ -102,6 +105,7 @@ class CustomerPaymentService:
         a clean "is this container paid?" signal. The money totals are masked
         to None for non-admins; ``tranche_count`` stays visible to everyone.
         """
+        await ContainerService.get_in_booking(db, booking_id, container_id)
         rows_q = await db.execute(
             select(CustomerPayment)
             .where(CustomerPayment.container_id == container_id)
@@ -135,10 +139,12 @@ class CustomerPaymentService:
     @staticmethod
     async def list(
         db: AsyncSession,
+        booking_id: uuid.UUID,
         container_id: uuid.UUID,
         actor: User,
         pagination: PaginationParams,
     ) -> dict[str, Any]:
+        await ContainerService.get_in_booking(db, booking_id, container_id)
         q = (
             select(CustomerPayment)
             .where(CustomerPayment.container_id == container_id)
