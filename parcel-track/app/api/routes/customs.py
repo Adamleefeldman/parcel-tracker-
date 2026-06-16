@@ -43,7 +43,7 @@ async def add_customs_note(
     if idempotency.cached_response:
         return idempotency.cached_response
 
-    await CustomsService.add_note(db, container_id, actor, body)
+    await CustomsService.add_note(db, booking_id, container_id, actor, body)
     result = {"message": "Note added"}
     await idempotency.store(result)
     return result

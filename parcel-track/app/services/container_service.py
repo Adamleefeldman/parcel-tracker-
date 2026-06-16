@@ -43,6 +43,35 @@ class ContainerService:
         return await paginate(db, q, pagination)
 
     @staticmethod
+    async def get_in_booking(
+        db: AsyncSession,
+        booking_id: uuid.UUID,
+        container_id: uuid.UUID,
+        *,
+        options: tuple[Any, ...] = (),
+    ) -> Container:
+        """Load a container, asserting it belongs to ``booking_id``.
+
+        A Container has no direct ``booking_id``; it is scoped to a booking only
+        through ``Container.bl_id -> BillOfLading.booking_id``. Endpoints nested
+        under ``/bookings/{booking_id}/containers/{container_id}`` MUST verify that
+        link — otherwise the path's ``booking_id`` is decorative and a caller can
+        address any container under any booking. Raises 404 when the container does
+        not exist or lives under a different booking.
+        """
+        q = (
+            select(Container)
+            .join(BillOfLading, Container.bl_id == BillOfLading.id)
+            .where(Container.id == container_id, BillOfLading.booking_id == booking_id)
+            .options(*options)
+        )
+        result = await db.execute(q)
+        container = result.scalar_one_or_none()
+        if container is None:
+            raise HTTPException(404, "Container not found")
+        return container
+
+    @staticmethod
     async def update_port_status(
         db: AsyncSession,
         container_id: uuid.UUID,

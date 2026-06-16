@@ -37,7 +37,7 @@ async def add_customer_payment(
     if idempotency.cached_response:
         return idempotency.cached_response
 
-    payment = await CustomerPaymentService.add(db, container_id, body, actor)
+    payment = await CustomerPaymentService.add(db, booking_id, container_id, body, actor)
     result = CustomerPaymentOut.model_validate(payment).model_dump(mode="json")
     await idempotency.store(result)
     return payment
@@ -51,7 +51,7 @@ async def list_customer_payments(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(require_booking_member),
 ):
-    return await CustomerPaymentService.list(db, container_id, actor, pagination)
+    return await CustomerPaymentService.list(db, booking_id, container_id, actor, pagination)
 
 
 @customer_payment_router.get("/aggregate")
@@ -66,7 +66,7 @@ async def aggregate_customer_payments(
     Money totals are masked to None for non-admin booking members; tranche_count
     stays visible.
     """
-    agg = await CustomerPaymentService.aggregate_for_container(db, container_id, actor)
+    agg = await CustomerPaymentService.aggregate_for_container(db, booking_id, container_id, actor)
     # Strip the ORM tranche objects from the response — the list view above
     # returns those. Here we only want the rolled-up totals.
     return {k: v for k, v in agg.items() if k != "tranches"}
