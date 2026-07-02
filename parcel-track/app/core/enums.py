@@ -278,3 +278,4 @@ class Currency(str, Enum):  # noqa: UP042
     GBP = "GBP"
     EUR = "EUR"
     MAD = "MAD"
+    AED = "AED"

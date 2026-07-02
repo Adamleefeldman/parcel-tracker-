@@ -6,6 +6,7 @@ from app.api.routes.bl import bl_router
 from app.api.routes.bookings import booking_router
 from app.api.routes.clearing import clearing_router
 from app.api.routes.containers import container_router
+from app.api.routes.currencies import currency_router
 from app.api.routes.customer_payments import customer_payment_router
 from app.api.routes.customs import customs_router
 from app.api.routes.delivery import delivery_router
@@ -29,6 +30,7 @@ __all__ = [
     "clearing_router",
     "company_router",
     "container_router",
+    "currency_router",
     "customer_payment_router",
     "customs_router",
     "delivery_router",

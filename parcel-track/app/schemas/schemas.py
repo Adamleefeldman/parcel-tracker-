@@ -10,7 +10,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.core.enums import UKPort
 
@@ -19,6 +19,49 @@ from app.core.enums import UKPort
 
 class UUIDModel(BaseModel):
     id: uuid.UUID
+    model_config = {"from_attributes": True}
+
+
+# ── Currencies (master data) ────────────────────────────────────────────────
+
+
+_CURRENCY_CODE_RE = re.compile(r"^[A-Z]{3}$")
+
+
+class CurrencyBase(BaseModel):
+    name: str = Field(..., max_length=60)
+    symbol: str | None = Field(None, max_length=8)
+    minor_units: int = Field(2, ge=0, le=6)
+
+
+class CurrencyCreate(CurrencyBase):
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def _valid_code(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not _CURRENCY_CODE_RE.match(v):
+            raise ValueError("code must be a 3-letter ISO-4217 code (e.g. 'AED')")
+        return v
+
+
+class CurrencyUpdate(BaseModel):
+    name: str | None = Field(None, max_length=60)
+    symbol: str | None = Field(None, max_length=8)
+    minor_units: int | None = Field(None, ge=0, le=6)
+    is_active: bool | None = None
+
+
+class CurrencyOut(BaseModel):
+    code: str
+    name: str
+    symbol: str | None = None
+    minor_units: int
+    is_base: bool
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
     model_config = {"from_attributes": True}
 
 

@@ -29,6 +29,7 @@ from app.api.routes import (
     clearing_router,
     company_router,
     container_router,
+    currency_router,
     customer_payment_router,
     customs_router,
     delivery_router,
@@ -232,6 +233,7 @@ app.include_router(bl_router, prefix=PREFIX)
 app.include_router(vessel_router, prefix=PREFIX)
 app.include_router(shipment_leg_router, prefix=PREFIX)
 app.include_router(port_template_router, prefix=PREFIX)
+app.include_router(currency_router, prefix=PREFIX)
 app.include_router(container_router, prefix=PREFIX)
 app.include_router(customs_router, prefix=PREFIX)
 app.include_router(clearing_router, prefix=PREFIX)

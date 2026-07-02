@@ -83,6 +83,28 @@ def lowercase_enum(enum_cls, **kw):
     return SAEnum(enum_cls, values_callable=lambda e: [m.value for m in e], **kw)
 
 
+# ── Reference / master data ─────────────────────────────────────────────────
+
+
+class CurrencyRef(Base):
+    """Reference list of supported currencies. Config-over-code: a new currency
+    is a row here, not an enum edit. The legacy `Currency` enum columns stay
+    valid (they still constrain to ISO codes); NEW columns reference
+    `currencies.code` so the list is data-driven going forward.
+    """
+
+    __tablename__ = "currencies"
+
+    code: Mapped[str] = mapped_column(String(3), primary_key=True)  # ISO-4217, e.g. "USD"
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    symbol: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    minor_units: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
+    is_base: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = now_utc()
+    updated_at: Mapped[datetime] = updated_at()
+
+
 # ── Users ─────────────────────────────────────────────────────────────────────
 
 
@@ -1054,6 +1076,12 @@ class AuditLog(Base):
         Index("ix_audit_logs_booking_time", "booking_id", "created_at"),
         # Supports "show all actions by user X ordered by time".
         Index("ix_audit_logs_actor_time", "actor_id", "created_at"),
+        # An audited row is identified by EITHER a UUID pk (bookings, containers…)
+        # OR a string code (master data: currencies.code, incoterms.code…).
+        CheckConstraint(
+            "(entity_id IS NOT NULL) <> (entity_code IS NOT NULL)",
+            name="ck_audit_logs_entity_ref",
+        ),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
@@ -1067,7 +1095,11 @@ class AuditLog(Base):
         String(100), nullable=False
     )  # e.g. "booking.status_changed"
     entity_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    # entity_id for UUID-keyed rows; entity_code for string-keyed master data
+    # (currencies.code, incoterms.code…). Exactly one is set — enforced by the
+    # ck_audit_logs_entity_ref check constraint above.
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    entity_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
     old_value: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     new_value: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
