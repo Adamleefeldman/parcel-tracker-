@@ -88,6 +88,17 @@ class Settings(BaseSettings):
     # many nautical miles of the port_of_discharge centroid.
     VESSELFINDER_APPROACHING_RADIUS_NM: float = 50.0
 
+    # ExchangeRate-API FX-rate poller (Data-Foundation 1b).
+    # Free tier: commercial-use OK, ~1,500 calls/mo, refreshes ~daily; one call
+    # returns every quote currency for the USD base. Disabled by default — flip
+    # the flag once EXCHANGERATE_API_KEY is wired as a secret in the platform.
+    EXCHANGERATE_API_ENABLED: bool = False
+    EXCHANGERATE_API_BASE_URL: str = "https://v6.exchangerate-api.com/v6"
+    EXCHANGERATE_API_KEY: SecretStr = SecretStr("")
+    # Poll cadence. Free tier refreshes ~once/day; 720 min (2x/day) catches the
+    # daily update with margin while staying far under the monthly call cap.
+    EXCHANGERATE_API_POLL_INTERVAL_MINUTES: int = 720
+
     # Login lockout — Redis-backed per-account failure counter.
     LOGIN_MAX_ATTEMPTS: int = 5
     LOGIN_LOCKOUT_WINDOW_SECONDS: int = 900  # 15-minute sliding window

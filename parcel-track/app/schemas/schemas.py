@@ -65,6 +65,18 @@ class CurrencyOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── FX rates ─────────────────────────────────────────────────────────────────
+
+
+class FxRateOut(UUIDModel):
+    base_code: str
+    quote_code: str
+    rate: Decimal
+    as_of: datetime
+    source: str
+    created_at: datetime
+
+
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 

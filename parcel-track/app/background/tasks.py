@@ -61,6 +61,13 @@ celery_app.conf.update(
             "task": "app.background.tasks.poll_vesselfinder",
             "schedule": settings.VESSELFINDER_POLL_INTERVAL_MINUTES * 60,
         },
+        # Poll ExchangeRate-API for USD-base FX rates (Data-Foundation 1b).
+        # No-ops while EXCHANGERATE_API_ENABLED is false, so registering the
+        # entry is safe before the key is wired.
+        "poll-fx-rates": {
+            "task": "app.background.tasks.poll_fx_rates",
+            "schedule": settings.EXCHANGERATE_API_POLL_INTERVAL_MINUTES * 60,
+        },
         # Daily A/R aging sweep — delivered-but-unbanked containers (P1.4).
         "check-ar-aging": {
             "task": "app.background.tasks.check_ar_aging",
@@ -293,6 +300,51 @@ def poll_vesselfinder(self):
         # Auth error or other terminal integration fault — log and drop.
         # Retrying won't fix a bad key.
         logger.warning("poll_vesselfinder permanent failure", exc_info=True)
+        return {"error": "permanent"}
+
+
+@celery_app.task(
+    name="app.background.tasks.poll_fx_rates",
+    bind=True,
+    max_retries=3,
+)
+def poll_fx_rates(self):
+    """Periodic ExchangeRate-API FX-rate poll (Data-Foundation 1b).
+
+    Beat fires this every `EXCHANGERATE_API_POLL_INTERVAL_MINUTES`. Thin shell —
+    all logic lives in `FxService.poll_once`. No-ops when EXCHANGERATE_API_ENABLED
+    is false, so the beat entry is safe while the key is not yet wired.
+
+    Transient integration errors retry with backoff; auth errors (bad/missing key)
+    are terminal and dropped — retrying won't fix a bad key.
+    """
+    import asyncio
+
+    from app.db.database import AsyncSessionLocal
+    from app.integrations._exceptions import (
+        IntegrationError,
+        IntegrationRateLimited,
+        IntegrationTimeout,
+        IntegrationUnavailable,
+    )
+    from app.services.fx_service import FxService
+
+    if not settings.EXCHANGERATE_API_ENABLED:
+        logger.debug("poll_fx_rates skipped — EXCHANGERATE_API_ENABLED is false")
+        return {"skipped": "disabled"}
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            summary = await FxService.poll_once(db)
+            await db.commit()
+            return summary
+
+    try:
+        return asyncio.run(_run())
+    except (IntegrationTimeout, IntegrationUnavailable, IntegrationRateLimited) as exc:
+        raise self.retry(exc=exc, countdown=2**self.request.retries) from exc
+    except IntegrationError:
+        logger.warning("poll_fx_rates permanent failure", exc_info=True)
         return {"error": "permanent"}
 
 
