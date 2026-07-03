@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./parcel-track/secrets/**)",
+      "Read(//Users/adamfeldman/parcel-tracker/parcel-track/secrets/**)",
+      "Bash(cat parcel-track/secrets/*)",
+      "Bash(cat /Users/adamfeldman/parcel-tracker/parcel-track/secrets/*)"
+    ],
+    "ask": [
+      "Bash(git reset --hard)",
+      "Bash(git reset --hard *)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git clean *)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/check-lan-ip.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking mobile LAN-IP config"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/ruff-done-gate.sh\"",
+            "timeout": 90,
+            "statusMessage": "ruff on changed backend files"
+          }
+        ]
+      }
+    ]
+  }
+}

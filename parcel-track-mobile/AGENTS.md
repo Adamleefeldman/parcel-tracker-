@@ -18,6 +18,7 @@ The companion backend doc is [`../parcel-track/CLAUDE.md`](../parcel-track/CLAUD
 ## Bug Fixing Rules
 
 - Reproduce first. If you can't reproduce it, you can't fix it — say so and ask.
+- **When the app breaks right after your change, suspect your change before the environment.** Especially structural changes to Expo Router route files — a deleted/renamed route (e.g. a tab group losing its `index.tsx`) hangs the splash screen with no error. A "stale Metro cache" theory once cost a full round-trip when the real cause was exactly this. Environment checks (LAN IP, backend, Metro) come second — run the `/device-verify` preflight for those.
 - Read the actual error: stack trace, Metro logs, device console. For network bugs, check `ApiError.status` (transport failures use `NETWORK_ERROR_STATUS = 0`) and `ApiError.payload` before guessing.
 - Trace to root cause. Don't paper over symptoms with a `try/catch` that swallows.
 - Only ask clarifying questions when the cause is genuinely undetermined after looking.
@@ -31,7 +32,8 @@ The companion backend doc is [`../parcel-track/CLAUDE.md`](../parcel-track/CLAUD
 ## Verification Rules
 
 - Pure-logic changes (api client, auth, jwt, utils): `npx tsc --noEmit` + `npm test` must pass before reporting done.
-- UI changes: typecheck + tests, **and** actually run the app on the iOS simulator (or device via Expo Go) and confirm the change renders + behaves as intended. Screenshot when useful. UI work is not "done" because tests pass — there aren't UI tests yet (see Testing policy).
+- UI changes: typecheck + tests, **and** actually run the app on the iOS simulator (or device via Expo Go) and confirm the change renders + behaves as intended. Screenshot when useful. UI work is not "done" because tests pass — there aren't UI tests yet (see Testing policy). Use the `/device-verify` skill: preflight (LAN IP vs `.env.local`, backend health, Metro) before the checklist, and seed data via `/seed-demo-data`, never ad-hoc SQL.
+- **Route files are read once at startup.** Adding/renaming/deleting anything under `app/` needs a full `expo start` restart — Fast Refresh will keep serving the old route tree and mislead you.
 - Never mark a task complete without proving it works.
 
 ## Commit Rules
