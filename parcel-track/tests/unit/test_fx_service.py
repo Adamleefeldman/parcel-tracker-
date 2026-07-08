@@ -102,3 +102,46 @@ async def test_poll_once_skips_when_as_of_already_stored():
     assert summary["inserted"] == 0
     assert summary["skipped"] == "already_stored"
     db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_capture_usd_base_currency():
+    db = MagicMock()
+    db.execute = AsyncMock()
+    fx_rate, amount_usd = await FxService.capture_usd(db, Decimal("100.00"), "USD")
+    assert fx_rate == Decimal("1")
+    assert amount_usd == Decimal("100.00")
+    db.execute.assert_not_called()  # USD short-circuits, no query
+
+
+@pytest.mark.asyncio
+async def test_capture_usd_from_stored_rate():
+    db = MagicMock()
+    row = FxRate(
+        base_code="USD",
+        quote_code="GBP",
+        rate=Decimal("0.80"),
+        as_of=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    db.execute = AsyncMock(return_value=_scalar(row))
+
+    fx_rate, amount_usd = await FxService.capture_usd(db, Decimal("1000.00"), "gbp")
+
+    # 1 USD = 0.80 GBP → £1 = $1.25; £1000 = $1250.00. amount_usd == amount * fx_rate.
+    assert fx_rate == Decimal("1.25000000")
+    assert amount_usd == Decimal("1250.00")
+
+
+@pytest.mark.asyncio
+async def test_capture_usd_none_when_no_rate():
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalar(None))
+    assert await FxService.capture_usd(db, Decimal("50.00"), "MAD") == (None, None)
+
+
+@pytest.mark.asyncio
+async def test_capture_usd_none_amount():
+    db = MagicMock()
+    db.execute = AsyncMock()
+    assert await FxService.capture_usd(db, None, "GBP") == (None, None)
+    db.execute.assert_not_called()

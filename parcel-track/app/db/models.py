@@ -439,6 +439,9 @@ class PurchaseOrder(Base):
     quantity_unit: Mapped[str] = mapped_column(String(50), nullable=False)
     total_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[Currency] = mapped_column(SAEnum(Currency), nullable=False)
+    # USD-capture (Pillar 1c): rate frozen at write time + stored USD-equivalent.
+    fx_rate_to_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
+    amount_usd: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     status: Mapped[POStatus] = mapped_column(
         SAEnum(POStatus), default=POStatus.DRAFT, nullable=False
     )
@@ -488,6 +491,9 @@ class Invoice(Base):
     invoice_date: Mapped[date] = mapped_column(Date, nullable=False)
     value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[Currency] = mapped_column(SAEnum(Currency), nullable=False)
+    # USD-capture (Pillar 1c): rate frozen at write time + stored USD-equivalent.
+    fx_rate_to_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
+    amount_usd: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     payment_terms: Mapped[str | None] = mapped_column(String(100), nullable=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[InvoiceStatus] = mapped_column(
@@ -523,6 +529,9 @@ class SupplierPayment(Base):
     payment_date: Mapped[date] = mapped_column(Date, nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[Currency] = mapped_column(SAEnum(Currency), nullable=False)
+    # USD-capture (Pillar 1c): rate frozen at write time + stored USD-equivalent.
+    fx_rate_to_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
+    amount_usd: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     bank_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     payment_type: Mapped[SupplierPaymentType] = mapped_column(
         SAEnum(SupplierPaymentType, name="paymenttype"), nullable=False
@@ -577,6 +586,9 @@ class CustomerPayment(Base):
         lowercase_enum(CustomerPaymentMethod), nullable=False
     )
     amount_received: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    # USD-capture (Pillar 1c): source currency is GBP (no currency column here).
+    fx_rate_to_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
+    amount_usd: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     # variance can be negative (short) or positive (over) — Decimal not constrained.
     variance: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     expense_courier: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
@@ -832,6 +844,9 @@ class Container(Base):
     sale_currency: Mapped[Currency] = mapped_column(
         SAEnum(Currency), default=Currency.GBP, nullable=False
     )
+    # USD-capture (Pillar 1c): rate frozen when the sale price is set/changed.
+    fx_rate_to_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
+    amount_usd: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
 
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()

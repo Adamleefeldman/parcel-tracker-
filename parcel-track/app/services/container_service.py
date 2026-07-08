@@ -22,6 +22,7 @@ from app.db.models import AuditLog, BillOfLading, Broker, Company, Container, Us
 from app.schemas.pagination import PaginationParams, paginate
 from app.schemas.schemas import ContainerSaleUpdate, ContainerStatusUpdate
 from app.services.container_lifecycle_service import ContainerLifecycleService
+from app.services.fx_service import FxService
 
 
 class ContainerService:
@@ -145,6 +146,15 @@ class ContainerService:
             container.sale_price_total = body.sale_price_total
         if body.sale_currency is not None:
             container.sale_currency = Currency(body.sale_currency)
+
+        # Freeze the USD-equivalent whenever the sale price/currency is set or
+        # changed in this call (Pillar 1c) — left untouched on unrelated edits.
+        if (
+            body.sale_price_total is not None or body.sale_currency is not None
+        ) and container.sale_price_total is not None:
+            container.fx_rate_to_usd, container.amount_usd = await FxService.capture_usd(
+                db, container.sale_price_total, container.sale_currency
+            )
 
         await db.flush()
         # Re-fetch with relationships so the response includes the broker/end_company objects.

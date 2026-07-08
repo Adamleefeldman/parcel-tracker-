@@ -31,6 +31,7 @@ from app.middleware.auth import financial_fields_allowed
 from app.schemas.pagination import PaginationParams, paginate
 from app.schemas.schemas import SupplierPaymentCreate, SupplierPaymentOut
 from app.services.booking_service import BookingService
+from app.services.fx_service import FxService
 from app.services.notification_service import NotificationService
 
 
@@ -62,6 +63,9 @@ class SupplierPaymentService:
             invoice_id=invoice_id,
             status=PaymentStatus.CONFIRMED,
             **body.model_dump(),
+        )
+        payment.fx_rate_to_usd, payment.amount_usd = await FxService.capture_usd(
+            db, payment.amount, payment.currency
         )
         db.add(payment)
         await db.flush()

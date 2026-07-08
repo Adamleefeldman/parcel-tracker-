@@ -18,6 +18,7 @@ from app.db.models import (
 from app.middleware.auth import financial_fields_allowed
 from app.schemas.schemas import POCreate, POOut
 from app.services.booking_service import BookingService
+from app.services.fx_service import FxService
 from app.services.notification_service import NotificationService
 
 
@@ -33,6 +34,9 @@ class PoService:
         """
         async with handle_integrity_error("A PO with this PO number already exists"):
             po = PurchaseOrder(**body.model_dump())
+            po.fx_rate_to_usd, po.amount_usd = await FxService.capture_usd(
+                db, po.total_value, po.currency
+            )
             db.add(po)
             await db.flush()
 
