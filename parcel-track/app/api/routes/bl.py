@@ -14,6 +14,7 @@ from app.db.models import BillOfLading, Container, User, Vessel
 from app.middleware.auth import get_client_ip, require_booking_member
 from app.schemas.schemas import BLCreate, BLOut
 from app.services.booking_service import BookingService
+from app.services.legal_entity_service import LegalEntityService
 from app.services.notification_service import NotificationService
 from app.services.port_template_service import PortTemplateService
 
@@ -49,10 +50,14 @@ async def upload_bl(
         db.add(bl)
         await db.flush()
 
+        default_entity_id = await LegalEntityService.default_id(db)
         for c in body.containers:
             db.add(
                 Container(
-                    bl_id=bl.id, container_number=c.container_number, seal_number=c.seal_number
+                    bl_id=bl.id,
+                    container_number=c.container_number,
+                    seal_number=c.seal_number,
+                    legal_entity_id=default_entity_id,
                 )
             )
 

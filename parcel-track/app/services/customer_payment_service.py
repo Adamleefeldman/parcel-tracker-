@@ -27,6 +27,7 @@ from app.schemas.schemas import CustomerPaymentCreate, CustomerPaymentOut
 from app.services.container_lifecycle_service import ContainerLifecycleService
 from app.services.container_service import ContainerService
 from app.services.fx_service import FxService
+from app.services.legal_entity_service import LegalEntityService
 
 # Money / bank-detail fields on a customer-payment record that only admins may
 # see. These names are specific to CustomerPaymentOut, so we mask them here
@@ -85,6 +86,7 @@ class CustomerPaymentService:
         payload["method"] = CustomerPaymentMethod(payload["method"])
 
         payment = CustomerPayment(container_id=container_id, **payload)
+        payment.legal_entity_id = payment.legal_entity_id or await LegalEntityService.default_id(db)
         payment.fx_rate_to_usd, payment.amount_usd = await FxService.capture_usd(
             db, payment.amount_received, "GBP"
         )
