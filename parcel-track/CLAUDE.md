@@ -246,6 +246,28 @@ uv sync --group dev                        # recompute lockfile after pyproject 
 Both must be set. Never swap them. Production `config.py` validates that
 `DATABASE_URL` starts with `postgresql+asyncpg://`.
 
+### Local vs prod — the two databases, plainly
+
+There are two completely separate databases and they never sync:
+
+1. **Local Docker Postgres** (`parceltrack-postgres` container) — what the host
+   `.env` and the local API container point at. All dev work, tests, seeding,
+   and Expo Go demos read/write THIS one.
+2. **Prod Supabase** — what Railway runs against. Touching it locally requires
+   `uv run --env-file .env.supabase ...`, deliberately.
+
+If "the data isn't showing up", the near-certain cause is writing to one DB
+while the app reads the other. Users/logins also live per-database — an admin
+created locally does not exist in prod, and vice versa.
+
+### Secrets
+
+Real credentials (R2 keys, etc.) are **not** in `.env`. They live as one file
+per secret in `parcel-track/secrets/` (gitignored) and are mounted into
+containers as Docker secrets at `/run/secrets/<NAME>`; pydantic-settings reads
+them via `secrets_dir`. Never `cat` these files or echo their values — load
+them into a command's environment without printing them.
+
 ### SQLAlchemy async
 
 - `expire_on_commit=False` is set on the session factory in `app/db/database.py` —
@@ -256,6 +278,29 @@ Both must be set. Never swap them. Production `config.py` validates that
   it permanent. Use `flush()` when you need a DB-generated ID mid-transaction.
 - After `db.refresh()`, relationships may be expired — refetch with explicit
   `selectinload` when serialising (see `upload_bl` in `routes.py` for the pattern).
+
+---
+
+## Demo data for manual verification
+
+Use `scripts/seed_demo.py` (via the `/seed-demo-data` skill) — **never
+hand-written INSERT statements**. Raw SQL seeding has failed six-plus times in
+a row on: Postgres enum labels (`invalid input value for enum postatus:
+"submitted"` — most enums store the uppercase member NAME, but
+`containerlifecyclestatus`/`ukport`/`customerpaymentmethod`/`deliverytype`
+store lowercase values via `lowercase_enum()`), `NOT NULL` ids on junction
+tables, and uuid/text casts. The script uses the ORM models directly so none
+of that can go wrong, is idempotent (keyed on `DEMO-` refs), and has a
+`--reset` flag. Note: `Container.bl_id` is NOT NULL — containers can only be
+seeded from `BL_ISSUED` onward.
+
+```bash
+uv run python scripts/seed_demo.py            # all scenarios
+uv run python scripts/seed_demo.py --reset    # remove demo rows
+```
+
+If a verification needs a state the script can't produce, extend the script —
+don't bypass it.
 
 ---
 
