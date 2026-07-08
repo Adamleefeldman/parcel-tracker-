@@ -105,6 +105,32 @@ class CurrencyRef(Base):
     updated_at: Mapped[datetime] = updated_at()
 
 
+class FxRate(Base):
+    """One observed FX rate at a point in time (append-only history).
+
+    The poller inserts rows; `FxService.get_rate(quote, as_of)` reads the latest
+    row at/under `as_of`. Base is always USD (the reporting base). Storing history
+    is what makes the 'locked historical rate' possible — a past transaction
+    references the rate that was live when it was written, never a re-fetched value.
+    """
+
+    __tablename__ = "fx_rates"
+    __table_args__ = (
+        Index("ix_fx_rates_quote_asof", "quote_code", "as_of"),
+        CheckConstraint("rate > 0", name="ck_fx_rates_rate_positive"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    base_code: Mapped[str] = mapped_column(String(3), ForeignKey("currencies.code"), nullable=False)
+    quote_code: Mapped[str] = mapped_column(
+        String(3), ForeignKey("currencies.code"), nullable=False
+    )
+    rate: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)  # 1 base = rate quote
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(40), default="exchangerate_api", nullable=False)
+    created_at: Mapped[datetime] = now_utc()
+
+
 # ── Users ─────────────────────────────────────────────────────────────────────
 
 

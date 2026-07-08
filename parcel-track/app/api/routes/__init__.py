@@ -11,6 +11,7 @@ from app.api.routes.customer_payments import customer_payment_router
 from app.api.routes.customs import customs_router
 from app.api.routes.delivery import delivery_router
 from app.api.routes.documents import doc_router
+from app.api.routes.fx_rates import fx_rate_router
 from app.api.routes.invoices import invoice_router
 from app.api.routes.money_risk import money_risk_router
 from app.api.routes.notifications import notif_router
@@ -35,6 +36,7 @@ __all__ = [
     "customs_router",
     "delivery_router",
     "doc_router",
+    "fx_rate_router",
     "invoice_router",
     "money_risk_router",
     "notif_router",

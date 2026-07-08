@@ -34,6 +34,7 @@ from app.api.routes import (
     customs_router,
     delivery_router,
     doc_router,
+    fx_rate_router,
     invoice_router,
     money_risk_router,
     notif_router,
@@ -234,6 +235,7 @@ app.include_router(vessel_router, prefix=PREFIX)
 app.include_router(shipment_leg_router, prefix=PREFIX)
 app.include_router(port_template_router, prefix=PREFIX)
 app.include_router(currency_router, prefix=PREFIX)
+app.include_router(fx_rate_router, prefix=PREFIX)
 app.include_router(container_router, prefix=PREFIX)
 app.include_router(customs_router, prefix=PREFIX)
 app.include_router(clearing_router, prefix=PREFIX)
