@@ -13,6 +13,7 @@ from app.api.routes.delivery import delivery_router
 from app.api.routes.documents import doc_router
 from app.api.routes.fx_rates import fx_rate_router
 from app.api.routes.invoices import invoice_router
+from app.api.routes.legal_entities import legal_entity_router
 from app.api.routes.money_risk import money_risk_router
 from app.api.routes.notifications import notif_router
 from app.api.routes.parties import broker_router, company_router
@@ -38,6 +39,7 @@ __all__ = [
     "doc_router",
     "fx_rate_router",
     "invoice_router",
+    "legal_entity_router",
     "money_risk_router",
     "notif_router",
     "payment_router",

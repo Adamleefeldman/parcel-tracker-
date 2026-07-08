@@ -65,6 +65,70 @@ class CurrencyOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Legal entities (master data) ─────────────────────────────────────────────
+
+
+_LEGAL_ENTITY_CODE_RE = re.compile(r"^[A-Z0-9_]{2,20}$")
+
+
+def _normalise_currency_code(v: str) -> str:
+    v = v.strip().upper()
+    if not _CURRENCY_CODE_RE.match(v):
+        raise ValueError("base_currency_code must be a 3-letter ISO-4217 code (e.g. 'USD')")
+    return v
+
+
+class LegalEntityBase(BaseModel):
+    legal_name: str = Field(..., max_length=255)
+    display_name: str = Field(..., max_length=255)
+    jurisdiction: str | None = Field(None, max_length=80)
+    base_currency_code: str = Field("USD", max_length=3)
+
+    @field_validator("base_currency_code")
+    @classmethod
+    def _valid_base_currency(cls, v: str) -> str:
+        return _normalise_currency_code(v)
+
+
+class LegalEntityCreate(LegalEntityBase):
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def _valid_code(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not _LEGAL_ENTITY_CODE_RE.match(v):
+            raise ValueError("code must be 2-20 chars of A-Z, 0-9 or underscore (e.g. 'FMCG_HUB')")
+        return v
+
+
+class LegalEntityUpdate(BaseModel):
+    legal_name: str | None = Field(None, max_length=255)
+    display_name: str | None = Field(None, max_length=255)
+    jurisdiction: str | None = Field(None, max_length=80)
+    base_currency_code: str | None = Field(None, max_length=3)
+    is_active: bool | None = None
+
+    @field_validator("base_currency_code")
+    @classmethod
+    def _valid_base_currency(cls, v: str | None) -> str | None:
+        return None if v is None else _normalise_currency_code(v)
+
+
+class LegalEntityOut(BaseModel):
+    id: uuid.UUID
+    code: str
+    legal_name: str
+    display_name: str
+    jurisdiction: str | None = None
+    base_currency_code: str
+    is_default: bool
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    model_config = {"from_attributes": True}
+
+
 # ── FX rates ─────────────────────────────────────────────────────────────────
 
 

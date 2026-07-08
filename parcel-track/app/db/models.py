@@ -131,6 +131,35 @@ class FxRate(Base):
     created_at: Mapped[datetime] = now_utc()
 
 
+class LegalEntity(Base):
+    """A legal trading entity that owns transactions (Data-Foundation Pillar 2).
+
+    Today: one UAE Free-Zone entity (WT Trading LLC / The FMCG Hub). Future: a
+    Morocco sister entity. Every money/shipment row carries a `legal_entity_id`
+    pointing here; reports filter by entity and the investor view consolidates
+    across them.
+
+    `is_default` is fixed by the migration seed (exactly one true) and is NOT
+    settable through the API — mirroring how `currencies.is_base` guarantees a
+    single base. `LegalEntityService.get_default` relies on that invariant.
+    """
+
+    __tablename__ = "legal_entities"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)  # "FMCG_HUB"
+    legal_name: Mapped[str] = mapped_column(String(255), nullable=False)  # "WT Trading LLC"
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)  # "The FMCG Hub"
+    jurisdiction: Mapped[str | None] = mapped_column(String(80), nullable=True)  # "UAE Free Zone"
+    base_currency_code: Mapped[str] = mapped_column(
+        String(3), ForeignKey("currencies.code"), default="USD", nullable=False
+    )
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = now_utc()
+    updated_at: Mapped[datetime] = updated_at()
+
+
 # ── Users ─────────────────────────────────────────────────────────────────────
 
 
@@ -226,6 +255,11 @@ class Booking(Base):
     )
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    # Multi-entity tag (Pillar 2) — owning legal entity; nullable + backfilled to
+    # the default entity now, tightened to NOT NULL in a later sweep.
+    legal_entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("legal_entities.id"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
@@ -446,6 +480,10 @@ class PurchaseOrder(Base):
         SAEnum(POStatus), default=POStatus.DRAFT, nullable=False
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Multi-entity tag (Pillar 2) — owning legal entity; nullable, backfilled to default.
+    legal_entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("legal_entities.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
 
@@ -500,6 +538,10 @@ class Invoice(Base):
         SAEnum(InvoiceStatus), default=InvoiceStatus.PENDING, nullable=False
     )
     discrepancy_acknowledged: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Multi-entity tag (Pillar 2) — owning legal entity; nullable, backfilled to default.
+    legal_entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("legal_entities.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
 
@@ -540,6 +582,10 @@ class SupplierPayment(Base):
         SAEnum(PaymentStatus), default=PaymentStatus.UPLOADED, nullable=False
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Multi-entity tag (Pillar 2) — owning legal entity; nullable, backfilled to default.
+    legal_entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("legal_entities.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = now_utc()
 
     invoice: Mapped["Invoice"] = relationship(back_populates="supplier_payments")
@@ -599,6 +645,10 @@ class CustomerPayment(Base):
     tranche_index: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     customer_invoice_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Multi-entity tag (Pillar 2) — owning legal entity; nullable, backfilled to default.
+    legal_entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("legal_entities.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = now_utc()
 
     container: Mapped["Container"] = relationship()
@@ -847,6 +897,11 @@ class Container(Base):
     # USD-capture (Pillar 1c): rate frozen when the sale price is set/changed.
     fx_rate_to_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
     amount_usd: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+
+    # Multi-entity tag (Pillar 2) — owning legal entity; nullable, backfilled to default.
+    legal_entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("legal_entities.id"), nullable=True, index=True
+    )
 
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()

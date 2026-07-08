@@ -43,6 +43,7 @@ from app.db.models import (
     User,
     Vessel,
 )
+from app.services.legal_entity_service import LegalEntityService
 
 # ── Allowed state transitions ─────────────────────────────────────────────────
 
@@ -86,6 +87,7 @@ class BookingService:
             )
 
         booking = Booking(reference=reference, created_by=actor.id)
+        booking.legal_entity_id = await LegalEntityService.default_id(db)
         db.add(booking)
         await db.flush()
 
