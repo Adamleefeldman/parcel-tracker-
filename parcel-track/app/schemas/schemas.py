@@ -12,7 +12,7 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
-from app.core.enums import UKPort
+from app.core.enums import PartyType, UKPort
 
 # ── Base ──────────────────────────────────────────────────────────────────────
 
@@ -127,6 +127,116 @@ class LegalEntityOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}
+
+
+# ── Parties (master data) ────────────────────────────────────────────────────
+
+
+_PARTY_CODE_RE = re.compile(r"^[A-Z0-9_-]{2,30}$")
+
+
+class PartyBase(BaseModel):
+    name: str = Field(..., max_length=255)
+    country: str | None = Field(None, max_length=80)
+    default_currency_code: str | None = Field(None, max_length=3)
+    default_payment_terms: str | None = Field(None, max_length=100)
+    email: EmailStr | None = None
+    phone: str | None = Field(None, max_length=50)
+
+    @field_validator("default_currency_code")
+    @classmethod
+    def _valid_currency(cls, v: str | None) -> str | None:
+        return None if v is None else _normalise_currency_code(v)
+
+
+class PartyCreate(PartyBase):
+    party_type: PartyType
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def _valid_code(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not _PARTY_CODE_RE.match(v):
+            raise ValueError("code must be 2-30 chars of A-Z, 0-9, underscore or hyphen")
+        return v
+
+
+class PartyUpdate(BaseModel):
+    name: str | None = Field(None, max_length=255)
+    country: str | None = Field(None, max_length=80)
+    default_currency_code: str | None = Field(None, max_length=3)
+    default_payment_terms: str | None = Field(None, max_length=100)
+    email: EmailStr | None = None
+    phone: str | None = Field(None, max_length=50)
+    is_active: bool | None = None
+
+    @field_validator("default_currency_code")
+    @classmethod
+    def _valid_currency(cls, v: str | None) -> str | None:
+        return None if v is None else _normalise_currency_code(v)
+
+
+class PartyBankAccountCreate(BaseModel):
+    currency_code: str = Field(..., max_length=3)
+    label: str | None = Field(None, max_length=80)
+    bank_name: str | None = Field(None, max_length=200)
+    account_name: str | None = Field(None, max_length=200)
+    iban: str | None = Field(None, max_length=40)
+    swift_bic: str | None = Field(None, max_length=20)
+    is_default: bool = False
+
+    @field_validator("currency_code")
+    @classmethod
+    def _valid_currency(cls, v: str) -> str:
+        return _normalise_currency_code(v)
+
+
+class PartyBankAccountOut(BaseModel):
+    id: uuid.UUID
+    party_id: uuid.UUID
+    label: str | None = None
+    currency_code: str
+    bank_name: str | None = None
+    account_name: str | None = None
+    iban: str | None = None
+    swift_bic: str | None = None
+    is_default: bool
+    created_at: datetime
+    updated_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class PartyOut(BaseModel):
+    id: uuid.UUID
+    party_type: PartyType
+    code: str
+    name: str
+    country: str | None = None
+    default_currency_code: str | None = None
+    default_payment_terms: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    bank_accounts: list[PartyBankAccountOut] = []
+    model_config = {"from_attributes": True}
+
+
+class FreeZoneWatchOut(BaseModel):
+    """One flagged counterparty in the UAE Free-Zone watch report (V1, report-only).
+
+    Fires when the owning trading entity is a UAE Free Zone and the counterparty
+    is UAE-based — a conservative, country-based signal for a human to review.
+    """
+
+    party_id: uuid.UUID
+    party_type: PartyType
+    code: str
+    name: str
+    country: str | None = None
+    reason: str
 
 
 # ── FX rates ─────────────────────────────────────────────────────────────────
@@ -320,7 +430,8 @@ class BookingUpdate(BaseModel):
 class POCreate(BaseModel):
     po_number: str
     po_date: date
-    supplier_ref: str | None = None
+    supplier_ref: str | None = None  # legacy free-text; superseded by supplier_party_id
+    supplier_party_id: uuid.UUID | None = None  # Party master (Pillar 3), must be a SUPPLIER
     product_description: str
     quantity: Decimal
     quantity_unit: str

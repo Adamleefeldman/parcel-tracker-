@@ -43,6 +43,7 @@ from app.core.enums import (
     DocumentEntityType,
     InvoiceStatus,
     NotificationType,
+    PartyType,
     PaymentStatus,
     PortStatus,
     POStatus,
@@ -158,6 +159,68 @@ class LegalEntity(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
+
+
+class Party(Base):
+    """A non-customer counterparty we transact with (Data-Foundation Pillar 3).
+
+    Suppliers, freight forwarders, hauliers, warehouse operators, customs
+    brokers — everyone we *pay* or coordinate with (the end-buyer customer
+    stays on `Company`/`Broker`). Holds default currency + payment terms;
+    bank accounts are child rows. `country` feeds the UAE Free-Zone watch-flag.
+    A partner-portal user will link to exactly one Party and see only its data.
+    """
+
+    __tablename__ = "parties"
+    __table_args__ = (UniqueConstraint("party_type", "code", name="uq_parties_type_code"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    party_type: Mapped[PartyType] = mapped_column(
+        lowercase_enum(PartyType), nullable=False, index=True
+    )
+    code: Mapped[str] = mapped_column(String(30), nullable=False)  # "SCDB"
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    country: Mapped[str | None] = mapped_column(String(80), nullable=True)  # "Morocco"
+    default_currency_code: Mapped[str | None] = mapped_column(
+        String(3), ForeignKey("currencies.code"), nullable=True
+    )
+    default_payment_terms: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = now_utc()
+    updated_at: Mapped[datetime] = updated_at()
+
+    bank_accounts: Mapped[list["PartyBankAccount"]] = relationship(
+        back_populates="party", cascade="all, delete-orphan"
+    )
+
+
+class PartyBankAccount(Base):
+    """A beneficiary bank account for a Party. A supplier may hold several
+    (e.g. a USD operating account and a EUR one), so this is a child table with
+    a per-party `is_default`. Supplier payments read the default account for
+    beneficiary detail."""
+
+    __tablename__ = "party_bank_accounts"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    party_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("parties.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    label: Mapped[str | None] = mapped_column(String(80), nullable=True)  # "USD operating"
+    currency_code: Mapped[str] = mapped_column(
+        String(3), ForeignKey("currencies.code"), nullable=False
+    )
+    bank_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    account_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    iban: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    swift_bic: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = now_utc()
+    updated_at: Mapped[datetime] = updated_at()
+
+    party: Mapped["Party"] = relationship(back_populates="bank_accounts")
 
 
 # ── Users ─────────────────────────────────────────────────────────────────────
@@ -483,6 +546,11 @@ class PurchaseOrder(Base):
     # Multi-entity tag (Pillar 2) — owning legal entity; nullable, backfilled to default.
     legal_entity_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("legal_entities.id"), nullable=True, index=True
+    )
+    # Party master (Pillar 3) — supplier as a real counterparty; nullable,
+    # backfilled to the SCDB party. `supplier_ref` stays as the legacy free-text.
+    supplier_party_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("parties.id"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = now_utc()
     updated_at: Mapped[datetime] = updated_at()
