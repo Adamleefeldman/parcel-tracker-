@@ -7,12 +7,13 @@ transaction so reports never re-convert historical rows.
 """
 
 from datetime import datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.enums import Currency
 from app.db.models import CurrencyRef, FxRate
 from app.integrations.exchangerate_api import PROVIDER, ExchangeRateApiClient
 
@@ -48,6 +49,30 @@ class FxService:
         if row is None or row.rate == 0:
             return None
         return Decimal(1) / row.rate
+
+    @staticmethod
+    async def capture_usd(
+        db: AsyncSession, amount: Decimal | None, currency: str | Currency
+    ) -> tuple[Decimal | None, Decimal | None]:
+        """Freeze the native->USD rate + USD-equivalent for `amount` at write time.
+
+        Returns (fx_rate_to_usd, amount_usd), or (None, None) when `amount` is None
+        or no rate is available (FX dormant / unknown currency). `amount_usd` is
+        computed from the *quantized* rate so a reader can reproduce it exactly:
+        amount_usd == amount * fx_rate_to_usd.
+
+        Accepts the currency as a code string OR a `Currency` enum — ORM money rows
+        hold the enum after load but a raw code string before flush.
+        """
+        if amount is None:
+            return None, None
+        code = currency.value if isinstance(currency, Currency) else currency
+        rate = await FxService.rate_to_usd(db, code)
+        if rate is None:
+            return None, None
+        fx_rate = rate.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
+        amount_usd = (amount * fx_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return fx_rate, amount_usd
 
     @staticmethod
     async def list_rates(

@@ -18,6 +18,7 @@ from app.db.models import (
 from app.middleware.auth import financial_fields_allowed
 from app.schemas.schemas import InvoiceCreate, InvoiceOut
 from app.services.booking_service import BookingService
+from app.services.fx_service import FxService
 
 
 class InvoiceService:
@@ -50,6 +51,9 @@ class InvoiceService:
         async with handle_integrity_error("An invoice with this invoice number already exists"):
             invoice = Invoice(
                 purchase_order_id=po_id, status=InvoiceStatus.RECEIVED, **body.model_dump()
+            )
+            invoice.fx_rate_to_usd, invoice.amount_usd = await FxService.capture_usd(
+                db, invoice.value, invoice.currency
             )
             db.add(invoice)
             await db.flush()
