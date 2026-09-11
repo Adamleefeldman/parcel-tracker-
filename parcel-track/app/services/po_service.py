@@ -7,7 +7,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.enums import BookingStatus, DocumentEntityType, NotificationType, POStatus, UserRole
+from app.core.enums import (
+    BookingStatus,
+    DocumentEntityType,
+    NotificationType,
+    PartyType,
+    POStatus,
+    UserRole,
+)
 from app.core.exceptions import handle_integrity_error
 from app.db.models import (
     BookingPurchaseOrder,
@@ -21,6 +28,7 @@ from app.services.booking_service import BookingService
 from app.services.fx_service import FxService
 from app.services.legal_entity_service import LegalEntityService
 from app.services.notification_service import NotificationService
+from app.services.party_service import PartyService
 
 
 class PoService:
@@ -33,6 +41,19 @@ class PoService:
         Create a standalone PurchaseOrder. The PO is not yet attached to any
         Booking — that happens via POST /bookings/{id}/purchase-orders.
         """
+        # Party master (Pillar 3): if a supplier party is given, it must resolve
+        # to an active SUPPLIER. `supplier_ref` (legacy free-text) stays untouched.
+        if body.supplier_party_id is not None:
+            supplier = await PartyService.get(db, body.supplier_party_id)
+            if (
+                supplier is None
+                or supplier.party_type != PartyType.SUPPLIER
+                or not supplier.is_active
+            ):
+                raise HTTPException(
+                    400, "supplier_party_id must reference an active supplier party"
+                )
+
         async with handle_integrity_error("A PO with this PO number already exists"):
             po = PurchaseOrder(**body.model_dump())
             po.legal_entity_id = po.legal_entity_id or await LegalEntityService.default_id(db)

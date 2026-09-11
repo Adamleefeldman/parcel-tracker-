@@ -17,6 +17,7 @@ from app.api.routes.legal_entities import legal_entity_router
 from app.api.routes.money_risk import money_risk_router
 from app.api.routes.notifications import notif_router
 from app.api.routes.parties import broker_router, company_router
+from app.api.routes.party_master import party_router
 from app.api.routes.po import po_router
 from app.api.routes.port_templates import port_template_router
 from app.api.routes.shipment_legs import shipment_leg_router
@@ -42,6 +43,7 @@ __all__ = [
     "legal_entity_router",
     "money_risk_router",
     "notif_router",
+    "party_router",
     "payment_router",
     "po_router",
     "port_template_router",

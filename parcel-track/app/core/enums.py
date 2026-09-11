@@ -279,3 +279,20 @@ class Currency(str, Enum):  # noqa: UP042
     EUR = "EUR"
     MAD = "MAD"
     AED = "AED"
+
+
+# ── Parties (master data) ─────────────────────────────────────────────────────
+
+
+class PartyType(str, Enum):  # noqa: UP042
+    """A non-customer counterparty we transact with (Data-Foundation Pillar 3).
+
+    Customers/brokers stay on `Broker`/`Company` (spec §4 non-goal). Lowercase
+    values → the column uses `lowercase_enum(PartyType)` in models.py.
+    """
+
+    SUPPLIER = "supplier"
+    FREIGHT_FORWARDER = "freight_forwarder"
+    HAULIER = "haulier"
+    WAREHOUSE_OPERATOR = "warehouse_operator"
+    CUSTOMS_BROKER = "customs_broker"
