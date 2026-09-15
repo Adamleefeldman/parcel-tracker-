@@ -19,3 +19,7 @@
 # Claude Code: personal/machine-local files (committed: settings.json, hooks/, skills/, launch.json)
 .claude/settings.local.json
 .claude/worktrees/
+
+# Generated client deliverables (built from ALIGNMENT-AND-PROGRESS.md; keep the source, not the binaries)
+/*.docx
+/*.pdf
